@@ -30,6 +30,7 @@ Full scope reasoning lives in the **Build Phases** artifact (https://claude.ai/a
 ## Branching & deployment
 
 - **`develop` is where all work happens.** It auto-tracks to the live sandbox at **https://buildiwick.olamtec.co.tz** — that subdomain exists purely for the two of us (and our agents) to see real changes on a real site while building. Branch off `develop`, PR back into `develop`, whatever workflow you like day to day — just don't touch `main` yet.
+- **Demo logins** (same on local and the live sandbox, password `password` for all): `director@buildiwick.test` (Admin), `grace@buildiwick.test` (Accounts), `twalib@buildiwick.test` (Estimator/QS), `neema@buildiwick.test` (Project Manager, scoped to Kinondoni + KICD), `amani@buildiwick.test` (Site Operator, same two projects, write-only). Use these to test — don't invent a new test user when one of these already covers the role you need.
 - **`main` is frozen on purpose.** It's a stable snapshot reserved for whenever a real production domain is bought and connected — not this sandbox subdomain. Don't merge `develop` → `main` casually; that merge is a deliberate "we're ready to go live for real" decision, not a routine one.
 - **Deploy to the sandbox is currently manual**, not automatic — pushing to `develop` on GitHub does *not* by itself update https://buildiwick.olamtec.co.tz. Someone has to SSH in and pull:
   ```bash

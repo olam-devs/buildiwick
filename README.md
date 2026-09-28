@@ -2,6 +2,8 @@
 
 A real system replacing the spreadsheet a Dar es Salaam construction company has been running their entire business on.
 
+> **New here?** If you're an AI agent (Claude or otherwise), **read `CLAUDE.md` first** — it has the full technical context, the decisions already made, and the branch/deploy rules, so you're not rediscovering any of it. Humans: this page has what you need, `CLAUDE.md` is written for your agent.
+
 ## What this is
 
 Buildiwick runs 16 active construction projects out of one shared Excel workbook — materials, labour, logistics, and preliminaries costs all typed into per-project tabs by hand. It works, but it's a single point of failure: anyone with the file sees every project's numbers (including figures site staff shouldn't see), one typo can break a shared formula, two people can't safely edit it at once, and they operate every other day without getting round to updating it.
@@ -10,9 +12,19 @@ This repo is the real system replacing it. The mandate from the client is explic
 
 ## Live sandbox
 
-**https://buildiwick.olamtec.co.tz** — same demo logins as below. This is a sandbox subdomain, not the eventual production domain (that'll be a separate domain the client buys later).
+**https://buildiwick.olamtec.co.tz** — this is a sandbox subdomain, not the eventual production domain (that'll be a separate domain the client buys later).
 
-**Branching:** all work happens on **`develop`** — that's what's live on the sandbox above. `main` is frozen on purpose, reserved for when a real production domain is connected. See `CLAUDE.md` → "Branching & deployment" for the deploy process (currently manual — a push to `develop` doesn't auto-update the sandbox yet).
+Demo logins (password `password` for all):
+
+| Email | Role | Scope |
+|---|---|---|
+| director@buildiwick.test | Admin | Everything |
+| grace@buildiwick.test | Accounts | Everything (not project-scoped) |
+| twalib@buildiwick.test | Estimator/QS | Materials pricing only, no cash |
+| neema@buildiwick.test | Project Manager | Kinondoni Residence + KICD Outdoor Lounge only |
+| amani@buildiwick.test | Site Operator | Same two projects, write-only |
+
+**Branching — important:** all work happens on **`develop`**, not `main`. `develop` is what's live on the sandbox above; `main` is frozen on purpose, reserved for when a real production domain is connected later. Don't merge into `main` casually. See `CLAUDE.md` → "Branching & deployment" for the deploy process (currently manual — a push to `develop` doesn't auto-update the sandbox yet, someone has to SSH in and pull).
 
 ## Current status: Phase 1 (MVP)
 
@@ -45,15 +57,7 @@ php artisan app:import-kinondoni-historical-data
 php artisan serve
 ```
 
-Visit `http://127.0.0.1:8000/login`. Demo accounts (password `password` for all):
-
-| Email | Role | Scope |
-|---|---|---|
-| director@buildiwick.test | Admin | Everything |
-| grace@buildiwick.test | Accounts | Everything (not project-scoped) |
-| twalib@buildiwick.test | Estimator/QS | Materials pricing only, no cash |
-| neema@buildiwick.test | Project Manager | Kinondoni Residence + KICD Outdoor Lounge only |
-| amani@buildiwick.test | Site Operator | Same two projects, write-only |
+Visit `http://127.0.0.1:8000/login` — same demo accounts as the [Live sandbox](#live-sandbox) section above.
 
 ## Design & planning references
 
