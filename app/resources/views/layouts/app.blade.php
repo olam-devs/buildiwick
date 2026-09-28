@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@yield('title', 'Buildiwick')</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  :root{
+    --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F8F9FA;
+    --ink:#1F272E; --ink-dim:#8D99A6; --ink-soft:#495764;
+    --primary:#2490EF; --primary-dark:#1B75C4; --primary-soft:#EAF4FE;
+    --line:#E1E5E8; --line-strong:#D1D8DD;
+    --good:#2FA36E; --good-soft:#E5F6EE;
+    --warn:#F5A623; --warn-soft:#FEF3E0;
+    --danger:#E6533C; --danger-soft:#FBE9E6;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  [hidden]{display:none!important;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13.5px;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}
+  button, input, select{font-family:inherit;}
+
+  .shell{display:grid;grid-template-columns:232px 1fr;min-height:100%;}
+  @media (max-width:860px){ .shell{grid-template-columns:1fr;} .sidebar{display:none;} }
+
+  .sidebar{background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:18px;}
+  .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 14px;border-bottom:1px solid var(--line);margin-bottom:2px;}
+  .brand .mark{width:26px;height:26px;border-radius:6px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none;}
+  .brand span{font-weight:700;font-size:14.5px;letter-spacing:-0.01em;}
+
+  .whoami{display:flex;align-items:center;gap:9px;padding:8px;border-radius:8px;background:var(--surface-2);margin-bottom:4px;}
+  .whoami .avatar{width:28px;height:28px;border-radius:50%;background:var(--primary-soft);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11.5px;flex:none;}
+  .whoami .who{min-width:0;}
+  .whoami .name{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .whoami .role{font-size:10.5px;color:var(--ink-dim);text-transform:capitalize;}
+
+  .navgroup{display:flex;flex-direction:column;gap:1px;}
+  .navgroup .label{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-dim);padding:10px 10px 4px;}
+  .navitem{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;font-size:13px;font-weight:500;color:var(--ink-soft);text-decoration:none;}
+  .navitem svg{flex:none;opacity:.75;}
+  .navitem.active{background:var(--primary-soft);color:var(--primary-dark);font-weight:600;}
+  .navitem.active svg{opacity:1;}
+  .navitem:not(.active):hover{background:var(--surface-2);}
+
+  .main{padding:22px 30px 60px;max-width:1180px;}
+  .crumb{font-size:12px;color:var(--ink-dim);margin-bottom:6px;}
+  .crumb a{color:var(--ink-dim);text-decoration:none;} .crumb a:hover{color:var(--primary);}
+  .topline{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:22px;flex-wrap:wrap;}
+  .topline h2{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:-0.02em;}
+  .topline p{margin:0;color:var(--ink-dim);font-size:13px;}
+
+  .btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;border-radius:7px;padding:9px 15px;cursor:pointer;border:1px solid transparent;text-decoration:none;}
+  .btn-primary{background:var(--primary);color:#fff;box-shadow:0 1px 2px rgba(20,80,150,.25);}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-ghost{background:var(--surface);border-color:var(--line-strong);color:var(--ink-soft);}
+  .btn-ghost:hover{background:var(--surface-2);}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px;}
+  .tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 17px;box-shadow:0 1px 2px rgba(16,24,32,.04);}
+  .tile .label{font-size:11.5px;color:var(--ink-dim);font-weight:600;margin-bottom:7px;}
+  .tile .value{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;}
+  .tile .sub{font-size:11px;color:var(--ink-dim);margin-top:3px;}
+
+  .panelrow{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-bottom:24px;}
+  @media (max-width:900px){ .panelrow{grid-template-columns:1fr;} }
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 19px;box-shadow:0 1px 2px rgba(16,24,32,.04);}
+  .panel h3{font-size:12.5px;font-weight:700;margin:0 0 14px;color:var(--ink);}
+
+  .bar-row{display:grid;grid-template-columns:150px 1fr 96px;align-items:center;gap:10px;margin-bottom:12px;font-size:12.5px;font-weight:500;}
+  .bar-row:last-child{margin-bottom:0;}
+  .bar-track{background:var(--surface-2);border-radius:5px;height:8px;overflow:hidden;}
+  .bar-fill{height:100%;background:var(--primary);border-radius:5px;}
+  .bar-amt{text-align:right;color:var(--ink-dim);font-variant-numeric:tabular-nums;}
+
+  .attn-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:12.5px;gap:10px;}
+  .attn-row:first-of-type{border-top:none;}
+  .attn-row .meta{color:var(--ink-dim);font-size:11.5px;flex:none;font-variant-numeric:tabular-nums;}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 1px 2px rgba(16,24,32,.04);}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:760px;}
+  thead th{text-align:left;padding:10px 16px;background:var(--surface-2);border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-dim);font-weight:600;}
+  tbody td{padding:11px 16px;border-top:1px solid var(--line);}
+  tbody tr.rowlink{cursor:pointer;}
+  tbody tr.rowlink:hover{background:var(--surface-2);}
+  td.amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  td.name{font-weight:600;}
+  td.code{font-size:11.5px;color:var(--ink-dim);}
+
+  .dot-status{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;}
+  .dot-status::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;flex:none;}
+  .dot-status.active{color:var(--good);}
+  .dot-status.zero{color:var(--ink-dim);}
+  .dot-status.attn{color:var(--warn);}
+  .dot-status.danger{color:var(--danger);}
+
+  .badge{display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;}
+  .badge.warn{background:var(--warn-soft);color:#96660f;}
+  .badge.good{background:var(--good-soft);color:#1c7a4f;}
+
+  footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-dim);}
+
+  .flash{background:var(--good-soft);color:#1c7a4f;border:1px solid #b9e6cf;border-radius:8px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:18px;}
+  .flash.error{background:var(--danger-soft);color:#a3392a;border-color:#f2c4bc;}
+
+  .drawer-overlay{position:fixed;inset:0;background:rgba(20,28,36,.42);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:40;}
+  .drawer-overlay.open{opacity:1;pointer-events:auto;}
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--surface);box-shadow:-8px 0 30px rgba(16,24,32,.18);transform:translateX(100%);transition:transform .24s cubic-bezier(.32,.72,0,1);z-index:41;display:flex;flex-direction:column;}
+  .drawer.open{transform:translateX(0);}
+  @media (prefers-reduced-motion: reduce){ .drawer, .drawer-overlay{transition:none;} }
+  .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line);}
+  .drawer-head h3{margin:0;font-size:16px;font-weight:700;}
+  .drawer-close{background:none;border:none;font-size:20px;line-height:1;color:var(--ink-dim);cursor:pointer;padding:4px;}
+  .drawer-close:hover{color:var(--ink);}
+  .drawer-body{padding:18px 20px;overflow-y:auto;flex:1;}
+  .drawer-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:8px;}
+
+  .cattabs{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:16px;}
+  .cattab{font-size:12px;font-weight:600;padding:8px 6px;text-align:center;border-radius:7px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;}
+  .cattab.active{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-dark);}
+
+  .modetabs{display:flex;gap:6px;margin-bottom:14px;background:var(--surface-2);border-radius:7px;padding:3px;}
+  .modetab{flex:1;font-size:12px;font-weight:600;padding:7px;text-align:center;border-radius:5px;border:none;background:none;color:var(--ink-dim);cursor:pointer;}
+  .modetab.active{background:var(--surface);color:var(--primary-dark);box-shadow:0 1px 2px rgba(16,24,32,.08);}
+
+  .field{margin-bottom:13px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .field .req{color:var(--danger);}
+  .field input, .field select, .field textarea{width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink);}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .field-err{color:var(--danger);font-size:11.5px;margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="mark">B</span><span>Buildiwick</span></div>
+    @auth
+    <div class="whoami">
+      <div class="avatar">{{ strtoupper(substr(auth()->user()->name,0,1)) }}</div>
+      <div class="who">
+        <div class="name">{{ auth()->user()->name }}</div>
+        <div class="role">{{ str_replace('_',' ', auth()->user()->role?->name) }}</div>
+      </div>
+    </div>
+    @endauth
+    <nav class="navgroup">
+      <div class="label">Overview</div>
+      <a class="navitem {{ request()->routeIs('dashboard.index') ? 'active' : '' }}" href="{{ url('/projects') }}">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="2.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="11.5" y="2.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="11.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="11.5" y="11.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/></svg>
+        All Projects
+      </a>
+    </nav>
+    @auth
+    <div style="margin-top:auto;">
+      <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;" onclick="Buildiwick.openDrawer()">
+        <span style="font-size:16px;line-height:1;">+</span> New Entry
+      </button>
+      <form method="POST" action="{{ url('/logout') }}" style="margin-top:8px;">
+        @csrf
+        <button type="submit" class="btn btn-ghost" style="width:100%;justify-content:center;">Sign out</button>
+      </form>
+    </div>
+    @endauth
+  </aside>
+  <main class="main">
+    @if (session('success'))<div class="flash">{{ session('success') }}</div>@endif
+    @yield('content')
+  </main>
+</div>
+
+@auth
+@include('partials.new-entry-drawer')
+@endauth
+
+</body>
+</html>
