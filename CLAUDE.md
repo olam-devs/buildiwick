@@ -27,9 +27,26 @@ Full scope reasoning lives in the **Build Phases** artifact (https://claude.ai/a
 - **Project codes and transaction codes are human-meaningful strings** (`BWG-KIN-2026-001`, `BWG-KIN-2026-001-TXN-0034`), not just internal IDs — they match the client's own reference convention. Don't replace them with UUIDs-only; the `client_uuid` column is separate and exists purely for offline idempotency.
 - **The database is regenerable, not sacred.** `php artisan migrate:fresh --seed && php artisan app:import-kinondoni-historical-data` rebuilds it from scratch, deterministically, from the migrations/seeders/import command — not from a committed `.sqlite` file (which is gitignored). If you're testing something destructive, this is your reset button.
 
+## Branching & deployment
+
+- **`develop` is where all work happens.** It auto-tracks to the live sandbox at **https://buildiwick.olamtec.co.tz** — that subdomain exists purely for the two of us (and our agents) to see real changes on a real site while building. Branch off `develop`, PR back into `develop`, whatever workflow you like day to day — just don't touch `main` yet.
+- **`main` is frozen on purpose.** It's a stable snapshot reserved for whenever a real production domain is bought and connected — not this sandbox subdomain. Don't merge `develop` → `main` casually; that merge is a deliberate "we're ready to go live for real" decision, not a routine one.
+- **Deploy to the sandbox is currently manual**, not automatic — pushing to `develop` on GitHub does *not* by itself update https://buildiwick.olamtec.co.tz. Someone has to SSH in and pull:
+  ```bash
+  ssh olamtecc@vda6000.is.cc   # DirectAdmin host, same as the other olamtec.co.tz sites
+  cd ~/domains/buildiwick.olamtec.co.tz/repo
+  git pull                      # tracks origin/develop
+  cd app
+  composer install --no-dev --optimize-autoloader   # only if dependencies changed
+  php artisan migrate --force                        # only if new migrations
+  php artisan config:cache && php artisan route:cache && php artisan view:cache
+  ```
+  An auto-deploy webhook (push → pull automatically) was considered and deferred — ask the human before building it, it's a real infra decision (needs a secret-verified public endpoint on the server), not a default to add unprompted.
+- The server's `app/.env` is production config (`APP_ENV=production`, `APP_DEBUG=false`, SQLite for now) — it's not in git (gitignored, same as local), so it won't come back if the server directory is ever rebuilt from a fresh clone. If that happens, recreate it from `.env.example` plus the production values in this section.
+
 ## Contribution protocol
 
-This is a two-developer team, each working with their own AI agent, sharing one repo. Read `CHANGELOG.md`'s most recent entries before you start, so you're not rediscovering context the other side already has. Before you finish and push:
+This is a two-developer team, each working with their own AI agent, sharing one repo. **Work from `develop`, not `main`** — see Branching & deployment above. Read `CHANGELOG.md`'s most recent entries before you start, so you're not rediscovering context the other side already has. Before you finish and push:
 
 1. **Write a specific commit message.** What changed and why — "update files" or "fixes" tells the next agent nothing. Reference the real thing that changed: "add record-payment page for Accounts" not "update EntryController."
 2. **Add a dated entry to `CHANGELOG.md`.** Plain language, written for a teammate (human or AI) who wasn't there: what you built or fixed, what's now possible that wasn't before, and any new decision that belongs in this file's "Decisions already made" section.

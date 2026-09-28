@@ -8,6 +8,12 @@ Buildiwick runs 16 active construction projects out of one shared Excel workbook
 
 This repo is the real system replacing it. The mandate from the client is explicit: **digitize what they already have, don't redesign it.** Every table, category, and status field in this codebase traces back to their actual interim tracker (`Buildiwick_All_Projects_Interim_Tracker_4.xlsx`) and their process lifecycle document — nothing invented.
 
+## Live sandbox
+
+**https://buildiwick.olamtec.co.tz** — same demo logins as below. This is a sandbox subdomain, not the eventual production domain (that'll be a separate domain the client buys later).
+
+**Branching:** all work happens on **`develop`** — that's what's live on the sandbox above. `main` is frozen on purpose, reserved for when a real production domain is connected. See `CLAUDE.md` → "Branching & deployment" for the deploy process (currently manual — a push to `develop` doesn't auto-update the sandbox yet).
+
 ## Current status: Phase 1 (MVP)
 
 Full phase breakdown (MVP → Phase 2 → Future modules) is in the **Build Phases** doc — see [Design & planning references](#design--planning-references) below. Short version:
