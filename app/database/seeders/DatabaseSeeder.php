@@ -2,8 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\Role;
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -21,13 +19,6 @@ class DatabaseSeeder extends Seeder
             LookupSeeder::class,
             ProjectSeeder::class,
             UserSeeder::class,
-        ]);
-
-        $adminRole = Role::where('name', 'admin')->first();
-        User::factory()->create([
-            'name' => 'Test Admin',
-            'email' => 'admin@buildiwick.test',
-            'role_id' => $adminRole->id,
         ]);
     }
 }
