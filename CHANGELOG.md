@@ -18,3 +18,11 @@ Every session or PR adds an entry here — dated, plain language, written for a 
 - Verified end-to-end in a live browser session: filed a real Materials entry for Kinondoni (Cement, 50 bags → auto-computed TSh 925,000), confirmed the category total and needs-confirmation list updated; created a real labour agreement for a fundi (TSh 1,900,000) and recorded a TSh 205,000 advance against it — running balance showed 205,000 / 1,900,000, matching the brief's own worked example.
 
 **Not yet built:** approve/reject as a real page for Project Managers (policy + logic exist, no Blade page); record-payment as a real page for Accounts (same). Client invoicing and the full procurement/sales workflow are Phase 2 / Future — deliberately out of scope for this phase.
+
+**Deployed to a live sandbox: https://buildiwick.olamtec.co.tz**
+
+- Server: `vda6000.is.cc` (DirectAdmin, same host as the other olamtec.co.tz sites), subdomain created with PHP 8.4.
+- Deploy pattern matches the sibling projects (e.g. sokokuku.olamtec.co.tz): the repo is cloned to `~/domains/buildiwick.olamtec.co.tz/repo`, and `public_html` is a symlink to `repo/app` — so the whole Laravel app (source included) sits at the web root. This looked like a risk at first glance, but it's protected by a server-level rule blocking dotfile access (`.env` returns 403) — confirmed by testing sokokuku's live `.env` before repeating the pattern here, not assumed.
+- To update the live site: `cd ~/domains/buildiwick.olamtec.co.tz/repo && git pull`, then re-run `composer install --no-dev --optimize-autoloader` if dependencies changed, and any new migrations.
+- **Found and fixed a real deploy-time bug**: `DatabaseSeeder` had a leftover `User::factory()->create(...)` call from before `UserSeeder` existed, which crashed `db:seed` in production because `composer install --no-dev` correctly excludes `fakerphp/faker`. Removed it — `UserSeeder`'s real named accounts already cover the admin demo login, the factory call was dead weight.
+- Server DB is SQLite for now, matching local dev — same reasoning as local (start simple, no separate DB service to provision). Revisit if/when this needs to survive a server migration or handle real concurrent writes.
