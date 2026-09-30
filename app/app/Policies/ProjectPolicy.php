@@ -33,8 +33,24 @@ class ProjectPolicy
         return $user->hasRole('admin');
     }
 
-    public function delete(User $user, Project $project): bool
+    public function manageSetup(User $user): bool
     {
         return $user->hasRole('admin');
+    }
+
+    public function delete(User $user, Project $project): bool
+    {
+        if (! $user->hasRole('admin')) {
+            return false;
+        }
+
+        return ! $project->transactions()->exists()
+            && ! $project->estimates()->exists()
+            && ! $project->internalBudgets()->exists()
+            && ! $project->expenseRequests()->exists()
+            && ! $project->invoices()->exists()
+            && ! $project->labourAgreements()->exists()
+            && ! $project->documents()->exists()
+            && ! $project->phases()->exists();
     }
 }

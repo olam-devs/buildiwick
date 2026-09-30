@@ -44,6 +44,42 @@
   .navitem.active{background:var(--primary-soft);color:var(--primary-dark);font-weight:600;}
   .navitem.active svg{opacity:1;}
   .navitem:not(.active):hover{background:var(--surface-2);}
+  .form-section{margin-bottom:14px;}
+  .form-section h3{margin-bottom:16px;}
+  .phase-schedule{border-top:1px solid var(--line);padding-top:14px;margin-top:8px;}
+  .phase-schedule h4{font-size:13px;margin:0 0 10px;font-weight:600;}
+  .actions{white-space:nowrap;}
+  .actions a{display:block;color:var(--primary-dark);text-decoration:none;margin:3px 0;font-size:12px;font-weight:600;}
+  .back-link{display:inline-block;margin-bottom:10px;color:var(--ink-dim);text-decoration:none;font-size:12.5px;}
+  .back-link:hover{color:var(--primary);}
+  .estimator-project-table{min-width:1450px;}
+  .estimate-entry-table{min-width:1320px;}
+  .phase-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px;}
+  .phase-heading h3{margin:0 0 4px;}
+  .phase-heading p,.form-context{color:var(--ink-dim);font-size:12px;margin:4px 0 12px;}
+  .phase-metrics{grid-template-columns:repeat(auto-fit,minmax(155px,1fr));}
+  .phase-metrics .tile .value{font-size:17px;}
+  .phase-empty,.empty-state{padding:20px;color:var(--ink-dim);}
+  .phase-empty a{color:var(--primary-dark);font-weight:600;margin-left:4px;}
+  .estimate-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .estimate-actions form{margin:0;}
+  .entry-actions a,.entry-actions button{display:block;border:0;background:none;padding:2px 0;color:var(--primary-dark);font:inherit;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;}
+  .entry-actions form{margin:0;}
+  .status-pill{display:inline-flex;align-items:center;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:600;text-transform:capitalize;white-space:nowrap;}
+  .approval-pending_approval{background:var(--warn-soft);color:#96660f;}
+  .approval-approved{background:var(--good-soft);color:#1c7a4f;}
+  .approval-rejected,.approval-cancelled{background:var(--danger-soft);color:#a3392a;}
+  .payment-unpaid{background:var(--surface-2);color:var(--ink-soft);}
+  .payment-part_paid{background:var(--warn-soft);color:#96660f;}
+  .payment-paid{background:var(--good-soft);color:#1c7a4f;}
+  .request-actions{display:flex;gap:8px;margin:16px 0 32px;}
+  .request-actions form{margin:0;}
+  .request-submit-note{line-height:1.8;color:var(--ink-soft);}
+  .site-project-table{min-width:1600px;}
+  .site-request-table{min-width:1750px;}
+  .request-detail-grid{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));}
+  tfoot th{padding:11px 16px;border-top:2px solid var(--line-strong);text-align:left;background:var(--surface-2);}
+  @media(max-width:700px){.main{padding:18px 14px 40px}.phase-heading{display:block}.phase-heading .btn{margin-top:8px}.estimate-actions{align-items:flex-start;flex-direction:column}}
 
   .main{padding:22px 30px 60px;max-width:1180px;}
   .crumb{font-size:12px;color:var(--ink-dim);margin-bottom:6px;}
@@ -150,16 +186,49 @@
     @endauth
     <nav class="navgroup">
       <div class="label">Overview</div>
+      @if (auth()->user()->hasRole('estimator_qs'))
+      <a class="navitem {{ request()->routeIs('estimator.projects.*') ? 'active' : '' }}" href="{{ route('estimator.projects.index') }}">Estimator Dashboard</a>
+      @elseif (auth()->user()->hasRole('site_operator'))
+      <a class="navitem {{ request()->routeIs('site.index') || request()->routeIs('site.projects.*') ? 'active' : '' }}" href="{{ route('site.index') }}">Projects</a>
+      <a class="navitem {{ request()->routeIs('site.requests.*') ? 'active' : '' }}" href="{{ route('site.requests.index') }}">Expense Requests</a>
+      @elseif (auth()->user()->hasRole('project_manager'))
+      <a class="navitem {{ request()->routeIs('pm.projects.*') ? 'active' : '' }}" href="{{ route('pm.projects.index') }}">Projects</a>
+      <a class="navitem {{ request()->routeIs('pm.budget-entries.*') || request()->routeIs('pm.budgets.*') ? 'active' : '' }}" href="{{ route('pm.projects.index') }}">Internal Budgets</a>
+      <a class="navitem {{ request()->routeIs('pm.requests.*') ? 'active' : '' }}" href="{{ route('pm.requests.index') }}">Site Requests</a>
+      @elseif (auth()->user()->hasRole('accountant') || auth()->user()->hasRole('accounts'))
+      <a class="navitem {{ request()->routeIs('accountant.index') ? 'active' : '' }}" href="{{ route('accountant.index') }}">Dashboard</a>
+      <a class="navitem {{ request()->routeIs('accountant.requests.*') ? 'active' : '' }}" href="{{ route('accountant.requests.index') }}">Approved Payments</a>
+      <a class="navitem {{ request()->routeIs('accountant.invoices.*') ? 'active' : '' }}" href="{{ route('accountant.invoices.index') }}">Client Invoices</a>
+      <a class="navitem {{ request()->routeIs('accountant.transactions.*') ? 'active' : '' }}" href="{{ route('accountant.transactions.index') }}">Transactions</a>
+      <a class="navitem {{ request()->routeIs('accountant.receivables.*') ? 'active' : '' }}" href="{{ route('accountant.receivables.index') }}">Receivables</a>
+      <a class="navitem {{ request()->routeIs('accountant.payables.*') ? 'active' : '' }}" href="{{ route('accountant.payables.index') }}">Approved Payables</a>
+      <a class="navitem {{ request()->routeIs('accountant.projects.*') ? 'active' : '' }}" href="{{ route('accountant.projects.index') }}">Projects</a>
+      @elseif (auth()->user()->hasRole('director'))
+      <a class="navitem {{ request()->routeIs('director.index') || request()->routeIs('director.projects.*') ? 'active' : '' }}" href="{{ route('director.index') }}">Executive Dashboard</a>
+      <a class="navitem {{ request()->routeIs('director.receivables.*') ? 'active' : '' }}" href="{{ route('director.receivables.index') }}">Receivables</a>
+      <a class="navitem {{ request()->routeIs('director.payables.*') ? 'active' : '' }}" href="{{ route('director.payables.index') }}">Approved Payables</a>
+      <a class="navitem {{ request()->routeIs('director.transactions.*') ? 'active' : '' }}" href="{{ route('director.transactions.index') }}">Transactions</a>
+      @else
       <a class="navitem {{ request()->routeIs('dashboard.index') ? 'active' : '' }}" href="{{ url('/projects') }}">
         <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="2.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="11.5" y="2.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="11.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="11.5" y="11.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/></svg>
         All Projects
       </a>
+      @endif
+      @can('manageSetup', App\Models\Project::class)
+        <a class="navitem {{ request()->routeIs('admin.projects.*') ? 'active' : '' }}" href="{{ route('admin.projects.index') }}">Project Setup</a>
+        <a class="navitem {{ request()->routeIs('estimator.projects.*') ? 'active' : '' }}" href="{{ route('estimator.projects.index') }}">Estimator Estimates</a>
+      @endcan
+      @if (auth()->user()->hasRole('admin'))
+        <a class="navitem {{ request()->routeIs('director.*') ? 'active' : '' }}" href="{{ route('director.index') }}">Director Analytics</a>
+      @endif
     </nav>
     @auth
     <div style="margin-top:auto;">
+      @if (auth()->user()->hasRole('admin'))
       <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;" onclick="Buildiwick.openDrawer()">
         <span style="font-size:16px;line-height:1;">+</span> New Entry
       </button>
+      @endif
       <form method="POST" action="{{ url('/logout') }}" style="margin-top:8px;">
         @csrf
         <button type="submit" class="btn btn-ghost" style="width:100%;justify-content:center;">Sign out</button>
@@ -174,7 +243,9 @@
 </div>
 
 @auth
+@if (auth()->user()->hasRole('admin') && ! request()->routeIs('estimator.*'))
 @include('partials.new-entry-drawer')
+@endif
 @endauth
 
 </body>

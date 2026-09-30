@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -42,6 +43,41 @@ class User extends Authenticatable
     public function assignedProjects(): BelongsToMany
     {
         return $this->belongsToMany(Project::class, 'project_assignments');
+    }
+
+    public function preparedEstimates(): HasMany
+    {
+        return $this->hasMany(ProjectEstimate::class, 'prepared_by');
+    }
+
+    public function createdBudgets(): HasMany
+    {
+        return $this->hasMany(InternalBudget::class, 'created_by');
+    }
+
+    public function requestedExpenses(): HasMany
+    {
+        return $this->hasMany(ExpenseRequest::class, 'requested_by');
+    }
+
+    public function expenseDecisions(): HasMany
+    {
+        return $this->hasMany(ExpenseRequestApproval::class, 'decided_by');
+    }
+
+    public function expensePaymentsRecorded(): HasMany
+    {
+        return $this->hasMany(ExpensePayment::class, 'recorded_by');
+    }
+
+    public function clientPaymentsRecorded(): HasMany
+    {
+        return $this->hasMany(ClientPayment::class, 'recorded_by');
+    }
+
+    public function uploadedProjectDocuments(): HasMany
+    {
+        return $this->hasMany(ProjectDocument::class, 'uploaded_by');
     }
 
     public function hasRole(string $name): bool

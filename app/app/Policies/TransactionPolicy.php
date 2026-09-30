@@ -33,7 +33,6 @@ class TransactionPolicy
     {
         return match ($user->role?->name) {
             'admin' => true,
-            'site_operator', 'project_manager' => $user->assignedProjects()->whereKey($project->id)->exists(),
             default => false, // accounts and estimator_qs never originate a cost line
         };
     }

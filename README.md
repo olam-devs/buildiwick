@@ -8,21 +8,22 @@ Buildiwick runs 16 active construction projects out of one shared Excel workbook
 
 This repo is the real system replacing it. The mandate from the client is explicit: **digitize what they already have, don't redesign it.** Every table, category, and status field in this codebase traces back to their actual interim tracker (`Buildiwick_All_Projects_Interim_Tracker_4.xlsx`) and their process lifecycle document — nothing invented.
 
-## Current status: Phase 1 (MVP)
+## Current status: Phases 1–11
 
 Full phase breakdown (MVP → Phase 2 → Future modules) is in the **Build Phases** doc — see [Design & planning references](#design--planning-references) below. Short version:
 
 **Built and working:**
 - Schema matching the real 23-column tracker, plus every real dropdown list (categories, subcategories, units, statuses, construction stages) as one managed `lookups` table
-- Auth (Sanctum API tokens + session-based web login) and role policies for all 5 roles — Admin, Accounts, Estimator/QS, Project Manager, Site Operator
+- Auth (Sanctum API tokens + session-based web login) and role policies for Admin, Director, Accounts, Estimator/QS, Project Manager, and Site Operator
 - A real entry form (web UI, not just an API) for Materials / Labour & Subcontracts / Logistics & Equipment / Preliminaries & Overheads, including the Labour "new agreement" vs "record payment" split
 - All Projects dashboard (company-wide rollup) and per-project drill-down, computed live from the database — not a maintained spreadsheet
 - Kinondoni Residence's 33 historical rows imported and verified **byte-for-byte** against the client's real Consolidated tab totals
 
+**Implemented through Phase 11:**
+- Project setup, Estimator/QS estimates, Site Operator need reports, PM internal budgets and approvals, Accountant payments/invoicing/reporting, Director read-only executive analytics, and security/authorization/audit/financial-integrity hardening.
+- Verified regression suite: 126 tests / 1,190 assertions, all passing in testing with in-memory SQLite.
+
 **Not built yet:**
-- Approve/reject as a real page for Project Managers (the policy and API endpoint exist; no Blade page yet)
-- Record-payment as a real page for Accounts (same — logic exists, page doesn't)
-- Client invoicing (Phase 2 — the client's own tracker doesn't have this yet either, deliberately out of scope for now)
 - The full multi-stage procurement workflow and sales/CRM pipeline (Future — separate modules, not scheduled)
 
 ## Getting started
@@ -39,11 +40,11 @@ php artisan app:import-kinondoni-historical-data
 php artisan serve
 ```
 
-Visit `http://127.0.0.1:8000/login`. Demo accounts (password `password` for all):
+Visit `http://127.0.0.1:8000/login`. Local/demo accounts use password `password` for all; these seeded credentials are development-only and production deployments must replace them before use. The sign-in page displays demo hints only in local/testing environments:
 
 | Email | Role | Scope |
 |---|---|---|
-| director@buildiwick.test | Admin | Everything |
+| director@buildiwick.test | Director | Read-only organization and project financial analytics |
 | grace@buildiwick.test | Accounts | Everything (not project-scoped) |
 | twalib@buildiwick.test | Estimator/QS | Materials pricing only, no cash |
 | neema@buildiwick.test | Project Manager | Kinondoni Residence + KICD Outdoor Lounge only |
