@@ -2,11 +2,21 @@
 
 A real system replacing the spreadsheet a Dar es Salaam construction company has been running their entire business on.
 
+> **New here?** AI agents must read `CLAUDE.md` before changing the project. It contains the current architecture decisions, security boundaries, and branch/deployment rules.
+
 ## What this is
 
 Buildiwick runs 16 active construction projects out of one shared Excel workbook — materials, labour, logistics, and preliminaries costs all typed into per-project tabs by hand. It works, but it's a single point of failure: anyone with the file sees every project's numbers (including figures site staff shouldn't see), one typo can break a shared formula, two people can't safely edit it at once, and they operate every other day without getting round to updating it.
 
 This repo is the real system replacing it. The mandate from the client is explicit: **digitize what they already have, don't redesign it.** Every table, category, and status field in this codebase traces back to their actual interim tracker (`Buildiwick_All_Projects_Interim_Tracker_4.xlsx`) and their process lifecycle document — nothing invented.
+
+## Live sandbox and branches
+
+The shared sandbox is **https://buildiwick.olamtec.co.tz**. It is for development and review; it is not the eventual production domain.
+
+- **`develop` is the integration branch** and is the branch checked out by the sandbox deployment. New work should use a feature branch and return to `develop` through review.
+- **`main` is the stable production-candidate branch.** Do not merge into it as part of ordinary sandbox development. Promoting `develop` to `main` is a deliberate release decision.
+- Sandbox deployment is manual. A push to `develop` does not update the server until an authorized operator pulls it and runs the required dependency, migration, and cache commands documented in `CLAUDE.md`.
 
 ## Current status: Phases 1–11
 
@@ -73,6 +83,7 @@ These were built as Claude artifacts during planning. They're private by default
 
 This is a two-developer team (plus AI agents on both sides), so nobody should have to reverse-engineer a diff to know what changed. Before you push:
 
-1. Write a specific commit message — what changed and why, not "update files."
-2. Add a dated entry to `CHANGELOG.md` in plain language: what you built or fixed, and what's now possible that wasn't before.
-3. If you're an AI agent, read `CLAUDE.md` first — it has the fuller technical context and the same protocol in more detail.
+1. Work on a feature branch and target `develop` unless the owners explicitly approve a production promotion.
+2. Write a specific commit message — what changed and why, not "update files."
+3. Add a dated entry to `CHANGELOG.md` in plain language: what you built or fixed, and what's now possible that wasn't before.
+4. If you're an AI agent, read `CLAUDE.md` first — it has the fuller technical context and the same protocol in more detail.
