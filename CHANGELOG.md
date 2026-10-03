@@ -2,6 +2,16 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-03 — Branch Reconciliation and Independent Verification
+
+**Prepared the Phase 11 `main` snapshot to return to the shared `develop` workflow without promoting or changing production.**
+
+- Restored the documented branch model that had remained only on the diverged `develop` branch: feature work targets `develop`, the shared sandbox checks out `develop`, and `main` remains the stable production-candidate branch.
+- Updated the restored guidance for the current Phase 11 role model: the bundled Director account is read-only and is not the Admin bypass.
+- Kept the newer Phase 2–11 implementation, security hardening, and financial workflows from commit `2986a9e`; no application or database behavior was changed by this reconciliation.
+- Independently installed the locked dependencies and ran the full test suite using portable PHP 8.4.25 and in-memory SQLite: **126 tests / 1,190 assertions passed**.
+- The shared sandbox remains a manual deployment. Merging or deploying the reconciliation still requires explicit review; no remote branch, production checkout, or database was changed during preparation.
+
 ## 2026-09-30 — Phase 11 Security, Authorization, Audit and Financial Integrity
 
 **Hardened existing workflows without starting Phase 12 or adding a new business module.**
@@ -108,17 +118,14 @@ Every session or PR adds an entry here — dated, plain language, written for a 
 - Added focused hardening coverage. The full isolated suite passes: 77 tests, 713 assertions. No Phase 6 approval, payment, invoicing, or analytics workflow was added.
 
 ## 2026-09-30
-## 2026-09-30
 **Implemented Phase 4 Site Operator dashboard and ExpenseRequest workflow.**
 
 - Added role-specific Site Operator dashboard, assigned-project request pages, details, safe owner-only pending edits/cancellation, and private evidence downloads.
 - Requests bind to the project’s single active standard phase, calculate amount server-side with fixed-point math, use collision-safe REQ-<ULID> codes, preserve submission/cancellation audit timestamps, and never create ExpensePayment.
 - Approval state, approved amount, actual payments, payment status, and approved outstanding remain separate; summaries are derived from request and payment records.
 - Removed Site Operator legacy transaction creation from policy, web entry UI, and API response path; historical transaction access/data remain otherwise intact.
-- Added additive submission/approved amount/cancellation and evidence original-filename columns. Focused Site tests pass (12 tests, 114 assertions); full suite passes (57 tests, 555 assertions) using in-memory SQLite migrations/seeders.
 - Added additive submission/approved amount/cancellation and evidence original-filename columns. Focused Site tests pass (14 tests, 128 assertions); full suite passes (59 tests, 569 assertions) using in-memory SQLite migrations/seeders.
 - PM decision controls and Accounts payment controls were not added in this phase.
- PM decision controls and Accounts payment controls were not added in this phase.
 
 ## 2026-09-30 — Phase 5
 **Implemented Phase 5 Project Manager internal operational budgets.**
@@ -136,9 +143,6 @@ Every session or PR adds an entry here — dated, plain language, written for a 
 - Added draft-only entry create/edit/delete with phase/category/subcategory validation and actor audit. Estimate totals and markup summaries use the existing fixed-point `Money` calculations; browser preview is integer-cent only and never authoritative.
 - Added an additive `estimate_entries.entered_by` FK; no existing estimate/financial rows were rewritten. Added 16 Estimator workflow feature tests.
 - Verified all migrations and seeders using explicitly in-memory SQLite. Full suite: 45 tests, 441 assertions, all passing. No PM, Site Operator, Accounts, invoice, or Director analytics workflows were added.
- Verified all migrations and seeders using explicitly in-memory SQLite. At Phase 3 completion: 45 tests, 441 assertions passed. PM financial, Accounts, invoicing, and Director analytics were not part of that phase.
-
-Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
 ## 2026-09-30
 
