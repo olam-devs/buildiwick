@@ -1,0 +1,7 @@
+@extends('layouts.app')
+@section('title', 'Suppliers / Payees · Buildiwick')
+@section('content')
+<div class="topline"><div><h2>Suppliers / Payees</h2><p>Reusable commercial records for PM procurement preparation.</p></div><a class="btn btn-primary" href="{{ route('pm.suppliers.create') }}">Add Supplier / Payee</a></div>
+<form method="GET" class="panel form-section"><div class="row2"><div class="field"><label for="q">Search by name</label><input id="q" name="q" value="{{ request('q') }}"></div><div class="field" style="display:flex;align-items:end"><button class="btn btn-ghost" type="submit">Search</button></div></div></form>
+<div class="tablewrap"><table><thead><tr><th>Name</th><th>Type</th><th>Contact Person</th><th>Phone</th><th>Email</th><th>Status</th><th>Action</th></tr></thead><tbody>@forelse($suppliers as $supplier)<tr><td>{{ $supplier->name }}</td><td>{{ ucfirst(str_replace('_',' ',$supplier->type)) }}</td><td>{{ $supplier->contact_person ?: '—' }}</td><td>{{ $supplier->phone ?: '—' }}</td><td>{{ $supplier->email ?: '—' }}</td><td>{{ $supplier->is_active ? 'Active' : 'Inactive' }}</td><td><a href="{{ route('pm.suppliers.destinations', $supplier) }}">Payment destinations</a></td></tr>@empty<tr><td colspan="7">No supplier/payees found.</td></tr>@endforelse</tbody></table></div>
+@endsection

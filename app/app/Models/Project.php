@@ -3,17 +3,90 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Project extends Model
 {
-    protected $fillable = ['project_code', 'name', 'status', 'location', 'created_by'];
+    use HasFactory;
+
+    protected $fillable = [
+        'project_code', 'name', 'status', 'location', 'created_by', 'client_id',
+        'contract_reference', 'contract_signed', 'contract_signed_at',
+        'planned_start_date', 'expected_completion_date', 'notes',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'contract_signed' => 'boolean',
+            'contract_signed_at' => 'date',
+            'planned_start_date' => 'date',
+            'expected_completion_date' => 'date',
+        ];
+    }
+
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
 
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    public function phases(): HasMany
+    {
+        return $this->hasMany(ProjectPhase::class);
+    }
+
+    public function activePhase(): HasOne
+    {
+        return $this->hasOne(ProjectPhase::class)->where('status', 'active')->orderBy('phase_order');
+    }
+
+    public function estimates(): HasMany
+    {
+        return $this->hasMany(ProjectEstimate::class);
+    }
+
+    public function internalBudgets(): HasMany
+    {
+        return $this->hasMany(InternalBudget::class);
+    }
+
+    public function expenseRequests(): HasMany
+    {
+        return $this->hasMany(ExpenseRequest::class);
+    }
+
+    public function expensePayments(): HasMany
+    {
+        return $this->hasMany(ExpensePayment::class);
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(ClientInvoice::class);
+    }
+
+    public function clientPayments(): HasMany
+    {
+        return $this->hasMany(ClientPayment::class);
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(ProjectDocument::class);
+    }
+
+    public function contractDocuments(): HasMany
+    {
+        return $this->documents()->where('document_type', 'contract')->latest('uploaded_at');
     }
 
     public function labourAgreements(): HasMany

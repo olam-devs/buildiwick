@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
-    public function show()
+    public function show(Request $request)
     {
         if (Auth::check()) {
-            return redirect('/projects');
+            return $this->roleLandingRedirect($request);
         }
 
         return view('auth.login');
@@ -31,12 +31,12 @@ class AuthController extends Controller
         if (! Auth::user()->is_active) {
             Auth::logout();
 
-            return back()->withErrors(['email' => 'This account has been deactivated.']);
+            return back()->withErrors(['email' => 'Those credentials don\'t match our records.']);
         }
 
         $request->session()->regenerate();
 
-        return redirect('/projects');
+        return $this->roleLandingRedirect($request);
     }
 
     public function logout(Request $request)
@@ -46,5 +46,28 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/login');
+    }
+
+    private function roleLandingRedirect(Request $request)
+    {
+        $route = match (Auth::user()->role?->name) {
+            'admin' => 'dashboard.index',
+            'director' => 'director.index',
+            'accounts', 'accountant' => 'accountant.index',
+            'project_manager' => 'pm.projects.index',
+            'estimator_qs' => 'estimator.projects.index',
+            'site_operator' => 'site.index',
+            default => null,
+        };
+
+        if ($route === null) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->withErrors(['email' => 'This account has no assigned application role.']);
+        }
+
+        return redirect()->route($route);
     }
 }

@@ -50,9 +50,12 @@ class LookupSeeder extends Seeder
         ], parentType: 'main_category', parentCode: 'labour_subcontracts', startOrder: 100);
 
         $this->seedType('unit', [
-            ['pc', 'PC'], ['bag', 'BAG'], ['kg', 'KG'], ['m', 'M'], ['m3', 'M³'],
-            ['l', 'L'], ['roll', 'ROLL'], ['trip', 'TRIP'], ['day', 'DAY'],
-            ['week', 'WEEK'], ['month', 'MONTH'], ['ls', 'LS'], ['hour', 'HOUR'], ['no', 'NO.'],
+            ['pc', 'PIECE'], ['bag', 'BAG'], ['kg', 'KG'], ['tonne', 'TONNE'], ['bundle', 'BUNDLE'],
+            ['m', 'M'], ['m2', 'M²'], ['m3', 'M³'], ['l', 'L'], ['sheet', 'SHEET'], ['roll', 'ROLL'],
+            ['box', 'BOX'], ['trip', 'TRIP'], ['load', 'LOAD'], ['km', 'KM'], ['day', 'DAY'],
+            ['worker_day', 'WORKER-DAY'], ['week', 'WEEK'], ['month', 'MONTH'], ['hour', 'HOUR'],
+            ['worker_hour', 'WORKER-HOUR'], ['job', 'JOB'], ['task', 'TASK'], ['service', 'SERVICE'],
+            ['point', 'POINT'], ['person', 'PERSON'], ['ls', 'LS'], ['no', 'NO.'],
         ]);
 
         $this->seedType('payment_status', [
@@ -87,7 +90,33 @@ class LookupSeeder extends Seeder
         ]);
 
         $this->seedType('project_status', [
-            ['active', 'Active'], ['planning', 'Planning'],
+            ['active', 'Active'], ['planning', 'Planning'], ['on_hold', 'On Hold'], ['completed', 'Completed'],
+        ]);
+
+        $this->seedType('project_phase_status', [
+            ['not_started', 'Not Started'], ['active', 'Active'], ['on_hold', 'On Hold'], ['completed', 'Completed'],
+        ]);
+
+        $this->seedType('estimate_status', [
+            ['draft', 'Draft'], ['issued', 'Issued'], ['superseded', 'Superseded'],
+        ]);
+
+        $this->seedType('internal_budget_status', [
+            ['draft', 'Draft'], ['finalized', 'Finalized'], ['approved', 'Approved'], ['superseded', 'Superseded'],
+        ]);
+
+        $this->seedType('expense_request_status', [
+            ['pending_approval', 'Pending Approval'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['cancelled', 'Cancelled'],
+        ]);
+
+        $this->seedType('client_invoice_status', [
+            ['draft', 'Draft'], ['issued', 'Issued'], ['cancelled', 'Cancelled'],
+        ]);
+
+        $this->seedType('project_document_type', [
+            ['estimate', 'Estimate'], ['budget', 'Budget'], ['request_evidence', 'Request Evidence'],
+            ['payment_receipt', 'Payment Receipt'], ['invoice', 'Invoice'], ['contract', 'Contract'],
+            ['drawing', 'Drawing'], ['other', 'Other'],
         ]);
     }
 

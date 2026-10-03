@@ -2,7 +2,7 @@
 
 A real system replacing the spreadsheet a Dar es Salaam construction company has been running their entire business on.
 
-> **New here?** If you're an AI agent (Claude or otherwise), **read `CLAUDE.md` first** — it has the full technical context, the decisions already made, and the branch/deploy rules, so you're not rediscovering any of it. Humans: this page has what you need, `CLAUDE.md` is written for your agent.
+> **New here?** AI agents must read `CLAUDE.md` before changing the project. It contains the current architecture decisions, security boundaries, and branch/deployment rules.
 
 ## What this is
 
@@ -10,37 +10,30 @@ Buildiwick runs 16 active construction projects out of one shared Excel workbook
 
 This repo is the real system replacing it. The mandate from the client is explicit: **digitize what they already have, don't redesign it.** Every table, category, and status field in this codebase traces back to their actual interim tracker (`Buildiwick_All_Projects_Interim_Tracker_4.xlsx`) and their process lifecycle document — nothing invented.
 
-## Live sandbox
+## Live sandbox and branches
 
-**https://buildiwick.olamtec.co.tz** — this is a sandbox subdomain, not the eventual production domain (that'll be a separate domain the client buys later).
+The shared sandbox is **https://buildiwick.olamtec.co.tz**. It is for development and review; it is not the eventual production domain.
 
-Demo logins (password `password` for all):
+- **`develop` is the integration branch** and is the branch checked out by the sandbox deployment. New work should use a feature branch and return to `develop` through review.
+- **`main` is the stable production-candidate branch.** Do not merge into it as part of ordinary sandbox development. Promoting `develop` to `main` is a deliberate release decision.
+- Sandbox deployment is manual. A push to `develop` does not update the server until an authorized operator pulls it and runs the required dependency, migration, and cache commands documented in `CLAUDE.md`.
 
-| Email | Role | Scope |
-|---|---|---|
-| director@buildiwick.test | Admin | Everything |
-| grace@buildiwick.test | Accounts | Everything (not project-scoped) |
-| twalib@buildiwick.test | Estimator/QS | Materials pricing only, no cash |
-| neema@buildiwick.test | Project Manager | Kinondoni Residence + KICD Outdoor Lounge only |
-| amani@buildiwick.test | Site Operator | Same two projects, write-only |
-
-**Branching — important:** all work happens on **`develop`**, not `main`. `develop` is what's live on the sandbox above; `main` is frozen on purpose, reserved for when a real production domain is connected later. Don't merge into `main` casually. See `CLAUDE.md` → "Branching & deployment" for the deploy process (currently manual — a push to `develop` doesn't auto-update the sandbox yet, someone has to SSH in and pull).
-
-## Current status: Phase 1 (MVP)
+## Current status: Phases 1–11
 
 Full phase breakdown (MVP → Phase 2 → Future modules) is in the **Build Phases** doc — see [Design & planning references](#design--planning-references) below. Short version:
 
 **Built and working:**
 - Schema matching the real 23-column tracker, plus every real dropdown list (categories, subcategories, units, statuses, construction stages) as one managed `lookups` table
-- Auth (Sanctum API tokens + session-based web login) and role policies for all 5 roles — Admin, Accounts, Estimator/QS, Project Manager, Site Operator
+- Auth (Sanctum API tokens + session-based web login) and role policies for Admin, Director, Accounts, Estimator/QS, Project Manager, and Site Operator
 - A real entry form (web UI, not just an API) for Materials / Labour & Subcontracts / Logistics & Equipment / Preliminaries & Overheads, including the Labour "new agreement" vs "record payment" split
 - All Projects dashboard (company-wide rollup) and per-project drill-down, computed live from the database — not a maintained spreadsheet
 - Kinondoni Residence's 33 historical rows imported and verified **byte-for-byte** against the client's real Consolidated tab totals
 
+**Implemented through Phase 11:**
+- Project setup, Estimator/QS estimates, Site Operator need reports, PM internal budgets and approvals, Accountant payments/invoicing/reporting, Director read-only executive analytics, and security/authorization/audit/financial-integrity hardening.
+- Verified regression suite: 126 tests / 1,190 assertions, all passing in testing with in-memory SQLite.
+
 **Not built yet:**
-- Approve/reject as a real page for Project Managers (the policy and API endpoint exist; no Blade page yet)
-- Record-payment as a real page for Accounts (same — logic exists, page doesn't)
-- Client invoicing (Phase 2 — the client's own tracker doesn't have this yet either, deliberately out of scope for now)
 - The full multi-stage procurement workflow and sales/CRM pipeline (Future — separate modules, not scheduled)
 
 ## Getting started
@@ -57,7 +50,15 @@ php artisan app:import-kinondoni-historical-data
 php artisan serve
 ```
 
-Visit `http://127.0.0.1:8000/login` — same demo accounts as the [Live sandbox](#live-sandbox) section above.
+Visit `http://127.0.0.1:8000/login`. Local/demo accounts use password `password` for all; these seeded credentials are development-only and production deployments must replace them before use. The sign-in page displays demo hints only in local/testing environments:
+
+| Email | Role | Scope |
+|---|---|---|
+| director@buildiwick.test | Director | Read-only organization and project financial analytics |
+| grace@buildiwick.test | Accounts | Everything (not project-scoped) |
+| twalib@buildiwick.test | Estimator/QS | Materials pricing only, no cash |
+| neema@buildiwick.test | Project Manager | Kinondoni Residence + KICD Outdoor Lounge only |
+| amani@buildiwick.test | Site Operator | Same two projects, write-only |
 
 ## Design & planning references
 
@@ -82,6 +83,7 @@ These were built as Claude artifacts during planning. They're private by default
 
 This is a two-developer team (plus AI agents on both sides), so nobody should have to reverse-engineer a diff to know what changed. Before you push:
 
-1. Write a specific commit message — what changed and why, not "update files."
-2. Add a dated entry to `CHANGELOG.md` in plain language: what you built or fixed, and what's now possible that wasn't before.
-3. If you're an AI agent, read `CLAUDE.md` first — it has the fuller technical context and the same protocol in more detail.
+1. Work on a feature branch and target `develop` unless the owners explicitly approve a production promotion.
+2. Write a specific commit message — what changed and why, not "update files."
+3. Add a dated entry to `CHANGELOG.md` in plain language: what you built or fixed, and what's now possible that wasn't before.
+4. If you're an AI agent, read `CLAUDE.md` first — it has the fuller technical context and the same protocol in more detail.

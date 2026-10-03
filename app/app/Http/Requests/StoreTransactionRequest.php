@@ -36,7 +36,7 @@ class StoreTransactionRequest extends FormRequest
             'work_area_stage' => ['nullable', 'string', Rule::exists('lookups', 'code')->where('type', 'construction_stage')],
             'notes' => ['nullable', 'string', 'max:2000'],
             'transaction_date' => ['required', 'date', 'before_or_equal:today'],
-            'evidence' => ['nullable', 'file', 'image', 'max:8192'], // 8MB, matches a phone camera photo
+            'evidence' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'extensions:jpg,jpeg,png,webp', 'max:8192'], // 8MB, matches a phone camera photo
 
             // Only meaningful when main_category = labour_subcontracts: this is an
             // instalment against an existing agreement, never a naked labour cost.

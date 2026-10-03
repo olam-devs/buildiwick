@@ -3,8 +3,13 @@
 namespace App\Providers;
 
 use App\Models\LabourAgreement;
+use App\Models\InternalBudget;
+use App\Models\InternalBudgetEntry;
+use App\Models\EstimateEntry;
 use App\Models\Lookup;
 use App\Models\Project;
+use App\Models\ProjectEstimate;
+use App\Models\ProjectPhase;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -29,12 +34,27 @@ class AppServiceProvider extends ServiceProvider
         // Applies before every policy check: a deactivated account can do
         // nothing at all, and Admin is a genuine bypass — never gated per
         // ability, matching "Admin/Directors: everything" from the brief.
-        Gate::before(function (User $user, string $ability) {
+        Gate::before(function (User $user, string $ability, array $arguments = []) {
             if (! $user->is_active) {
                 return false;
             }
 
             if ($user->hasRole('admin')) {
+                $target = $arguments[0] ?? null;
+                if ($ability === 'delete' && ($target instanceof Project || $target instanceof ProjectPhase || in_array($target, [Project::class, ProjectPhase::class], true))) {
+                    return null; // These policies enforce historical integrity even for Admin.
+                }
+                if (in_array($ability, ['update', 'delete', 'finalize'], true)
+                    && ($target instanceof ProjectEstimate || $target instanceof EstimateEntry
+                        || in_array($target, [ProjectEstimate::class, EstimateEntry::class], true))) {
+                    return null; // Estimate lifecycle and invoice-reference locks apply to Admin too.
+                }
+                if (in_array($ability, ['update', 'delete', 'finalize'], true)
+                    && ($target instanceof InternalBudget || $target instanceof InternalBudgetEntry
+                        || in_array($target, [InternalBudget::class, InternalBudgetEntry::class], true))) {
+                    return null; // Budget baseline locks apply to Admin too.
+                }
+
                 return true;
             }
 
@@ -46,6 +66,10 @@ class AppServiceProvider extends ServiceProvider
         // company cash position is exactly what the brief keeps from both roles.
         Gate::define('view-dashboard', fn (User $user) => in_array(
             $user->role?->name, ['admin', 'accounts', 'project_manager'], true
+        ));
+
+        Gate::define('view-director-analytics', fn (User $user) => in_array(
+            $user->role?->name, ['admin', 'director'], true
         ));
 
         // Feeds the "New Entry" drawer, which lives in the shared layout and

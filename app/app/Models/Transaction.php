@@ -10,6 +10,7 @@ class Transaction extends Model
 {
     protected $fillable = [
         'client_uuid', 'transaction_code', 'project_id', 'transaction_type',
+        'project_phase_id',
         'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
         'invoice_receipt_no', 'quantity', 'unit', 'unit_cost', 'total_amount',
         'amount_paid_received', 'payment_status', 'payment_method', 'agreement_id',
@@ -33,6 +34,11 @@ class Transaction extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function phase(): BelongsTo
+    {
+        return $this->belongsTo(ProjectPhase::class, 'project_phase_id');
     }
 
     public function agreement(): BelongsTo

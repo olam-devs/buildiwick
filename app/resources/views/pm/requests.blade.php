@@ -1,0 +1,12 @@
+@extends('layouts.app')
+@section('title', 'Site Requests · Project Manager')
+@section('content')
+<div class="topline"><div><h2>Site Requests</h2><p>Review assigned Site needs, prepare commercial details, and record PM decisions. Payment execution remains with Accounts.</p></div><a class="btn btn-ghost" href="{{ route('pm.projects.index') }}">Projects</a></div>
+<div class="panel form-section"><a class="btn {{ $filter === 'all' ? 'btn-primary' : 'btn-ghost' }}" href="{{ route('pm.requests.index', ['filter' => 'all']) }}">All</a> <a class="btn {{ $filter === 'awaiting_pricing' ? 'btn-primary' : 'btn-ghost' }}" href="{{ route('pm.requests.index', ['filter' => 'awaiting_pricing']) }}">Awaiting Pricing</a> <a class="btn {{ $filter === 'ready' ? 'btn-primary' : 'btn-ghost' }}" href="{{ route('pm.requests.index', ['filter' => 'ready']) }}">Ready for Review</a> <a class="btn {{ $filter === 'approved' ? 'btn-primary' : 'btn-ghost' }}" href="{{ route('pm.requests.index', ['filter' => 'approved']) }}">Approved</a> <a class="btn {{ $filter === 'rejected' ? 'btn-primary' : 'btn-ghost' }}" href="{{ route('pm.requests.index', ['filter' => 'rejected']) }}">Rejected</a></div>
+@if($requests->isEmpty())
+<section class="panel empty-state"><h3>No Site Requests are awaiting review.</h3><p>Non-cancelled requests from assigned projects will appear here.</p></section>
+@else
+<div class="tablewrap"><table><thead><tr><th>Request Code</th><th>Project</th><th>Phase</th><th>Category</th><th>Item</th><th>Quantity</th><th>Unit</th><th>Submitted By</th><th>Submitted At</th><th>Commercial Status</th><th>Approval Status</th><th>Action</th></tr></thead><tbody>
+@foreach($requests as $request)<tr><td>{{ $request->request_code }}</td><td>{{ $request->project->name }}</td><td>{{ $request->phase?->stage_label ?? '—' }}</td><td>{{ $labels[$request->main_category] ?? $request->main_category }}</td><td>{{ $request->item_description }}</td><td class="amt">{{ $request->quantity ?? '1.00' }}</td><td>{{ $request->unit ?? 'LS' }}</td><td>{{ $request->requestedBy?->name ?? '—' }}</td><td>{{ $request->submitted_at?->format('d M Y H:i') }}</td><td>{{ $request->commercial_total !== null ? 'Ready for Review' : 'Awaiting Pricing' }}</td><td><span class="status-pill approval-{{ $request->status }}">{{ ucwords(str_replace('_',' ',$request->status)) }}</span></td><td><a href="{{ route('pm.requests.commercial.edit', $request) }}">Review</a></td></tr>@endforeach</tbody></table></div>
+@endif
+@endsection

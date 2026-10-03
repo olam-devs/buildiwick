@@ -21,7 +21,7 @@ class UserSeeder extends Seeder
 
         $director = User::updateOrCreate(
             ['email' => 'director@buildiwick.test'],
-            ['name' => 'Emmanuel (Technical Director)', 'password' => Hash::make('password'), 'role_id' => $roleId('admin'), 'is_active' => true]
+            ['name' => 'Emmanuel (Technical Director)', 'password' => Hash::make('password'), 'role_id' => $roleId('director'), 'is_active' => true]
         );
 
         $accounts = User::updateOrCreate(

@@ -39,12 +39,14 @@
       <input id="password" name="password" type="password">
       <button type="submit">Sign in</button>
     </form>
+    @if (app()->environment(['local', 'testing']))
     <div class="hint">
       director@buildiwick.test<br>
       neema@buildiwick.test<br>
       grace@buildiwick.test<br>
       &middot; password for all: password
     </div>
+    @endif
   </div>
 </body>
 </html>
