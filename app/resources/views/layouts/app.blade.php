@@ -219,17 +219,13 @@
         <a class="navitem {{ request()->routeIs('estimator.projects.*') ? 'active' : '' }}" href="{{ route('estimator.projects.index') }}">Estimator Estimates</a>
       @endcan
       @if (auth()->user()->hasRole('admin'))
+        <a class="navitem {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">User Management</a>
         <a class="navitem {{ request()->routeIs('director.*') ? 'active' : '' }}" href="{{ route('director.index') }}">Director Analytics</a>
       @endif
     </nav>
     @auth
     <div style="margin-top:auto;">
-      @if (auth()->user()->hasRole('admin'))
-      <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;" onclick="Buildiwick.openDrawer()">
-        <span style="font-size:16px;line-height:1;">+</span> New Entry
-      </button>
-      @endif
-      <form method="POST" action="{{ url('/logout') }}" style="margin-top:8px;">
+      <form method="POST" action="{{ url('/logout') }}">
         @csrf
         <button type="submit" class="btn btn-ghost" style="width:100%;justify-content:center;">Sign out</button>
       </form>
@@ -242,11 +238,6 @@
   </main>
 </div>
 
-@auth
-@if (auth()->user()->hasRole('admin') && ! request()->routeIs('estimator.*'))
-@include('partials.new-entry-drawer')
-@endif
-@endauth
-
+@stack('drawers')
 </body>
 </html>

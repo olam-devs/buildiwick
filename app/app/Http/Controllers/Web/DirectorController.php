@@ -15,10 +15,31 @@ class DirectorController extends Controller
     public function index(Request $request, DirectorAnalyticsService $analytics)
     {
         $this->authorize('view-director-analytics');
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', 'in:all,active,planning,on_hold,completed'],
+        ]);
         $range = $this->dateRange($request);
         $report = $analytics->portfolio($range['from'], $range['to']);
+        $projects = $report['projects']
+            ->when(($filters['search'] ?? null), function ($rows, string $search) {
+                $needle = mb_strtolower($search);
 
-        return view('director.index', ['report' => $report, 'range' => $range]);
+                return $rows->filter(fn ($row) => str_contains(mb_strtolower(implode(' ', [
+                    $row['project']->name,
+                    $row['project']->project_code,
+                    $row['project']->client?->name,
+                ])), $needle));
+            })
+            ->when(($filters['status'] ?? 'all') !== 'all', fn ($rows) => $rows->where('project.status', $filters['status']))
+            ->values();
+        $actionCounts = [
+            'over_budget' => $report['projects']->where('over_budget', true)->count(),
+            'overdue_invoices' => $report['summary']['overdue_invoice_count'],
+            'overdue_receivables' => $report['summary']['overdue_receivables'],
+        ];
+
+        return view('director.index', compact('projects', 'actionCounts', 'range', 'filters'));
     }
 
     public function project(Request $request, Project $project, DirectorAnalyticsService $analytics)
@@ -34,6 +55,7 @@ class DirectorController extends Controller
     {
         $this->authorize('view-director-analytics');
         $request->validate(['project_id' => ['nullable', 'integer', 'exists:projects,id']]);
+
         return view('director.receivables', [
             'receivables' => $analytics->receivables($request->integer('project_id') ?: null),
             'projects' => Project::orderBy('name')->get(['id', 'name']),
@@ -141,7 +163,9 @@ class DirectorController extends Controller
         return response()->streamDownload(function () use ($headers, $rows): void {
             $handle = fopen('php://output', 'w');
             fputcsv($handle, $headers);
-            foreach ($rows as $row) fputcsv($handle, $row);
+            foreach ($rows as $row) {
+                fputcsv($handle, $row);
+            }
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv']);
     }

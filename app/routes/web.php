@@ -1,15 +1,16 @@
 <?php
 
+use App\Http\Controllers\Web\AccountantController;
+use App\Http\Controllers\Web\AdminUserController;
 use App\Http\Controllers\Web\AuthController;
 use App\Http\Controllers\Web\DashboardController;
+use App\Http\Controllers\Web\DirectorController;
 use App\Http\Controllers\Web\EntryController;
 use App\Http\Controllers\Web\EstimatorController;
-use App\Http\Controllers\Web\ProjectSetupController;
 use App\Http\Controllers\Web\ProjectManagerController;
+use App\Http\Controllers\Web\ProjectSetupController;
 use App\Http\Controllers\Web\SiteOperatorController;
 use App\Http\Controllers\Web\SupplierPayeeController;
-use App\Http\Controllers\Web\AccountantController;
-use App\Http\Controllers\Web\DirectorController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => auth()->user()?->hasRole('estimator_qs')
@@ -106,6 +107,9 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::put('/admin/projects/{project}', [ProjectSetupController::class, 'update'])->name('admin.projects.update');
     Route::get('/admin/projects/{project}/contracts/{document}', [ProjectSetupController::class, 'downloadContract'])->name('admin.projects.contracts.download');
     Route::get('/admin/projects/{project}', [ProjectSetupController::class, 'show'])->name('admin.projects.show');
+    Route::resource('/admin/users', AdminUserController::class)
+        ->except(['show', 'destroy'])
+        ->names('admin.users');
 
     Route::get('/projects', [DashboardController::class, 'index'])->name('dashboard.index');
     Route::get('/projects/{project}', [DashboardController::class, 'show'])->name('dashboard.show');

@@ -2,10 +2,10 @@
 
 namespace App\Providers;
 
-use App\Models\LabourAgreement;
+use App\Models\EstimateEntry;
 use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
-use App\Models\EstimateEntry;
+use App\Models\LabourAgreement;
 use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectEstimate;
@@ -72,9 +72,9 @@ class AppServiceProvider extends ServiceProvider
             $user->role?->name, ['admin', 'director'], true
         ));
 
-        // Feeds the "New Entry" drawer, which lives in the shared layout and
-        // can be opened from any page — one composer beats passing the same
-        // three lookups through every controller action that renders a page.
+        Gate::define('manage-users', fn (User $user) => $user->hasRole('admin'));
+
+        // Feeds the project-level "New Entry" drawer.
         View::composer('partials.new-entry-drawer', function ($view) {
             $user = Auth::user();
             if (! $user) {

@@ -3,21 +3,22 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\SaveInternalBudgetEntryRequest;
-use App\Http\Requests\SaveExpenseCommercialDetailsRequest;
 use App\Http\Requests\DecideExpenseRequestRequest;
+use App\Http\Requests\SaveExpenseCommercialDetailsRequest;
+use App\Http\Requests\SaveInternalBudgetEntryRequest;
+use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
 use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectPhase;
-use App\Models\ExpenseRequest;
 use App\Models\SupplierPayee;
 use App\Models\SupplierPaymentDestination;
-use App\Services\ProjectManagerBudgetService;
-use App\Services\ExpenseRequestDecisionService;
 use App\Services\ExpenseRequestCommercialService;
+use App\Services\ExpenseRequestDecisionService;
+use App\Services\ProjectManagerBudgetService;
 use App\Support\CostEntryOptions;
+use App\Support\Money;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -27,12 +28,28 @@ class ProjectManagerController extends Controller
     public function requests(Request $request)
     {
         abort_unless($request->user()->hasRole('project_manager') || $request->user()->hasRole('admin'), 403);
+        $filters = $request->validate([
+            'filter' => ['nullable', 'in:all,awaiting_pricing,ready,approved,rejected'],
+            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'phase_id' => ['nullable', 'integer', 'exists:project_phases,id'],
+            'category' => ['nullable', 'in:materials,labour_subcontracts,logistics_equipment,preliminaries_overheads'],
+        ]);
         $query = ExpenseRequest::with(['project', 'phase', 'requestedBy', 'supplierPayee'])
             ->where('status', '!=', 'cancelled')->orderByDesc('submitted_at');
         if ($request->user()->hasRole('project_manager')) {
             $query->whereIn('project_id', $request->user()->assignedProjects()->select('projects.id'));
         }
-        match ($request->input('filter')) {
+        $counts = [
+            'all' => (clone $query)->count(),
+            'awaiting_pricing' => (clone $query)->where('status', 'pending_approval')->whereNull('commercial_total')->count(),
+            'ready' => (clone $query)->where('status', 'pending_approval')->whereNotNull('commercial_total')->count(),
+            'approved' => (clone $query)->where('status', 'approved')->count(),
+            'rejected' => (clone $query)->where('status', 'rejected')->count(),
+        ];
+        $query->when($request->integer('project_id'), fn ($builder, int $projectId) => $builder->where('project_id', $projectId))
+            ->when($request->integer('phase_id'), fn ($builder, int $phaseId) => $builder->where('project_phase_id', $phaseId))
+            ->when($filters['category'] ?? null, fn ($builder, string $category) => $builder->where('main_category', $category));
+        match ($filters['filter'] ?? 'all') {
             'awaiting_pricing' => $query->where('status', 'pending_approval')->whereNull('commercial_total'),
             'ready' => $query->where('status', 'pending_approval')->whereNotNull('commercial_total'),
             'approved' => $query->where('status', 'approved'),
@@ -40,7 +57,22 @@ class ProjectManagerController extends Controller
             default => null,
         };
 
-        return view('pm.requests', ['requests' => $query->get(), 'labels' => ProjectManagerBudgetService::CATEGORIES, 'filter' => $request->input('filter', 'all')]);
+        $projectQuery = Project::query()->orderBy('name');
+        if ($request->user()->hasRole('project_manager')) {
+            $projectQuery->whereIn('id', $request->user()->assignedProjects()->select('projects.id'));
+        }
+        $projects = $projectQuery->get(['id', 'name']);
+        $phases = ProjectPhase::query()->whereIn('project_id', $projects->pluck('id'))->orderBy('phase_order')->get();
+
+        return view('pm.requests', [
+            'requests' => $query->get(),
+            'labels' => ProjectManagerBudgetService::CATEGORIES,
+            'filter' => $filters['filter'] ?? 'all',
+            'filters' => $filters,
+            'counts' => $counts,
+            'projects' => $projects,
+            'phases' => $phases,
+        ]);
     }
 
     public function editCommercial(Request $request, ExpenseRequest $expenseRequest, ExpenseRequestDecisionService $decisions)
@@ -64,7 +96,7 @@ class ProjectManagerController extends Controller
         return redirect()->route('pm.requests.commercial.edit', $expenseRequest)->with('success', 'Commercial details saved.');
     }
 
-    public function decide(DecideExpenseRequestRequest $request, ExpenseRequest $expenseRequest, \App\Services\ExpenseRequestDecisionService $decisions)
+    public function decide(DecideExpenseRequestRequest $request, ExpenseRequest $expenseRequest, ExpenseRequestDecisionService $decisions)
     {
         $decisions->decide($expenseRequest, $request->validated()['decision'], $request->validated()['notes'], $request->user());
 
@@ -95,7 +127,7 @@ class ProjectManagerController extends Controller
             ->orderBy('name')->get()->map(function (Project $project) use ($budgets) {
                 $current = $this->currentBudget($project);
                 $requests = $project->expenseRequests->where('status', '!=', 'cancelled');
-                $approvedCommitments = \App\Support\Money::sum($requests->where('status', 'approved')->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->approved_amount ?? $request->total_amount ?? '0.00'));
+                $approvedCommitments = Money::sum($requests->where('status', 'approved')->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->approved_amount ?? $request->total_amount ?? '0.00'));
                 $comparison = $budgets->comparison($budgets->projectBudget($project), $approvedCommitments);
                 $pending = $requests->where('status', 'pending_approval');
 
@@ -104,11 +136,11 @@ class ProjectManagerController extends Controller
                     'budget' => $current,
                     'comparison' => $comparison,
                     'pending_count' => $pending->count(),
-                    'pending_amount' => \App\Support\Money::sum($pending->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null)->map(fn (ExpenseRequest $request) => $request->commercial_total)),
+                    'pending_amount' => Money::sum($pending->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null)->map(fn (ExpenseRequest $request) => $request->commercial_total)),
                     'commercialized_count' => $requests->whereNotNull('commercial_total')->count(),
                     'awaiting_commercial_count' => $pending->whereNull('commercial_total')->count(),
                     'ready_count' => $pending->whereNotNull('commercial_total')->count(),
-                    'approved_awaiting_accounts' => $requests->where('status', 'approved')->filter(fn (ExpenseRequest $request) => \App\Support\Money::compare($request->approved_outstanding_amount, '0') > 0)->count(),
+                    'approved_awaiting_accounts' => $requests->where('status', 'approved')->filter(fn (ExpenseRequest $request) => Money::compare($request->approved_outstanding_amount, '0') > 0)->count(),
                 ];
             });
 

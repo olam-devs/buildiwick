@@ -7,7 +7,6 @@
     <h2>All Projects</h2>
     <p>{{ $summary->active_projects }} projects &middot; computed live from every logged transaction, not a maintained spreadsheet</p>
   </div>
-  <button type="button" class="btn btn-primary" onclick="Buildiwick.openDrawer()"><span style="font-size:16px;line-height:1;">+</span> New Entry</button>
 </div>
 
 <div class="tiles">

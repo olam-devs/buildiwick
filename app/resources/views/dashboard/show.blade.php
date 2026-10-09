@@ -74,3 +74,6 @@
 
 <footer>{{ $needsAttention->count() }} entries still need confirming on this project</footer>
 @endsection
+@push('drawers')
+@include('partials.new-entry-drawer')
+@endpush
