@@ -11,9 +11,7 @@ use App\Models\Role;
 use App\Models\SupplierPayee;
 use App\Models\User;
 use App\Services\ExpensePaymentRecorder;
-use App\Support\Money;
 use Database\Seeders\LookupSeeder;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -93,7 +91,7 @@ class AccountantPaymentWorkflowTest extends TestCase
         [$project, $accountant] = $this->projectAndAccountant();
         $request = $this->approvedRequest($project, '250.00');
         $this->actingAs($accountant)->get(route('accountant.requests.show', $request))
-            ->assertOk()->assertSee('PM Approved Commercial Instruction')->assertSee('ABC Hardware')->assertSee('12345');
+            ->assertOk()->assertSee('Approved Commercial Instruction')->assertSee('ABC Hardware')->assertSee('12345');
         $payment = app(ExpensePaymentRecorder::class)->record($request, ['amount' => '250.00', 'payment_date' => now()->toDateString(), 'payment_method' => 'bank_transfer'], $accountant, UploadedFile::fake()->create('bank-confirmation.pdf', 100, 'application/pdf'));
         $this->assertSame('bank-confirmation.pdf', $payment->evidence_original_name);
         Storage::disk('local')->assertExists($payment->evidence_link);

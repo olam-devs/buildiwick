@@ -1,10 +1,12 @@
 @extends('layouts.app')
-@section('title', 'Site Requests · Project Manager')
+@section('title', 'Project Requests · Project Manager')
 @section('content')
-<div class="topline"><div><h2>Site Requests</h2><p>Review requests by project, construction phase, category, and status; prepare commercial details and record PM decisions.</p></div><a class="btn btn-ghost" href="{{ route('pm.projects.index') }}">Projects</a></div>
+<div class="topline"><div><h2>Project Requests</h2><p>Review Site Operator requests or create a request yourself, then prepare commercial details for Director approval.</p></div><a class="btn btn-ghost" href="{{ route('pm.projects.index') }}">Projects</a></div>
+
+<section class="panel form-section"><h3>Create a Request</h3><p class="form-context">Choose an assigned project. Your request follows the same commercial preparation, PM approval, and Director approval workflow.</p><div class="estimate-actions">@foreach($projects as $project)<a class="btn btn-primary" href="{{ route('pm.requests.create', $project) }}">{{ $project->name }}</a>@endforeach</div></section>
 
 <div class="panel form-section request-tabs">
-@foreach(['all' => 'All', 'awaiting_pricing' => 'Awaiting Pricing', 'ready' => 'Ready for Review', 'approved' => 'Approved', 'rejected' => 'Rejected'] as $value => $label)
+@foreach(['all' => 'All', 'awaiting_pricing' => 'Awaiting Pricing', 'ready' => 'Ready for PM Review', 'awaiting_director' => 'Awaiting Director', 'approved' => 'Director Approved', 'rejected' => 'Rejected'] as $value => $label)
   <a class="btn {{ $filter === $value ? 'btn-primary' : 'btn-ghost' }}" href="{{ route('pm.requests.index', array_filter(['filter' => $value, 'project_id' => $filters['project_id'] ?? null, 'phase_id' => $filters['phase_id'] ?? null, 'category' => $filters['category'] ?? null])) }}">{{ $label }} <span class="queue-count">{{ $counts[$value] }}</span></a>
 @endforeach
 </div>
@@ -16,10 +18,10 @@
 </div><div class="estimate-actions"><button class="btn btn-primary" type="submit">Apply Filters</button><a class="btn btn-ghost" href="{{ route('pm.requests.index', ['filter' => $filter]) }}">Clear Filters</a></div></form>
 
 @if($requests->isEmpty())
-<section class="panel empty-state"><h3>No Site Requests match this view.</h3><p>Change the filters or wait for a Site Operator to submit a request.</p></section>
+<section class="panel empty-state"><h3>No project requests match this view.</h3><p>Change the filters, create a PM request, or wait for a Site Operator submission.</p></section>
 @else
-<div class="tablewrap"><table><thead><tr><th>Request Code</th><th>Project</th><th>Phase</th><th>Category</th><th>Item</th><th>Quantity</th><th>Unit</th><th>Submitted By</th><th>Submitted At</th><th>Commercial Status</th><th>Approval Status</th><th>Action</th></tr></thead><tbody>
-@foreach($requests as $request)<tr><td>{{ $request->request_code }}</td><td>{{ $request->project->name }}</td><td>{{ $request->phase?->stage_label ?? '—' }}</td><td>{{ $labels[$request->main_category] ?? $request->main_category }}</td><td>{{ $request->item_description }}</td><td class="amt">{{ $request->quantity ?? '1.00' }}</td><td>{{ $request->unit ?? 'LS' }}</td><td>{{ $request->requestedBy?->name ?? '—' }}</td><td>{{ $request->submitted_at?->format('d M Y H:i') }}</td><td>{{ $request->commercial_total !== null ? 'Ready for Review' : 'Awaiting Pricing' }}</td><td><span class="status-pill approval-{{ $request->status }}">{{ ucwords(str_replace('_',' ',$request->status)) }}</span></td><td><a href="{{ route('pm.requests.commercial.edit', $request) }}">Review</a></td></tr>@endforeach</tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Request Code</th><th>Project</th><th>Phase</th><th>Type</th><th>Category</th><th>Description</th><th>Requested Amount</th><th>Submitted By</th><th>Submitted At</th><th>Commercial Status</th><th>Approval Status</th><th>Action</th></tr></thead><tbody>
+@foreach($requests as $request)<tr><td>{{ $request->request_code }}</td><td>{{ $request->project->name }}</td><td>{{ $request->phase?->stage_label ?? '—' }}</td><td>{{ \App\Models\ExpenseRequest::TYPES[$request->request_type] ?? $request->request_type }}</td><td>{{ $labels[$request->main_category] ?? $request->main_category }}</td><td>{{ $request->item_description }}</td><td class="amt">{{ $request->requested_amount !== null ? 'TSh '.\App\Support\Money::format($request->requested_amount) : '—' }}</td><td>{{ $request->requestedBy?->name ?? '—' }}</td><td>{{ $request->submitted_at?->format('d M Y H:i') }}</td><td>{{ $request->commercial_total !== null ? 'Prepared' : 'Awaiting Pricing' }}</td><td><span class="status-pill approval-{{ $request->status }}">{{ ucwords(str_replace('_',' ',$request->status)) }}</span></td><td><a href="{{ route('pm.requests.commercial.edit', $request) }}">Review</a></td></tr>@endforeach</tbody></table></div>
 @endif
 <style>.request-tabs{display:flex;gap:8px;flex-wrap:wrap}.queue-count{background:rgba(0,0,0,.08);border-radius:99px;padding:1px 6px}.btn-primary .queue-count{background:rgba(255,255,255,.2)}</style>
 @endsection

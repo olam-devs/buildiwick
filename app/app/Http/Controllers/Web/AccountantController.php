@@ -90,7 +90,7 @@ class AccountantController extends Controller
         $this->authorizeWorkspace($request);
         $this->authorize('view', $expenseRequest);
         abort_unless($expenseRequest->status === 'approved', 404);
-        $expenseRequest->load(['project', 'phase', 'requestedBy', 'supplierPayee', 'latestApproval.decidedBy', 'payments.recordedBy']);
+        $expenseRequest->load(['project', 'phase', 'requestedBy', 'supplierPayee', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy', 'payments.recordedBy']);
 
         return view('accountant.show', [
             'expenseRequest' => $expenseRequest,
@@ -310,7 +310,7 @@ class AccountantController extends Controller
 
     private function approvedQuery()
     {
-        return ExpenseRequest::query()->where('status', 'approved')->with(['project', 'phase', 'requestedBy', 'supplierPayee', 'latestApproval.decidedBy', 'payments']);
+        return ExpenseRequest::query()->where('status', 'approved')->with(['project', 'phase', 'requestedBy', 'supplierPayee', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy', 'payments']);
     }
 
     private function financialTotals($requests): array

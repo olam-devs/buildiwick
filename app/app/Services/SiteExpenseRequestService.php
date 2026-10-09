@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ExpenseRequest;
+use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectPhase;
 use App\Models\User;
@@ -61,6 +62,7 @@ class SiteExpenseRequestService
                 $lockedProject = Project::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
                 Gate::forUser($actor)->authorize('create', [ExpenseRequest::class, $lockedProject]);
                 $phase = $this->activePhase($lockedProject, lock: true);
+                $this->assertCategoryPair($data);
                 $evidencePath = $evidence?->store('expense-requests/'.$lockedProject->id, 'local');
                 $storedPath = $evidencePath;
 
@@ -70,6 +72,7 @@ class SiteExpenseRequestService
                 $request = $lockedProject->expenseRequests()->create([
                     'request_code' => 'REQ-TMP-'.Str::ulid(),
                     'project_phase_id' => $phase->id,
+                    'request_type' => $data['request_type'] ?? 'item',
                     'main_category' => $data['main_category'],
                     'subcategory' => $data['subcategory'] ?? null,
                     'item_description' => $data['item_description'],
@@ -79,6 +82,7 @@ class SiteExpenseRequestService
                     'unit' => $data['unit'] ?? null,
                     'unit_cost' => array_key_exists('unit_cost', $data) ? $data['unit_cost'] : null,
                     'total_amount' => $legacyAmount,
+                    'requested_amount' => $data['requested_amount'] ?? null,
                     'requested_at' => $data['requested_at'],
                     'submitted_at' => now(),
                     'status' => 'pending_approval',
@@ -113,11 +117,13 @@ class SiteExpenseRequestService
                 $storedPath = $newPath;
 
                 $request->update([
+                    'request_type' => $data['request_type'] ?? $request->request_type ?? 'item',
                     'main_category' => $data['main_category'],
                     'subcategory' => $data['subcategory'] ?? null,
                     'item_description' => $data['item_description'],
                     'quantity' => $this->normalizeQuantity($data['quantity'] ?? null),
                     'unit' => $data['unit'] ?? null,
+                    'requested_amount' => $data['requested_amount'] ?? null,
                     ...($this->legacyCommercialData($data)),
                     'requested_at' => $data['requested_at'],
                     'notes' => $data['notes'] ?? null,
@@ -160,7 +166,7 @@ class SiteExpenseRequestService
         $requests = $project->expenseRequests()->with('payments')->where('status', '!=', 'cancelled')->get();
         $priced = $requests->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null || $request->total_amount !== null);
         $requested = Money::sum($priced->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->total_amount));
-        $pending = $requests->where('status', 'pending_approval');
+        $pending = $requests->whereIn('status', ['pending_approval', 'pending_director_approval']);
         $approved = $requests->where('status', 'approved');
         $rejected = $requests->where('status', 'rejected');
         $pendingAmount = Money::sum($pending->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null || $request->total_amount !== null)->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->total_amount));
@@ -175,7 +181,7 @@ class SiteExpenseRequestService
             $categories[$code] = [
                 'label' => $label,
                 'requests' => $group->count(),
-                'pending' => $group->where('status', 'pending_approval')->count(),
+                'pending' => $group->whereIn('status', ['pending_approval', 'pending_director_approval'])->count(),
                 'approved' => $group->where('status', 'approved')->count(),
                 'rejected' => $group->where('status', 'rejected')->count(),
                 'requested' => Money::sum($group->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null || $request->total_amount !== null)->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->total_amount)),
@@ -190,6 +196,7 @@ class SiteExpenseRequestService
             'requested' => $requested,
             'pending_count' => $pending->count(),
             'pending_amount' => $pendingAmount,
+            'pending_director_count' => $requests->where('status', 'pending_director_approval')->count(),
             'approved_count' => $approved->count(),
             'approved_amount' => $approvedAmount,
             'rejected_count' => $rejected->count(),
@@ -233,7 +240,7 @@ class SiteExpenseRequestService
             return;
         }
 
-        $valid = \App\Models\Lookup::where('type', 'subcategory')
+        $valid = Lookup::where('type', 'subcategory')
             ->where('code', $data['subcategory'])
             ->where('parent_code', $data['main_category'])
             ->where('is_active', true)

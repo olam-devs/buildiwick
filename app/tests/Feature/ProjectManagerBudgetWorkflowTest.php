@@ -3,32 +3,28 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
-use App\Models\ClientInvoice;
-use App\Models\ClientPayment;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
-use App\Models\InternalBudget;
-use App\Models\InternalBudgetEntry;
 use App\Models\Project;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Models\Role;
-use App\Models\User;
 use App\Models\SupplierPayee;
 use App\Models\SupplierPaymentDestination;
-use App\Policies\InternalBudgetEntryPolicy;
-use App\Policies\InternalBudgetPolicy;
+use App\Models\User;
 use App\Policies\ClientInvoicePolicy;
 use App\Policies\ClientPaymentPolicy;
-use App\Services\ProjectManagerBudgetService;
+use App\Policies\InternalBudgetEntryPolicy;
+use App\Policies\InternalBudgetPolicy;
 use App\Services\ExpensePaymentRecorder;
+use App\Services\ExpenseRequestDecisionService;
+use App\Services\ProjectManagerBudgetService;
 use Database\Seeders\LookupSeeder;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class ProjectManagerBudgetWorkflowTest extends TestCase
@@ -41,7 +37,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     {
         parent::setUp();
         $this->seed(LookupSeeder::class);
-        foreach (['admin', 'accounts', 'estimator_qs', 'project_manager', 'site_operator'] as $role) {
+        foreach (['admin', 'director', 'accounts', 'estimator_qs', 'project_manager', 'site_operator'] as $role) {
             Role::firstOrCreate(['name' => $role], ['description' => $role]);
         }
         Storage::fake('local');
@@ -199,7 +195,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $wallingPhase = $project->phases()->where('stage_code', 'walling')->firstOrFail();
         $logisticsRequest = $this->request($project, $wallingPhase, ['main_category' => 'logistics_equipment', 'quantity' => '1', 'total_amount' => '500.00', 'status' => 'approved']);
         foreach ([[$materialsRequest, '120.00'], [$labourRequest, '250.00'], [$logisticsRequest, '500.00']] as [$request, $amount]) {
-            \App\Models\ExpensePayment::create([
+            ExpensePayment::create([
                 'payment_code' => 'PAY-CMP-'.fake()->unique()->numerify('#####'),
                 'expense_request_id' => $request->id,
                 'project_id' => $project->id,
@@ -233,7 +229,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $service = app(ProjectManagerBudgetService::class);
         $phase = $project->phases()->firstOrFail();
         $request = $this->request($project, $phase, ['quantity' => '1', 'total_amount' => '500000.00', 'status' => 'approved']);
-        \App\Models\ExpensePayment::create([
+        ExpensePayment::create([
             'payment_code' => 'PAY-ZERO-001', 'expense_request_id' => $request->id,
             'project_id' => $project->id, 'project_phase_id' => $phase->id,
             'amount' => '500000.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
@@ -359,9 +355,10 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'commercial_payment_method' => 'bank_transfer', 'commercial_payment_destination_id' => $destination->id,
             'commercial_evidence_link' => 'expense-requests/quote.pdf',
         ]);
-        $service = app(\App\Services\ExpenseRequestDecisionService::class);
+        $service = app(ExpenseRequestDecisionService::class);
         $approval = $service->decide($request, 'approve', 'Within budget.', $pm);
-        $this->assertSame('approved', $request->fresh()->status);
+        $this->assertSame('pending_director_approval', $request->fresh()->status);
+        $this->assertSame('project_manager', $approval->approval_stage);
         $this->assertSame('120.00', $approval->approved_total);
         $this->assertSame('ABC Hardware', $approval->supplier_name_snapshot);
         $this->assertStringContainsString('12345', $approval->payment_destination_snapshot);
@@ -377,7 +374,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $request = $this->request($project, $project->phases()->firstOrFail(), ['quantity' => '1', 'total_amount' => null]);
         $supplier = SupplierPayee::create(['name' => 'Security Company', 'type' => 'service_provider']);
         $request->update(['supplier_payee_id' => $supplier->id, 'commercial_unit_rate' => '500.00', 'commercial_total' => '500.00', 'commercial_payment_method' => 'cash', 'commercial_evidence_link' => 'quote.pdf']);
-        $service = app(\App\Services\ExpenseRequestDecisionService::class);
+        $service = app(ExpenseRequestDecisionService::class);
         try {
             $service->decide($request, 'approve', '', $pm);
             $this->fail('Over-budget approval requires justification.');
@@ -385,8 +382,49 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             $this->assertArrayHasKey('notes', $exception->errors());
         }
         $approval = $service->decide($request, 'approve', 'No budget was set; urgent site need.', $pm);
-        $this->assertSame('approved', $approval->expenseRequest->fresh()->status);
-        $this->assertNull(app(\App\Services\ExpenseRequestDecisionService::class)->impact($request)['utilization']);
+        $this->assertSame('pending_director_approval', $approval->expenseRequest->fresh()->status);
+        $this->assertNull(app(ExpenseRequestDecisionService::class)->impact($request)['utilization']);
+    }
+
+    public function test_pm_can_create_a_typed_request_but_accounts_only_receive_it_after_director_approval(): void
+    {
+        [$project, $pm] = $this->assignedProject();
+        $director = $this->user('director');
+        $accounts = $this->user('accounts');
+
+        $this->actingAs($pm)->post(route('pm.requests.store', $project), [
+            'requested_at' => now()->toDateString(), 'request_type' => 'salary_wage',
+            'main_category' => 'labour_subcontracts', 'item_description' => 'Weekly mason wages',
+            'requested_amount' => '300000.00', 'unit' => 'ls', 'notes' => 'Week one wages.',
+        ])->assertRedirect();
+        $request = ExpenseRequest::latest('id')->firstOrFail();
+        $this->assertSame($pm->id, $request->requested_by);
+        $this->assertSame('salary_wage', $request->request_type);
+        $this->assertSame('300000.00', $request->requested_amount);
+
+        $supplier = SupplierPayee::create(['name' => 'Mason Team Lead', 'type' => 'service_provider', 'is_active' => true]);
+        $this->actingAs($pm)->put(route('pm.requests.commercial.update', $request), [
+            'supplier_payee_id' => $supplier->id, 'commercial_unit_rate' => '300000.00',
+            'commercial_payment_method' => 'cash',
+            'commercial_evidence' => UploadedFile::fake()->create('wage-sheet.pdf', 20, 'application/pdf'),
+        ])->assertRedirect();
+        $this->actingAs($pm)->post(route('pm.requests.decision', $request), [
+            'decision' => 'approve', 'notes' => 'Verified against attendance.',
+        ])->assertRedirect();
+
+        $this->assertSame('pending_director_approval', $request->fresh()->status);
+        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertDontSee($request->request_code);
+        $this->actingAs($accounts)->get(route('accountant.requests.show', $request))->assertNotFound();
+        $this->actingAs($director)->get(route('director.requests.index'))->assertOk()->assertSee($request->request_code);
+        $this->actingAs($director)->post(route('director.requests.decision', $request), [
+            'decision' => 'approve', 'notes' => 'Director confirms the wage payment.',
+        ])->assertRedirect(route('director.requests.index'));
+
+        $request->refresh();
+        $this->assertSame('approved', $request->status);
+        $this->assertSame(['project_manager', 'director'], $request->approvals()->orderBy('id')->pluck('approval_stage')->all());
+        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertSee($request->request_code);
+        $this->assertDatabaseCount('expense_payments', 0);
     }
 
     public function test_rejection_requires_reason_and_unrelated_pm_cannot_decide(): void
@@ -396,12 +434,12 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $request = $this->request($project, $project->phases()->firstOrFail(), ['total_amount' => null]);
         $this->assertFalse($otherPm->can('reject', $request));
         try {
-            app(\App\Services\ExpenseRequestDecisionService::class)->decide($request, 'reject', '', $pm);
+            app(ExpenseRequestDecisionService::class)->decide($request, 'reject', '', $pm);
             $this->fail('Rejection requires a reason.');
         } catch (ValidationException $exception) {
             $this->assertSame('pending_approval', $request->fresh()->status);
         }
-        $approval = app(\App\Services\ExpenseRequestDecisionService::class)->decide($request, 'reject', 'Duplicate need report.', $pm);
+        $approval = app(ExpenseRequestDecisionService::class)->decide($request, 'reject', 'Duplicate need report.', $pm);
         $this->assertSame('rejected', $approval->expenseRequest->fresh()->status);
         $this->assertSame('Duplicate need report.', $approval->notes);
         $this->assertDatabaseCount('expense_payments', 0);
@@ -429,7 +467,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $estimate = ProjectEstimate::create(['estimate_code' => 'EST-PM-HIDDEN-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'issued']);
         $estimate->entries()->create(['project_phase_id' => $future->id, 'main_category' => 'materials', 'subcategory' => 'concrete_cement', 'item_description' => 'Director-only estimate', 'quantity' => '1', 'unit' => 'ls', 'base_unit_cost' => '987654.00', 'markup_percent' => '0']);
         $request = $this->request($project, $future, ['quantity' => '1', 'total_amount' => '120.00', 'status' => 'approved']);
-        \App\Models\ExpensePayment::create([
+        ExpensePayment::create([
             'payment_code' => 'PAY-PM-WORKSPACE-001', 'expense_request_id' => $request->id,
             'project_id' => $project->id, 'project_phase_id' => $future->id,
             'amount' => '120.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
@@ -474,6 +512,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     {
         $quantity = $override['quantity'] ?? '1';
         $amount = $override['total_amount'] ?? '50.00';
+
         return ExpenseRequest::create([
             'request_code' => 'REQ-CMP-'.fake()->unique()->numerify('#####'), 'project_id' => $project->id,
             'project_phase_id' => $phase->id, 'main_category' => $override['main_category'] ?? 'materials',

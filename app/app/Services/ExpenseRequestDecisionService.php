@@ -21,7 +21,7 @@ class ExpenseRequestDecisionService
     {
         $budget = $this->budgets->budgetFor($request->project, $request->project_phase_id, $request->main_category);
         $approved = Money::sum($request->project->expenseRequests()
-            ->where('status', 'approved')
+            ->whereIn('status', ['pending_director_approval', 'approved'])
             ->where('id', '!=', $request->id)
             ->where('project_phase_id', $request->project_phase_id)
             ->where('main_category', $request->main_category)
@@ -44,6 +44,9 @@ class ExpenseRequestDecisionService
 
     public function decide(ExpenseRequest $request, string $decision, string $notes, User $actor): ExpenseRequestApproval
     {
+        if (! $actor->hasRole('project_manager')) {
+            throw ValidationException::withMessages(['decision' => 'Only the assigned Project Manager can complete the first approval stage.']);
+        }
         if (trim($notes) === '') {
             throw ValidationException::withMessages(['notes' => $decision === 'reject' ? 'A rejection reason is required.' : 'Decision notes are required.']);
         }
@@ -51,12 +54,12 @@ class ExpenseRequestDecisionService
         return $this->database->transaction(function () use ($request, $decision, $notes, $actor): ExpenseRequestApproval {
             $locked = ExpenseRequest::query()->with(['supplierPayee', 'commercialPaymentDestination'])->lockForUpdate()->findOrFail($request->id);
             Gate::forUser($actor)->authorize($decision === 'approve' ? 'approve' : 'reject', $locked);
-            if ($locked->status !== 'pending_approval' || $locked->approvals()->exists() || $locked->payments()->exists()) {
+            if ($locked->status !== 'pending_approval' || $locked->approvals()->where('approval_stage', 'project_manager')->exists() || $locked->payments()->exists()) {
                 throw ValidationException::withMessages(['decision' => 'This request has already been decided or has payment history.']);
             }
 
             if ($decision === 'reject') {
-                return $this->recordDecision($locked, 'rejected', $notes, $actor);
+                return $this->recordDecision($locked, 'project_manager', 'rejected', 'rejected', $notes, $actor);
             }
 
             $this->assertCommerciallyComplete($locked);
@@ -65,7 +68,32 @@ class ExpenseRequestDecisionService
                 throw ValidationException::withMessages(['notes' => 'An over-budget approval requires a variance justification.']);
             }
 
-            return $this->recordDecision($locked, 'approved', $notes, $actor, $impact);
+            return $this->recordDecision($locked, 'project_manager', 'approved', 'pending_director_approval', $notes, $actor, $impact);
+        });
+    }
+
+    public function decideAsDirector(ExpenseRequest $request, string $decision, string $notes, User $actor): ExpenseRequestApproval
+    {
+        if (! $actor->hasRole('director')) {
+            throw ValidationException::withMessages(['decision' => 'Only the Director can complete the final approval stage.']);
+        }
+        if (trim($notes) === '') {
+            throw ValidationException::withMessages(['notes' => $decision === 'reject' ? 'A Director rejection reason is required.' : 'Director decision notes are required.']);
+        }
+
+        return $this->database->transaction(function () use ($request, $decision, $notes, $actor): ExpenseRequestApproval {
+            $locked = ExpenseRequest::query()->with(['supplierPayee', 'commercialPaymentDestination'])->lockForUpdate()->findOrFail($request->id);
+            if ($locked->status !== 'pending_director_approval'
+                || ! $locked->approvals()->where('approval_stage', 'project_manager')->where('decision', 'approved')->exists()
+                || $locked->approvals()->where('approval_stage', 'director')->exists()
+                || $locked->payments()->exists()) {
+                throw ValidationException::withMessages(['decision' => 'This request is not awaiting a Director decision.']);
+            }
+
+            $this->assertCommerciallyComplete($locked);
+            $status = $decision === 'approve' ? 'approved' : 'rejected';
+
+            return $this->recordDecision($locked, 'director', $status, $status, $notes, $actor);
         });
     }
 
@@ -89,15 +117,16 @@ class ExpenseRequestDecisionService
         }
     }
 
-    private function recordDecision(ExpenseRequest $request, string $status, string $notes, User $actor, ?array $impact = null): ExpenseRequestApproval
+    private function recordDecision(ExpenseRequest $request, string $stage, string $decision, string $status, string $notes, User $actor, ?array $impact = null): ExpenseRequestApproval
     {
         $supplier = $request->supplierPayee;
         $destination = $request->commercialPaymentDestination;
         $approval = $request->approvals()->create([
-            'decision' => $status,
-            'approved_amount' => $status === 'approved' ? $request->commercial_total : null,
-            'approved_unit_rate' => $status === 'approved' ? $request->commercial_unit_rate : null,
-            'approved_total' => $status === 'approved' ? $request->commercial_total : null,
+            'approval_stage' => $stage,
+            'decision' => $decision,
+            'approved_amount' => $decision === 'approved' ? $request->commercial_total : null,
+            'approved_unit_rate' => $decision === 'approved' ? $request->commercial_unit_rate : null,
+            'approved_total' => $decision === 'approved' ? $request->commercial_total : null,
             'supplier_payee_id' => $supplier?->id,
             'supplier_name_snapshot' => $supplier?->name,
             'supplier_type_snapshot' => $supplier?->type,
@@ -111,7 +140,7 @@ class ExpenseRequestDecisionService
             'decided_at' => now(),
             'notes' => $notes,
         ]);
-        $request->update(['status' => $status, 'approved_amount' => $status === 'approved' ? $request->commercial_total : null]);
+        $request->update(['status' => $status, 'approved_amount' => in_array($status, ['pending_director_approval', 'approved'], true) ? $request->commercial_total : null]);
 
         return $approval;
     }

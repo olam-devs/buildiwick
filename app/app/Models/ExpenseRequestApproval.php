@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ExpenseRequestApproval extends Model
 {
     protected $fillable = [
-        'expense_request_id', 'decision', 'approved_amount', 'approved_unit_rate', 'approved_total',
+        'expense_request_id', 'approval_stage', 'decision', 'approved_amount', 'approved_unit_rate', 'approved_total',
         'supplier_payee_id', 'supplier_name_snapshot', 'supplier_type_snapshot', 'supplier_contact_snapshot',
         'supplier_phone_snapshot', 'supplier_email_snapshot', 'payment_method_snapshot',
         'payment_destination_snapshot', 'commercial_evidence_snapshot', 'decided_by', 'decided_at', 'notes',

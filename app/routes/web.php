@@ -29,6 +29,8 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/director/receivables', [DirectorController::class, 'receivables'])->name('director.receivables.index');
     Route::get('/director/payables', [DirectorController::class, 'payables'])->name('director.payables.index');
     Route::get('/director/transactions', [DirectorController::class, 'transactions'])->name('director.transactions.index');
+    Route::get('/director/request-approvals', [DirectorController::class, 'requests'])->name('director.requests.index');
+    Route::post('/director/request-approvals/{expenseRequest}/decision', [DirectorController::class, 'decideRequest'])->name('director.requests.decision');
     Route::get('/director/projects.csv', [DirectorController::class, 'exportPortfolio'])->name('director.portfolio.export');
     Route::get('/director/summary.csv', [DirectorController::class, 'exportSummary'])->name('director.summary.export');
     Route::get('/director/transactions.csv', [DirectorController::class, 'exportTransactions'])->name('director.transactions.export');
@@ -56,6 +58,8 @@ Route::middleware(['auth', 'active-account'])->group(function () {
 
     Route::get('/pm/projects', [ProjectManagerController::class, 'index'])->name('pm.projects.index');
     Route::get('/pm/site-requests', [ProjectManagerController::class, 'requests'])->name('pm.requests.index');
+    Route::get('/pm/projects/{project}/requests/create', [ProjectManagerController::class, 'createRequest'])->name('pm.requests.create');
+    Route::post('/pm/projects/{project}/requests', [ProjectManagerController::class, 'storeRequest'])->name('pm.requests.store');
     Route::get('/pm/site-requests/{expenseRequest}/commercial', [ProjectManagerController::class, 'editCommercial'])->name('pm.requests.commercial.edit');
     Route::put('/pm/site-requests/{expenseRequest}/commercial', [ProjectManagerController::class, 'updateCommercial'])->name('pm.requests.commercial.update');
     Route::post('/pm/site-requests/{expenseRequest}/decision', [ProjectManagerController::class, 'decide'])->name('pm.requests.decision');

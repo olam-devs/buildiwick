@@ -7,27 +7,27 @@ use App\Models\ClientInvoice;
 use App\Models\ClientPayment;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
-use App\Models\ExpenseRequestApproval;
-use App\Models\InternalBudget;
 use App\Models\Project;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Models\Role;
 use App\Models\SupplierPayee;
 use App\Models\SupplierPaymentDestination;
-use App\Models\Transaction;
 use App\Models\User;
 use App\Services\ClientInvoiceService;
 use App\Services\ClientPaymentRecorder;
+use App\Services\EstimatorEstimateService;
 use App\Services\ExpensePaymentRecorder;
 use App\Services\ExpenseRequestDecisionService;
-use App\Services\ProjectManagerBudgetService;
+use App\Services\TransactionRecorder;
 use Database\Seeders\LookupSeeder;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -56,7 +56,7 @@ class FinancialIntegritySecurityTest extends TestCase
         $projectB->assignedUsers()->attach($other->id);
 
         $this->actingAs($site)->post(route('site.requests.store', $projectA), [
-            'requested_at' => today()->toDateString(), 'main_category' => 'materials', 'item_description' => 'Need only',
+            'requested_at' => today()->toDateString(), 'request_type' => 'item', 'main_category' => 'materials', 'item_description' => 'Need only',
             'quantity' => '2', 'unit' => 'bag', 'notes' => 'Please deliver',
             'project_id' => $projectB->id, 'project_phase_id' => $projectB->phases()->first()->id,
             'requested_by' => $other->id, 'status' => 'approved', 'approved_amount' => '1.00',
@@ -152,7 +152,7 @@ class FinancialIntegritySecurityTest extends TestCase
 
         $valid = [
             'expense_request_id' => $another->id, 'project_id' => $project->id, 'project_phase_id' => $phase->id,
-            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
+            'idempotency_key' => (string) Str::uuid(),
             'amount' => '60.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
             'recorded_by' => $pm->id, 'payment_code' => 'FORGED', 'payment_status' => 'paid',
         ];
@@ -171,7 +171,7 @@ class FinancialIntegritySecurityTest extends TestCase
         $overpay = array_merge($valid, [
             'expense_request_id' => $request->id,
             'amount' => '50.00',
-            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
+            'idempotency_key' => (string) Str::uuid(),
         ]);
         $this->actingAs($accounts)->from(route('accountant.requests.show', $request))
             ->post(route('accountant.payments.store', $request), $overpay)->assertSessionHasErrors('amount');
@@ -188,7 +188,7 @@ class FinancialIntegritySecurityTest extends TestCase
         $invoice = $this->issuedInvoice($project, $phase, $accounts, '100.00');
         $otherInvoice = $this->issuedInvoice($project, $phase, $accounts, '100.00');
         $recorder = app(ClientPaymentRecorder::class);
-        $receiptKey = (string) \Illuminate\Support\Str::uuid();
+        $receiptKey = (string) Str::uuid();
         $first = $recorder->record($invoice, ['idempotency_key' => $receiptKey, 'amount' => '60.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash'], $accounts);
         $this->assertSame($accounts->id, $first->recorded_by);
         $this->assertSame('40.00', $invoice->fresh()->outstanding_amount);
@@ -196,7 +196,7 @@ class FinancialIntegritySecurityTest extends TestCase
         try {
             $recorder->record($invoice, ['client_invoice_id' => $otherInvoice->id, 'project_id' => $project->id, 'client_id' => $project->client_id, 'amount' => '1.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash'], $accounts);
             $this->fail('A mismatched invoice ID should be rejected.');
-        } catch (\Illuminate\Validation\ValidationException $exception) {
+        } catch (ValidationException $exception) {
             $this->assertArrayHasKey('client_invoice_id', $exception->errors());
         }
 
@@ -208,7 +208,7 @@ class FinancialIntegritySecurityTest extends TestCase
         $this->actingAs($accounts)->post(route('accountant.client-payments.store', $invoice), $retryPayload)->assertRedirect();
         $this->assertSame(1, ClientPayment::where('client_invoice_id', $invoice->id)->count());
 
-        $overpayPayload = array_merge($retryPayload, ['idempotency_key' => (string) \Illuminate\Support\Str::uuid(), 'amount' => '50.00']);
+        $overpayPayload = array_merge($retryPayload, ['idempotency_key' => (string) Str::uuid(), 'amount' => '50.00']);
         $this->actingAs($accounts)->from(route('accountant.invoices.show', $invoice))
             ->post(route('accountant.client-payments.store', $invoice), $overpayPayload)->assertSessionHasErrors('amount');
         $this->assertSame(1, ClientPayment::where('client_invoice_id', $invoice->id)->count());
@@ -233,7 +233,7 @@ class FinancialIntegritySecurityTest extends TestCase
         try {
             app(ClientInvoiceService::class)->void($paidInvoice, 'Already paid.', $accounts);
             $this->fail('A paid issued invoice must not be voidable.');
-        } catch (\Illuminate\Auth\Access\AuthorizationException) {
+        } catch (AuthorizationException) {
             $this->assertSame('issued', $paidInvoice->fresh()->status);
         }
 
@@ -248,10 +248,10 @@ class FinancialIntegritySecurityTest extends TestCase
         [$project, $phase] = $this->project('BWG-SEC-ESTIMATE-AUDIT');
         $estimator = $this->user('estimator_qs');
         $project->assignedUsers()->attach($estimator->id);
-        $estimate = app(\App\Services\EstimatorEstimateService::class)->ensureWorkingEstimate($project, $estimator);
+        $estimate = app(EstimatorEstimateService::class)->ensureWorkingEstimate($project, $estimator);
         $estimate->entries()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'item_description' => 'Entry', 'quantity' => '1', 'unit' => 'ls', 'base_unit_cost' => '100.00', 'markup_percent' => '0']);
 
-        $issued = app(\App\Services\EstimatorEstimateService::class)->finalize($estimate, $estimator);
+        $issued = app(EstimatorEstimateService::class)->finalize($estimate, $estimator);
         $this->assertSame('issued', $issued->status);
         $this->assertSame($estimator->id, $issued->issued_by);
         $this->assertNotNull($issued->issued_at);
@@ -292,7 +292,7 @@ class FinancialIntegritySecurityTest extends TestCase
     {
         [$project] = $this->project('BWG-SEC-TRANSACTION-FILE');
         $admin = $this->user('admin');
-        [$transaction] = app(\App\Services\TransactionRecorder::class)->record([
+        [$transaction] = app(TransactionRecorder::class)->record([
             'project_id' => $project->id, 'main_category' => 'materials', 'item_description' => 'Secure upload', 'total_amount' => '10.00',
             'transaction_date' => today()->toDateString(),
         ], $project, $admin, UploadedFile::fake()->create('quote.pdf', 20, 'application/pdf'));
@@ -309,7 +309,7 @@ class FinancialIntegritySecurityTest extends TestCase
         $path = 'evidence/legacy-receipt.pdf';
         Storage::disk('public')->put($path, 'legacy private evidence bytes');
         $transaction = $project->transactions()->create([
-            'client_uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'client_uuid' => (string) Str::uuid(),
             'transaction_code' => $project->project_code.'-TXN-0001',
             'main_category' => 'materials', 'item_description' => 'Historical record',
             'total_amount' => '123.45', 'amount_paid_received' => '0.00',
@@ -405,6 +405,7 @@ class FinancialIntegritySecurityTest extends TestCase
     private function projectAndAccountant(string $code): array
     {
         [$project, $phase] = $this->project($code);
+
         return [$project, $phase, $this->user('accounts')];
     }
 

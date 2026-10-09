@@ -67,6 +67,7 @@
   .entry-actions form{margin:0;}
   .status-pill{display:inline-flex;align-items:center;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:600;text-transform:capitalize;white-space:nowrap;}
   .approval-pending_approval{background:var(--warn-soft);color:#96660f;}
+  .approval-pending_director_approval{background:#e9e7ff;color:#5342a6;}
   .approval-approved{background:var(--good-soft);color:#1c7a4f;}
   .approval-rejected,.approval-cancelled{background:var(--danger-soft);color:#a3392a;}
   .payment-unpaid{background:var(--surface-2);color:var(--ink-soft);}
@@ -194,7 +195,7 @@
       @elseif (auth()->user()->hasRole('project_manager'))
       <a class="navitem {{ request()->routeIs('pm.projects.*') ? 'active' : '' }}" href="{{ route('pm.projects.index') }}">Projects</a>
       <a class="navitem {{ request()->routeIs('pm.budget-entries.*') || request()->routeIs('pm.budgets.*') ? 'active' : '' }}" href="{{ route('pm.projects.index') }}">Internal Budgets</a>
-      <a class="navitem {{ request()->routeIs('pm.requests.*') ? 'active' : '' }}" href="{{ route('pm.requests.index') }}">Site Requests</a>
+      <a class="navitem {{ request()->routeIs('pm.requests.*') ? 'active' : '' }}" href="{{ route('pm.requests.index') }}">Project Requests</a>
       @elseif (auth()->user()->hasRole('accountant') || auth()->user()->hasRole('accounts'))
       <a class="navitem {{ request()->routeIs('accountant.index') ? 'active' : '' }}" href="{{ route('accountant.index') }}">Dashboard</a>
       <a class="navitem {{ request()->routeIs('accountant.requests.*') ? 'active' : '' }}" href="{{ route('accountant.requests.index') }}">Approved Payments</a>
@@ -205,6 +206,7 @@
       <a class="navitem {{ request()->routeIs('accountant.projects.*') ? 'active' : '' }}" href="{{ route('accountant.projects.index') }}">Projects</a>
       @elseif (auth()->user()->hasRole('director'))
       <a class="navitem {{ request()->routeIs('director.index') || request()->routeIs('director.projects.*') ? 'active' : '' }}" href="{{ route('director.index') }}">Executive Dashboard</a>
+      <a class="navitem {{ request()->routeIs('director.requests.*') ? 'active' : '' }}" href="{{ route('director.requests.index') }}">Request Approvals</a>
       <a class="navitem {{ request()->routeIs('director.receivables.*') ? 'active' : '' }}" href="{{ route('director.receivables.index') }}">Receivables</a>
       <a class="navitem {{ request()->routeIs('director.payables.*') ? 'active' : '' }}" href="{{ route('director.payables.index') }}">Approved Payables</a>
       <a class="navitem {{ request()->routeIs('director.transactions.*') ? 'active' : '' }}" href="{{ route('director.transactions.index') }}">Transactions</a>

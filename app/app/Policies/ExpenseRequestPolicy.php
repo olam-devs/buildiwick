@@ -10,13 +10,13 @@ class ExpenseRequestPolicy
 {
     public function viewAny(User $user): bool
     {
-        return in_array($user->role?->name, ['admin', 'accounts', 'accountant', 'project_manager', 'site_operator'], true);
+        return in_array($user->role?->name, ['admin', 'director', 'accounts', 'accountant', 'project_manager', 'site_operator'], true);
     }
 
     public function view(User $user, ExpenseRequest $request): bool
     {
         return match ($user->role?->name) {
-            'admin', 'accounts', 'accountant' => true,
+            'admin', 'director', 'accounts', 'accountant' => true,
             'project_manager', 'site_operator' => $user->assignedProjects()->whereKey($request->project_id)->exists(),
             default => false,
         };
@@ -24,7 +24,7 @@ class ExpenseRequestPolicy
 
     public function create(User $user, Project $project): bool
     {
-        return $user->hasRole('admin') || ($user->hasRole('site_operator') && $user->assignedProjects()->whereKey($project->id)->exists());
+        return $user->hasRole('admin') || (($user->hasRole('site_operator') || $user->hasRole('project_manager')) && $user->assignedProjects()->whereKey($project->id)->exists());
     }
 
     public function update(User $user, ExpenseRequest $request): bool
@@ -44,13 +44,13 @@ class ExpenseRequestPolicy
 
     public function approve(User $user, ExpenseRequest $request): bool
     {
-        return ($user->hasRole('admin') || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($request->project_id)->exists()))
+        return $user->hasRole('project_manager') && $user->assignedProjects()->whereKey($request->project_id)->exists()
             && $request->status === 'pending_approval';
     }
 
     public function reject(User $user, ExpenseRequest $request): bool
     {
-        return ($user->hasRole('admin') || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($request->project_id)->exists()))
+        return $user->hasRole('project_manager') && $user->assignedProjects()->whereKey($request->project_id)->exists()
             && $request->status === 'pending_approval';
     }
 

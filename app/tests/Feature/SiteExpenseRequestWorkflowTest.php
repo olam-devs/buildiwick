@@ -2,11 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Client;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
 use App\Models\Project;
-use App\Models\ProjectPhase;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\ExpensePaymentRecorder;
@@ -16,7 +14,6 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class SiteExpenseRequestWorkflowTest extends TestCase
@@ -337,6 +334,26 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         $this->actingAs($operator)->get(route('site.requests.index'))->assertOk()->assertSee('No expense requests yet.');
     }
 
+    public function test_salary_and_cash_requests_require_an_amount_while_items_and_services_do_not(): void
+    {
+        [$project, $operator] = $this->assignedProject();
+        $this->actingAs($operator)->from(route('site.requests.create', $project))
+            ->post(route('site.requests.store', $project), $this->payload(['request_type' => 'salary_wage', 'requested_amount' => null]))
+            ->assertSessionHasErrors('requested_amount');
+
+        $this->actingAs($operator)->post(route('site.requests.store', $project), $this->payload([
+            'request_type' => 'cash_amount', 'requested_amount' => '75000.00', 'item_description' => 'Petty cash float',
+        ]))->assertRedirect();
+        $cash = ExpenseRequest::latest('id')->firstOrFail();
+        $this->assertSame('cash_amount', $cash->request_type);
+        $this->assertSame('75000.00', $cash->requested_amount);
+
+        $this->actingAs($operator)->post(route('site.requests.store', $project), $this->payload([
+            'request_type' => 'service', 'requested_amount' => null, 'item_description' => 'Crane hire service',
+        ]))->assertRedirect();
+        $this->assertSame('service', ExpenseRequest::latest('id')->value('request_type'));
+    }
+
     private function assignedProject(): array
     {
         $project = $this->project('BWG-SITE-'.fake()->unique()->numerify('#####'));
@@ -368,6 +385,7 @@ class SiteExpenseRequestWorkflowTest extends TestCase
     {
         return array_merge([
             'requested_at' => now()->toDateString(),
+            'request_type' => 'item',
             'main_category' => 'materials',
             'subcategory' => 'concrete_cement',
             'item_description' => 'Cement for current work',

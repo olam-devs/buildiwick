@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\DecideExpenseRequestRequest;
 use App\Http\Requests\SaveExpenseCommercialDetailsRequest;
 use App\Http\Requests\SaveInternalBudgetEntryRequest;
+use App\Http\Requests\StoreSiteExpenseRequest;
 use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
@@ -17,6 +18,7 @@ use App\Models\SupplierPaymentDestination;
 use App\Services\ExpenseRequestCommercialService;
 use App\Services\ExpenseRequestDecisionService;
 use App\Services\ProjectManagerBudgetService;
+use App\Services\SiteExpenseRequestService;
 use App\Support\CostEntryOptions;
 use App\Support\Money;
 use Illuminate\Http\Request;
@@ -29,7 +31,7 @@ class ProjectManagerController extends Controller
     {
         abort_unless($request->user()->hasRole('project_manager') || $request->user()->hasRole('admin'), 403);
         $filters = $request->validate([
-            'filter' => ['nullable', 'in:all,awaiting_pricing,ready,approved,rejected'],
+            'filter' => ['nullable', 'in:all,awaiting_pricing,ready,awaiting_director,approved,rejected'],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
             'phase_id' => ['nullable', 'integer', 'exists:project_phases,id'],
             'category' => ['nullable', 'in:materials,labour_subcontracts,logistics_equipment,preliminaries_overheads'],
@@ -43,6 +45,7 @@ class ProjectManagerController extends Controller
             'all' => (clone $query)->count(),
             'awaiting_pricing' => (clone $query)->where('status', 'pending_approval')->whereNull('commercial_total')->count(),
             'ready' => (clone $query)->where('status', 'pending_approval')->whereNotNull('commercial_total')->count(),
+            'awaiting_director' => (clone $query)->where('status', 'pending_director_approval')->count(),
             'approved' => (clone $query)->where('status', 'approved')->count(),
             'rejected' => (clone $query)->where('status', 'rejected')->count(),
         ];
@@ -52,6 +55,7 @@ class ProjectManagerController extends Controller
         match ($filters['filter'] ?? 'all') {
             'awaiting_pricing' => $query->where('status', 'pending_approval')->whereNull('commercial_total'),
             'ready' => $query->where('status', 'pending_approval')->whereNotNull('commercial_total'),
+            'awaiting_director' => $query->where('status', 'pending_director_approval'),
             'approved' => $query->where('status', 'approved'),
             'rejected' => $query->where('status', 'rejected'),
             default => null,
@@ -75,13 +79,39 @@ class ProjectManagerController extends Controller
         ]);
     }
 
+    public function createRequest(Request $request, Project $project)
+    {
+        abort_unless($request->user()->hasRole('project_manager'), 403);
+        $this->authorize('create', [ExpenseRequest::class, $project]);
+        $activePhases = $project->phases()->where('status', 'active')
+            ->whereIn('stage_code', SiteExpenseRequestService::PHASES)->orderBy('phase_order')->get();
+
+        return view('site.request-form', [
+            'project' => $project,
+            'phase' => $activePhases->count() === 1 ? $activePhases->first() : null,
+            'phaseConfiguration' => $activePhases->count(),
+            'expenseRequest' => null,
+            'lookups' => $this->lookups(),
+            'formAudience' => 'project_manager',
+        ]);
+    }
+
+    public function storeRequest(StoreSiteExpenseRequest $request, Project $project, SiteExpenseRequestService $service)
+    {
+        abort_unless($request->user()->hasRole('project_manager'), 403);
+        $created = $service->create($project, $request->validated(), $request->user(), $request->file('evidence'));
+
+        return redirect()->route('pm.requests.commercial.edit', $created)
+            ->with('success', 'Request '.$created->request_code.' created. Complete the commercial details, then submit it to the Director.');
+    }
+
     public function editCommercial(Request $request, ExpenseRequest $expenseRequest, ExpenseRequestDecisionService $decisions)
     {
         abort_unless($request->user()->hasRole('admin') || $request->user()->hasRole('project_manager'), 403);
         abort_unless($request->user()->can('view', $expenseRequest), 403);
 
         return view('pm.commercial-form', [
-            'expenseRequest' => $expenseRequest->load(['project', 'phase', 'supplierPayee', 'commercialPaymentDestination', 'latestApproval']),
+            'expenseRequest' => $expenseRequest->load(['project', 'phase', 'supplierPayee', 'commercialPaymentDestination', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy']),
             'suppliers' => SupplierPayee::where('is_active', true)->orderBy('name')->get(),
             'destinations' => SupplierPaymentDestination::where('is_active', true)->orderBy('supplier_payee_id')->get(),
             'paymentMethods' => Lookup::ofType('payment_method')->get(),
@@ -100,13 +130,17 @@ class ProjectManagerController extends Controller
     {
         $decisions->decide($expenseRequest, $request->validated()['decision'], $request->validated()['notes'], $request->user());
 
-        return redirect()->route('pm.requests.commercial.edit', $expenseRequest)->with('success', ucfirst($request->validated()['decision']).' decision recorded. No payment was created.');
+        $message = $request->validated()['decision'] === 'approve'
+            ? 'PM approval recorded and the request was submitted to the Director. It is not yet available to Accounts.'
+            : 'PM rejection recorded. No payment was created.';
+
+        return redirect()->route('pm.requests.commercial.edit', $expenseRequest)->with('success', $message);
     }
 
     public function commercialEvidence(Request $request, ExpenseRequest $expenseRequest): StreamedResponse
     {
         $user = $request->user();
-        abort_unless($user->hasRole('admin') || $user->hasRole('accounts')
+        abort_unless($user->hasRole('admin') || $user->hasRole('director') || $user->hasRole('accounts')
             || ($user->hasRole('project_manager') && $user->can('view', $expenseRequest)), 403);
         abort_unless($expenseRequest->commercial_evidence_link && Storage::disk('local')->exists($expenseRequest->commercial_evidence_link), 404);
 
@@ -140,6 +174,7 @@ class ProjectManagerController extends Controller
                     'commercialized_count' => $requests->whereNotNull('commercial_total')->count(),
                     'awaiting_commercial_count' => $pending->whereNull('commercial_total')->count(),
                     'ready_count' => $pending->whereNotNull('commercial_total')->count(),
+                    'awaiting_director_count' => $requests->where('status', 'pending_director_approval')->count(),
                     'approved_awaiting_accounts' => $requests->where('status', 'approved')->filter(fn (ExpenseRequest $request) => Money::compare($request->approved_outstanding_amount, '0') > 0)->count(),
                 ];
             });

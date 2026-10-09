@@ -10,9 +10,11 @@
   <div class="tile"><div class="label">Request Date</div><div>{{ $expenseRequest->requested_at?->format('d M Y') }}</div></div>
   <div class="tile"><div class="label">Submitted At</div><div>{{ $expenseRequest->submitted_at?->format('d M Y H:i') ?? $expenseRequest->created_at?->format('d M Y H:i') }}</div></div>
   <div class="tile"><div class="label">Requested By</div><div>{{ $expenseRequest->requestedBy?->name ?? '—' }}</div></div>
+  <div class="tile"><div class="label">Request Type</div><div>{{ \App\Models\ExpenseRequest::TYPES[$expenseRequest->request_type] ?? $expenseRequest->request_type }}</div></div>
   <div class="tile"><div class="label">Category</div><div>{{ $categoryLabels[$expenseRequest->main_category] ?? $expenseRequest->main_category }} · {{ $subcategoryLabels[$expenseRequest->subcategory] ?? 'No subcategory' }}</div></div>
   <div class="tile"><div class="label">Description</div><div>{{ $expenseRequest->item_description }}</div></div>
   <div class="tile"><div class="label">Quantity / Unit</div><div>{{ $expenseRequest->quantity ?? 'Lump sum' }} · {{ $unitLabels[$expenseRequest->unit] ?? 'LS / no unit' }}</div></div>
+  <div class="tile"><div class="label">Requested Amount</div><div>{{ $expenseRequest->requested_amount !== null ? 'TSh '.\App\Support\Money::format($expenseRequest->requested_amount) : '—' }}</div></div>
   @if($showFinancialDetails && $expenseRequest->unit_cost !== null)<div class="tile"><div class="label">Historical Unit Cost</div><div>TSh {{ \App\Support\Money::format($expenseRequest->unit_cost) }}</div></div>@endif
   @if($showFinancialDetails && $expenseRequest->total_amount !== null)<div class="tile"><div class="label">Historical Requested Total</div><div>{{ \App\Support\Money::format($expenseRequest->total_amount) }} TSh</div></div>@endif
   <div class="tile"><div class="label">Evidence</div><div>@if($expenseRequest->evidence_link)<a href="{{ route('site.requests.evidence', [$project, $expenseRequest]) }}">{{ $expenseRequest->evidence_original_name ?? 'Download supporting evidence' }}</a>@else — @endif</div></div>
@@ -20,8 +22,8 @@
 </div></section>
 
 <section class="panel form-section"><h3>Approval History</h3>
-@if($expenseRequest->approvals->isEmpty())<div class="phase-empty">No Project Manager decision has been recorded.</div>@else
-<div class="tablewrap"><table style="min-width:600px"><thead><tr><th>Decision</th><th>Decided By</th><th>Decision Date</th><th>Notes</th></tr></thead><tbody>@foreach($expenseRequest->approvals as $approval)<tr><td>{{ ucfirst($approval->decision) }}</td><td>{{ $approval->decidedBy?->name ?? '—' }}</td><td>{{ $approval->decided_at?->format('d M Y H:i') }}</td><td>{{ $approval->notes ?: '—' }}</td></tr>@endforeach</tbody></table></div>
+@if($expenseRequest->approvals->isEmpty())<div class="phase-empty">No approval decision has been recorded.</div>@else
+<div class="tablewrap"><table style="min-width:600px"><thead><tr><th>Stage</th><th>Decision</th><th>Decided By</th><th>Decision Date</th><th>Notes</th></tr></thead><tbody>@foreach($expenseRequest->approvals as $approval)<tr><td>{{ ucwords(str_replace('_',' ',$approval->approval_stage)) }}</td><td>{{ ucfirst($approval->decision) }}</td><td>{{ $approval->decidedBy?->name ?? '—' }}</td><td>{{ $approval->decided_at?->format('d M Y H:i') }}</td><td>{{ $approval->notes ?: '—' }}</td></tr>@endforeach</tbody></table></div>
 @endif</section>
 
 <section class="panel form-section"><h3>Payment Summary · Read Only</h3><div class="tiles"><div class="tile"><div class="label">Approval Status</div><div>{{ ucwords(str_replace('_', ' ', $expenseRequest->status)) }}</div></div><div class="tile"><div class="label">Payment Status</div><div>{{ ucwords(str_replace('_', ' ', $expenseRequest->payment_status)) }}</div></div>@if($showFinancialDetails)<div class="tile"><div class="label">Approved Amount</div><div>{{ $expenseRequest->status === 'approved' ? \App\Support\Money::format($expenseRequest->approved_payable_amount).' TSh' : 'Not approved' }}</div></div><div class="tile"><div class="label">Amount Paid</div><div>{{ \App\Support\Money::format($expenseRequest->paid_to_date) }} TSh</div></div><div class="tile"><div class="label">Approved Outstanding</div><div>{{ \App\Support\Money::format($expenseRequest->approved_outstanding_amount) }} TSh</div></div>@endif</div>

@@ -7,13 +7,21 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ExpenseRequest extends Model
 {
+    public const TYPES = [
+        'item' => 'Item / Materials',
+        'service' => 'Service',
+        'salary_wage' => 'Salary / Wage',
+        'cash_amount' => 'Direct Amount / Cash Request',
+    ];
+
     protected $fillable = [
-        'request_code', 'project_id', 'project_phase_id', 'main_category', 'subcategory',
+        'request_code', 'project_id', 'project_phase_id', 'request_type', 'main_category', 'subcategory',
         'item_description', 'supplier_fundi_client', 'supplier_payee_id', 'invoice_receipt_no', 'quantity', 'unit',
-        'unit_cost', 'total_amount', 'commercial_unit_rate', 'commercial_total', 'commercial_payment_method',
+        'unit_cost', 'total_amount', 'requested_amount', 'commercial_unit_rate', 'commercial_total', 'commercial_payment_method',
         'commercial_payment_destination', 'commercial_payment_destination_id', 'commercial_notes', 'commercial_evidence_link', 'commercial_prepared_by',
         'commercial_prepared_at', 'approved_amount', 'requested_at', 'submitted_at',
         'status', 'cancelled_at', 'cancelled_by', 'requested_by', 'evidence_link', 'evidence_original_name', 'notes',
@@ -22,7 +30,7 @@ class ExpenseRequest extends Model
     protected function casts(): array
     {
         return [
-            'quantity' => 'decimal:2', 'unit_cost' => 'decimal:2', 'total_amount' => 'decimal:2',
+            'quantity' => 'decimal:2', 'unit_cost' => 'decimal:2', 'total_amount' => 'decimal:2', 'requested_amount' => 'decimal:2',
             'commercial_unit_rate' => 'decimal:2', 'commercial_total' => 'decimal:2', 'approved_amount' => 'decimal:2',
             'requested_at' => 'date', 'submitted_at' => 'datetime', 'commercial_prepared_at' => 'datetime',
             'cancelled_at' => 'datetime',
@@ -64,9 +72,19 @@ class ExpenseRequest extends Model
         return $this->hasMany(ExpenseRequestApproval::class);
     }
 
-    public function latestApproval(): \Illuminate\Database\Eloquent\Relations\HasOne
+    public function latestApproval(): HasOne
     {
         return $this->hasOne(ExpenseRequestApproval::class)->latestOfMany();
+    }
+
+    public function latestPmApproval(): HasOne
+    {
+        return $this->hasOne(ExpenseRequestApproval::class)->where('approval_stage', 'project_manager')->latestOfMany();
+    }
+
+    public function latestDirectorApproval(): HasOne
+    {
+        return $this->hasOne(ExpenseRequestApproval::class)->where('approval_stage', 'director')->latestOfMany();
     }
 
     public function payments(): HasMany
