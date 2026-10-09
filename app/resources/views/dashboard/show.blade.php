@@ -19,7 +19,6 @@
     <h2>{{ $project->name }}</h2>
     <p>{{ $project->project_code }} @if($project->location) &middot; {{ $project->location }} @endif</p>
   </div>
-  <button type="button" class="btn btn-primary" onclick="Buildiwick.openDrawer()"><span style="font-size:16px;line-height:1;">+</span> New Entry</button>
 </div>
 
 <div class="tiles">
@@ -74,6 +73,3 @@
 
 <footer>{{ $needsAttention->count() }} entries still need confirming on this project</footer>
 @endsection
-@push('drawers')
-@include('partials.new-entry-drawer')
-@endpush

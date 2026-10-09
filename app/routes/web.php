@@ -58,6 +58,9 @@ Route::middleware(['auth', 'active-account'])->group(function () {
 
     Route::get('/pm/projects', [ProjectManagerController::class, 'index'])->name('pm.projects.index');
     Route::get('/pm/site-requests', [ProjectManagerController::class, 'requests'])->name('pm.requests.index');
+    Route::get('/pm/labour-agreements', [ProjectManagerController::class, 'labourAgreements'])->name('pm.labour.index');
+    Route::get('/pm/projects/{project}/labour-agreements/create', [ProjectManagerController::class, 'createLabourAgreement'])->name('pm.labour.create');
+    Route::post('/pm/projects/{project}/labour-agreements', [ProjectManagerController::class, 'storeLabourAgreement'])->name('pm.labour.store');
     Route::get('/pm/projects/{project}/requests/create', [ProjectManagerController::class, 'createRequest'])->name('pm.requests.create');
     Route::post('/pm/projects/{project}/requests', [ProjectManagerController::class, 'storeRequest'])->name('pm.requests.store');
     Route::get('/pm/site-requests/{expenseRequest}/commercial', [ProjectManagerController::class, 'editCommercial'])->name('pm.requests.commercial.edit');

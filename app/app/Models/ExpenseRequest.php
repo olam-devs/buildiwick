@@ -18,8 +18,15 @@ class ExpenseRequest extends Model
         'cash_amount' => 'Direct Amount / Cash Request',
     ];
 
+    public const CATEGORY_GUIDANCE = [
+        'materials' => 'Physical materials incorporated into the works, such as cement, steel, blocks, timber, plumbing, electrical and finishes.',
+        'labour_subcontracts' => 'Salaries, wages, casual or fundi labour, professional services and subcontracted scopes. Link an agreement where one exists.',
+        'logistics_equipment' => 'Transport, delivery, haulage, tools, fuel, equipment hire and plant or machinery needed to execute the work.',
+        'preliminaries_overheads' => 'Project-support costs not tied to one building element: site office, temporary utilities, PPE, cleaning, security, permits, communications and insurance.',
+    ];
+
     protected $fillable = [
-        'request_code', 'project_id', 'project_phase_id', 'request_type', 'main_category', 'subcategory',
+        'request_code', 'project_id', 'project_phase_id', 'labour_agreement_id', 'request_type', 'main_category', 'subcategory',
         'item_description', 'supplier_fundi_client', 'supplier_payee_id', 'invoice_receipt_no', 'quantity', 'unit',
         'unit_cost', 'total_amount', 'requested_amount', 'commercial_unit_rate', 'commercial_total', 'commercial_payment_method',
         'commercial_payment_destination', 'commercial_payment_destination_id', 'commercial_notes', 'commercial_evidence_link', 'commercial_prepared_by',
@@ -50,6 +57,11 @@ class ExpenseRequest extends Model
     public function requestedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by');
+    }
+
+    public function labourAgreement(): BelongsTo
+    {
+        return $this->belongsTo(LabourAgreement::class);
     }
 
     public function supplierPayee(): BelongsTo

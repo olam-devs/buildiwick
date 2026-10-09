@@ -14,7 +14,17 @@ trait SiteExpenseRequestRules
         return [
             'requested_at' => ['required', 'date', 'before_or_equal:today'],
             'request_type' => ['required', Rule::in(array_keys(ExpenseRequest::TYPES))],
-            'main_category' => ['required', Rule::exists('lookups', 'code')->where('type', 'main_category')->where('is_active', true)],
+            'main_category' => [
+                'required', Rule::exists('lookups', 'code')->where('type', 'main_category')->where('is_active', true),
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($this->input('request_type') === 'salary_wage' && $value !== 'labour_subcontracts') {
+                        $fail('Salary and wage requests must use the Labour & Subcontracts category.');
+                    }
+                    if ($this->filled('labour_agreement_id') && $value !== 'labour_subcontracts') {
+                        $fail('A labour agreement can only be linked to the Labour & Subcontracts category.');
+                    }
+                },
+            ],
             'subcategory' => [
                 'nullable', 'string',
                 Rule::exists('lookups', 'code')->where('type', 'subcategory')->where('parent_code', $mainCategory)->where('is_active', true),
@@ -23,6 +33,10 @@ trait SiteExpenseRequestRules
             'quantity' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
             'unit' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'unit')->where('is_active', true)],
             'requested_amount' => ['nullable', 'required_if:request_type,salary_wage,cash_amount', 'numeric', 'decimal:0,2', 'min:0.01', 'max:999999999999.99'],
+            'labour_agreement_id' => [
+                'nullable', 'integer',
+                Rule::exists('labour_agreements', 'id')->where('project_id', $this->route('project')?->id),
+            ],
             'evidence' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx', 'extensions:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx', 'max:20480'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];

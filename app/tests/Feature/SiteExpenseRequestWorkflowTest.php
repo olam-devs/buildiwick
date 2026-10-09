@@ -340,6 +340,9 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         $this->actingAs($operator)->from(route('site.requests.create', $project))
             ->post(route('site.requests.store', $project), $this->payload(['request_type' => 'salary_wage', 'requested_amount' => null]))
             ->assertSessionHasErrors('requested_amount');
+        $this->actingAs($operator)->from(route('site.requests.create', $project))
+            ->post(route('site.requests.store', $project), $this->payload(['request_type' => 'salary_wage', 'requested_amount' => '50000.00']))
+            ->assertSessionHasErrors('main_category');
 
         $this->actingAs($operator)->post(route('site.requests.store', $project), $this->payload([
             'request_type' => 'cash_amount', 'requested_amount' => '75000.00', 'item_description' => 'Petty cash float',

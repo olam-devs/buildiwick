@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\DecideExpenseRequestRequest;
 use App\Http\Requests\SaveExpenseCommercialDetailsRequest;
 use App\Http\Requests\SaveInternalBudgetEntryRequest;
+use App\Http\Requests\StoreLabourAgreementRequest;
 use App\Http\Requests\StoreSiteExpenseRequest;
 use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
+use App\Models\LabourAgreement;
 use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectPhase;
@@ -23,6 +25,7 @@ use App\Support\CostEntryOptions;
 use App\Support\Money;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProjectManagerController extends Controller
@@ -36,7 +39,7 @@ class ProjectManagerController extends Controller
             'phase_id' => ['nullable', 'integer', 'exists:project_phases,id'],
             'category' => ['nullable', 'in:materials,labour_subcontracts,logistics_equipment,preliminaries_overheads'],
         ]);
-        $query = ExpenseRequest::with(['project', 'phase', 'requestedBy', 'supplierPayee'])
+        $query = ExpenseRequest::with(['project', 'phase', 'requestedBy', 'supplierPayee', 'labourAgreement'])
             ->where('status', '!=', 'cancelled')->orderByDesc('submitted_at');
         if ($request->user()->hasRole('project_manager')) {
             $query->whereIn('project_id', $request->user()->assignedProjects()->select('projects.id'));
@@ -93,6 +96,7 @@ class ProjectManagerController extends Controller
             'expenseRequest' => null,
             'lookups' => $this->lookups(),
             'formAudience' => 'project_manager',
+            'labourAgreements' => $project->labourAgreements()->whereIn('status', ['draft', 'active'])->orderBy('fundi_subcontractor')->get(),
         ]);
     }
 
@@ -105,13 +109,55 @@ class ProjectManagerController extends Controller
             ->with('success', 'Request '.$created->request_code.' created. Complete the commercial details, then submit it to the Director.');
     }
 
+    public function labourAgreements(Request $request)
+    {
+        abort_unless($request->user()->hasRole('project_manager') || $request->user()->hasRole('admin'), 403);
+        $projectQuery = Project::query()->orderBy('name');
+        if ($request->user()->hasRole('project_manager')) {
+            $projectQuery->whereIn('id', $request->user()->assignedProjects()->select('projects.id'));
+        }
+        $projects = $projectQuery->get(['id', 'name', 'project_code']);
+        $agreements = LabourAgreement::query()
+            ->with(['project', 'expenseRequests.payments'])
+            ->whereIn('project_id', $projects->pluck('id'))
+            ->orderByDesc('agreement_date')->get();
+
+        return view('pm.labour.index', compact('projects', 'agreements'));
+    }
+
+    public function createLabourAgreement(Request $request, Project $project)
+    {
+        abort_unless($request->user()->hasRole('project_manager') || $request->user()->hasRole('admin'), 403);
+        $this->authorize('create', [LabourAgreement::class, $project]);
+
+        return view('pm.labour.form', [
+            'project' => $project,
+            'labourTypes' => Lookup::where('type', 'subcategory')->where('parent_code', 'labour_subcontracts')->where('is_active', true)->orderBy('sort_order')->get(),
+        ]);
+    }
+
+    public function storeLabourAgreement(StoreLabourAgreementRequest $request, Project $project)
+    {
+        abort_unless($request->user()->hasRole('project_manager') || $request->user()->hasRole('admin'), 403);
+        $this->authorize('create', [LabourAgreement::class, $project]);
+        abort_unless((int) $request->validated()['project_id'] === (int) $project->id, 404);
+        $agreement = LabourAgreement::create($request->validated() + [
+            'agreement_code' => 'AGR-TMP-'.Str::ulid(),
+            'status' => 'active',
+            'created_by' => $request->user()->id,
+        ]);
+        $agreement->update(['agreement_code' => 'AGR-'.str_pad((string) $agreement->id, 6, '0', STR_PAD_LEFT)]);
+
+        return redirect()->route('pm.labour.index')->with('success', 'Labour/subcontract agreement '.$agreement->agreement_code.' created. Requests can now be linked to it.');
+    }
+
     public function editCommercial(Request $request, ExpenseRequest $expenseRequest, ExpenseRequestDecisionService $decisions)
     {
         abort_unless($request->user()->hasRole('admin') || $request->user()->hasRole('project_manager'), 403);
         abort_unless($request->user()->can('view', $expenseRequest), 403);
 
         return view('pm.commercial-form', [
-            'expenseRequest' => $expenseRequest->load(['project', 'phase', 'supplierPayee', 'commercialPaymentDestination', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy']),
+            'expenseRequest' => $expenseRequest->load(['project', 'phase', 'labourAgreement', 'supplierPayee', 'commercialPaymentDestination', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy']),
             'suppliers' => SupplierPayee::where('is_active', true)->orderBy('name')->get(),
             'destinations' => SupplierPaymentDestination::where('is_active', true)->orderBy('supplier_payee_id')->get(),
             'paymentMethods' => Lookup::ofType('payment_method')->get(),

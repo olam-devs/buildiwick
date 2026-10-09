@@ -23,7 +23,7 @@ class DirectorController extends Controller
             'category' => ['nullable', 'in:materials,labour_subcontracts,logistics_equipment,preliminaries_overheads'],
         ]);
         $query = ExpenseRequest::query()
-            ->with(['project', 'phase', 'requestedBy', 'supplierPayee', 'commercialPaymentDestination', 'latestPmApproval.decidedBy'])
+            ->with(['project', 'phase', 'labourAgreement', 'requestedBy', 'supplierPayee', 'commercialPaymentDestination', 'latestPmApproval.decidedBy'])
             ->where('status', 'pending_director_approval')
             ->when($request->integer('project_id'), fn ($builder, int $projectId) => $builder->where('project_id', $projectId))
             ->when($filters['request_type'] ?? null, fn ($builder, string $type) => $builder->where('request_type', $type))

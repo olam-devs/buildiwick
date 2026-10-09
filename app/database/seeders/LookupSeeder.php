@@ -32,10 +32,6 @@ class LookupSeeder extends Seeder
             ['timber_formwork', 'Timber & Formwork'],
             ['electrical', 'Electrical'],
             ['finishes', 'Finishes'],
-            ['tools_small_equipment', 'Tools & Small Equipment'],
-            ['transport_handling', 'Transport / Handling'],
-            ['ppe_welfare', 'PPE / Welfare'],
-            ['site_cleaning_housekeeping', 'Site Cleaning & Housekeeping'],
             ['tax_on_materials', 'Tax on Materials'],
             ['other_materials', 'Other Materials'],
         ], parentType: 'main_category', parentCode: 'materials');
@@ -44,10 +40,31 @@ class LookupSeeder extends Seeder
             ['direct_labour', 'Direct Labour'],
             ['fundi_labour', 'Fundi Labour'],
             ['subcontractor', 'Subcontractor'],
-            ['equipment_hire', 'Equipment Hire'],
-            ['temporary_utilities', 'Temporary Utilities'],
+            ['salary_wages', 'Salaries & Wages'],
+            ['casual_labour', 'Casual Labour'],
+            ['professional_services', 'Professional Services'],
             ['other', 'Other'],
         ], parentType: 'main_category', parentCode: 'labour_subcontracts', startOrder: 100);
+
+        $this->seedType('subcategory', [
+            ['transport_handling', 'Transport / Handling'],
+            ['delivery_haulage', 'Delivery & Haulage'],
+            ['equipment_hire', 'Equipment Hire'],
+            ['plant_machinery_hire', 'Plant & Machinery Hire'],
+            ['tools_small_equipment', 'Tools & Small Equipment'],
+            ['fuel_lubricants', 'Fuel & Lubricants'],
+        ], parentType: 'main_category', parentCode: 'logistics_equipment', startOrder: 200);
+
+        $this->seedType('subcategory', [
+            ['temporary_utilities', 'Temporary Utilities'],
+            ['ppe_welfare', 'PPE / Welfare'],
+            ['site_cleaning_housekeeping', 'Site Cleaning & Housekeeping'],
+            ['site_security', 'Site Security'],
+            ['site_office_accommodation', 'Site Office & Accommodation'],
+            ['permits_fees', 'Permits & Fees'],
+            ['communications', 'Communications'],
+            ['insurance_bonds', 'Insurance & Bonds'],
+        ], parentType: 'main_category', parentCode: 'preliminaries_overheads', startOrder: 300);
 
         $this->seedType('unit', [
             ['pc', 'PIECE'], ['bag', 'BAG'], ['kg', 'KG'], ['tonne', 'TONNE'], ['bundle', 'BUNDLE'],
@@ -106,7 +123,8 @@ class LookupSeeder extends Seeder
         ]);
 
         $this->seedType('expense_request_status', [
-            ['pending_approval', 'Pending Approval'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['cancelled', 'Cancelled'],
+            ['pending_approval', 'Pending PM Approval'], ['pending_director_approval', 'Pending Director Approval'],
+            ['approved', 'Director Approved'], ['rejected', 'Rejected'], ['cancelled', 'Cancelled'],
         ]);
 
         $this->seedType('client_invoice_status', [

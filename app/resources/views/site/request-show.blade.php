@@ -11,6 +11,7 @@
   <div class="tile"><div class="label">Submitted At</div><div>{{ $expenseRequest->submitted_at?->format('d M Y H:i') ?? $expenseRequest->created_at?->format('d M Y H:i') }}</div></div>
   <div class="tile"><div class="label">Requested By</div><div>{{ $expenseRequest->requestedBy?->name ?? '—' }}</div></div>
   <div class="tile"><div class="label">Request Type</div><div>{{ \App\Models\ExpenseRequest::TYPES[$expenseRequest->request_type] ?? $expenseRequest->request_type }}</div></div>
+  <div class="tile"><div class="label">Labour / Subcontract Agreement</div><div>{{ $expenseRequest->labourAgreement ? $expenseRequest->labourAgreement->agreement_code.' · '.$expenseRequest->labourAgreement->fundi_subcontractor : 'Not linked' }}</div></div>
   <div class="tile"><div class="label">Category</div><div>{{ $categoryLabels[$expenseRequest->main_category] ?? $expenseRequest->main_category }} · {{ $subcategoryLabels[$expenseRequest->subcategory] ?? 'No subcategory' }}</div></div>
   <div class="tile"><div class="label">Description</div><div>{{ $expenseRequest->item_description }}</div></div>
   <div class="tile"><div class="label">Quantity / Unit</div><div>{{ $expenseRequest->quantity ?? 'Lump sum' }} · {{ $unitLabels[$expenseRequest->unit] ?? 'LS / no unit' }}</div></div>

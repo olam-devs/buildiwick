@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
+use App\Models\LabourAgreement;
 use App\Models\Project;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
@@ -392,15 +393,25 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $director = $this->user('director');
         $accounts = $this->user('accounts');
 
+        $this->actingAs($pm)->post(route('pm.labour.store', $project), [
+            'project_id' => $project->id, 'fundi_subcontractor' => 'Mason Team Lead',
+            'labour_type' => 'subcontractor', 'scope_of_work' => 'Masonry labour',
+            'agreement_date' => now()->toDateString(), 'agreed_value' => '900000.00',
+        ])->assertRedirect(route('pm.labour.index'));
+        $agreement = LabourAgreement::firstOrFail();
+        $this->actingAs($pm)->get(route('pm.labour.index'))->assertOk()->assertSee($agreement->agreement_code);
+
         $this->actingAs($pm)->post(route('pm.requests.store', $project), [
             'requested_at' => now()->toDateString(), 'request_type' => 'salary_wage',
             'main_category' => 'labour_subcontracts', 'item_description' => 'Weekly mason wages',
             'requested_amount' => '300000.00', 'unit' => 'ls', 'notes' => 'Week one wages.',
+            'labour_agreement_id' => $agreement->id,
         ])->assertRedirect();
         $request = ExpenseRequest::latest('id')->firstOrFail();
         $this->assertSame($pm->id, $request->requested_by);
         $this->assertSame('salary_wage', $request->request_type);
         $this->assertSame('300000.00', $request->requested_amount);
+        $this->assertSame($agreement->id, $request->labour_agreement_id);
 
         $supplier = SupplierPayee::create(['name' => 'Mason Team Lead', 'type' => 'service_provider', 'is_active' => true]);
         $this->actingAs($pm)->put(route('pm.requests.commercial.update', $request), [

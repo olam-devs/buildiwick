@@ -72,6 +72,7 @@ class SiteExpenseRequestService
                 $request = $lockedProject->expenseRequests()->create([
                     'request_code' => 'REQ-TMP-'.Str::ulid(),
                     'project_phase_id' => $phase->id,
+                    'labour_agreement_id' => $data['labour_agreement_id'] ?? null,
                     'request_type' => $data['request_type'] ?? 'item',
                     'main_category' => $data['main_category'],
                     'subcategory' => $data['subcategory'] ?? null,
@@ -117,6 +118,7 @@ class SiteExpenseRequestService
                 $storedPath = $newPath;
 
                 $request->update([
+                    'labour_agreement_id' => $data['labour_agreement_id'] ?? null,
                     'request_type' => $data['request_type'] ?? $request->request_type ?? 'item',
                     'main_category' => $data['main_category'],
                     'subcategory' => $data['subcategory'] ?? null,

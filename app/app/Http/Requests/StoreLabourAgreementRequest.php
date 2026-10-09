@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Models\LabourAgreement;
+use App\Models\Project;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -9,7 +11,13 @@ class StoreLabourAgreementRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true; // real check: $this->authorize('create', [LabourAgreement::class, $project]) in the controller
+        $project = $this->route('project');
+        if (! $project instanceof Project) {
+            $project = Project::find($this->input('project_id'));
+        }
+
+        return $project instanceof Project
+            && ($this->user()?->can('create', [LabourAgreement::class, $project]) ?? false);
     }
 
     public function rules(): array

@@ -196,6 +196,7 @@
       <a class="navitem {{ request()->routeIs('pm.projects.*') ? 'active' : '' }}" href="{{ route('pm.projects.index') }}">Projects</a>
       <a class="navitem {{ request()->routeIs('pm.budget-entries.*') || request()->routeIs('pm.budgets.*') ? 'active' : '' }}" href="{{ route('pm.projects.index') }}">Internal Budgets</a>
       <a class="navitem {{ request()->routeIs('pm.requests.*') ? 'active' : '' }}" href="{{ route('pm.requests.index') }}">Project Requests</a>
+      <a class="navitem {{ request()->routeIs('pm.labour.*') ? 'active' : '' }}" href="{{ route('pm.labour.index') }}">Labour &amp; Subcontracts</a>
       @elseif (auth()->user()->hasRole('accountant') || auth()->user()->hasRole('accounts'))
       <a class="navitem {{ request()->routeIs('accountant.index') ? 'active' : '' }}" href="{{ route('accountant.index') }}">Dashboard</a>
       <a class="navitem {{ request()->routeIs('accountant.requests.*') ? 'active' : '' }}" href="{{ route('accountant.requests.index') }}">Approved Payments</a>

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
 
 class LabourAgreement extends Model
 {
@@ -35,9 +35,15 @@ class LabourAgreement extends Model
         return $this->hasMany(Transaction::class, 'agreement_id');
     }
 
+    public function expenseRequests(): HasMany
+    {
+        return $this->hasMany(ExpenseRequest::class);
+    }
+
     public function paidToDate(): float
     {
-        return (float) $this->payments()->sum('amount_paid_received');
+        return (float) $this->payments()->sum('amount_paid_received')
+            + (float) ExpensePayment::whereIn('expense_request_id', $this->expenseRequests()->select('id'))->sum('amount');
     }
 
     public function outstanding(): float

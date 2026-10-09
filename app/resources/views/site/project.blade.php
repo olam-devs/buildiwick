@@ -6,6 +6,8 @@
 @if($activeCount === 1)<a class="btn btn-primary" href="{{ route('site.requests.create', $project) }}">+ New Expense Request</a>@endif
 </div>
 
+@if($activeCount === 1)<section class="panel form-section"><h3>Raise a Request by Cost Area</h3><div class="estimate-actions"><a class="btn btn-ghost" href="{{ route('site.requests.create', [$project, 'category'=>'materials', 'type'=>'item']) }}">Materials</a><a class="btn btn-ghost" href="{{ route('site.requests.create', [$project, 'category'=>'labour_subcontracts', 'type'=>'salary_wage']) }}">Salary / Wages</a><a class="btn btn-ghost" href="{{ route('site.requests.create', [$project, 'category'=>'labour_subcontracts', 'type'=>'service']) }}">Labour / Subcontract</a><a class="btn btn-ghost" href="{{ route('site.requests.create', [$project, 'category'=>'logistics_equipment', 'type'=>'service']) }}">Logistics / Equipment</a><a class="btn btn-ghost" href="{{ route('site.requests.create', [$project, 'category'=>'preliminaries_overheads', 'type'=>'service']) }}">Preliminaries / Overheads</a></div></section>@endif
+
 <section class="panel form-section"><h3>Project</h3><div class="tiles">
   <div class="tile"><div class="label">Name</div><div>{{ $project->name }}</div></div>
   <div class="tile"><div class="label">Code</div><div>{{ $project->project_code }}</div></div>

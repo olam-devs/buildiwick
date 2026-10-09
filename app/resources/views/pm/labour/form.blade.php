@@ -1,0 +1,13 @@
+@extends('layouts.app')
+@section('title', 'New Labour Agreement · '.$project->name)
+@section('content')
+<a class="back-link" href="{{ route('pm.labour.index') }}">&larr; Back to Labour &amp; Subcontracts</a>
+<div class="topline"><div><h2>New Labour / Subcontract Agreement</h2><p>{{ $project->name }} · terms only; this does not approve or record a payment.</p></div></div>
+@if($errors->any())<div class="flash error"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+<form method="POST" action="{{ route('pm.labour.store', $project) }}">@csrf<input type="hidden" name="project_id" value="{{ $project->id }}">
+<section class="panel form-section"><div class="row2"><div class="field"><label for="fundi_subcontractor">Worker / Fundi / Subcontractor <span class="req">*</span></label><input id="fundi_subcontractor" name="fundi_subcontractor" value="{{ old('fundi_subcontractor') }}" required></div><div class="field"><label for="labour_type">Labour / Subcontract Type</label><select id="labour_type" name="labour_type"><option value="">Select type</option>@foreach($labourTypes as $type)<option value="{{ $type->code }}" @selected(old('labour_type')===$type->code)>{{ $type->label }}</option>@endforeach</select></div></div>
+<div class="field"><label for="scope_of_work">Scope of Work</label><textarea id="scope_of_work" name="scope_of_work" rows="3">{{ old('scope_of_work') }}</textarea></div>
+<div class="row3"><div class="field"><label for="agreed_value">Agreed Value (TSh) <span class="req">*</span></label><input id="agreed_value" name="agreed_value" type="number" min="0.01" step="0.01" value="{{ old('agreed_value') }}" required></div><div class="field"><label for="agreement_date">Agreement Date <span class="req">*</span></label><input id="agreement_date" name="agreement_date" type="date" value="{{ old('agreement_date', now()->toDateString()) }}" required></div><div class="field"><label for="contact">Contact</label><input id="contact" name="contact" value="{{ old('contact') }}"></div></div>
+<div class="row2"><div class="field"><label for="start_date">Start Date</label><input id="start_date" name="start_date" type="date" value="{{ old('start_date') }}"></div><div class="field"><label for="expected_completion">Expected Completion</label><input id="expected_completion" name="expected_completion" type="date" value="{{ old('expected_completion') }}"></div></div></section>
+<div class="estimate-actions"><a class="btn btn-ghost" href="{{ route('pm.labour.index') }}">Cancel</a><button class="btn btn-primary" type="submit">Save Agreement</button></div></form>
+@endsection

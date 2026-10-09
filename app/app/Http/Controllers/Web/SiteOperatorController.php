@@ -92,6 +92,7 @@ class SiteOperatorController extends Controller
             'phaseConfiguration' => $activePhases->count(),
             'expenseRequest' => null,
             'lookups' => $this->lookups(),
+            'labourAgreements' => $project->labourAgreements()->whereIn('status', ['draft', 'active'])->orderBy('fundi_subcontractor')->get(),
         ]);
     }
 
@@ -107,7 +108,7 @@ class SiteOperatorController extends Controller
         $this->authorizeWorkspaceRole($request->user());
         abort_unless((int) $expenseRequest->project_id === (int) $project->id, 404);
         $this->authorize('view', $expenseRequest);
-        $expenseRequest->load(['project', 'phase', 'requestedBy', 'cancelledBy', 'approvals.decidedBy', 'payments.recordedBy']);
+        $expenseRequest->load(['project', 'phase', 'labourAgreement', 'requestedBy', 'cancelledBy', 'approvals.decidedBy', 'payments.recordedBy']);
         $canEdit = $request->user()->can('update', $expenseRequest);
 
         return view('site.request-show', [
@@ -133,6 +134,7 @@ class SiteOperatorController extends Controller
             'phaseConfiguration' => 1,
             'expenseRequest' => $expenseRequest,
             'lookups' => $this->lookups(),
+            'labourAgreements' => $project->labourAgreements()->whereIn('status', ['draft', 'active'])->orderBy('fundi_subcontractor')->get(),
         ]);
     }
 
