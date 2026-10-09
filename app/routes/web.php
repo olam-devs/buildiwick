@@ -64,6 +64,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/pm/projects/{project}/requests/create', [ProjectManagerController::class, 'createRequest'])->name('pm.requests.create');
     Route::post('/pm/projects/{project}/requests', [ProjectManagerController::class, 'storeRequest'])->name('pm.requests.store');
     Route::get('/pm/site-requests/{expenseRequest}/commercial', [ProjectManagerController::class, 'editCommercial'])->name('pm.requests.commercial.edit');
+    Route::put('/pm/site-requests/{expenseRequest}/classification', [ProjectManagerController::class, 'classifyRequest'])->name('pm.requests.classification.update');
     Route::put('/pm/site-requests/{expenseRequest}/commercial', [ProjectManagerController::class, 'updateCommercial'])->name('pm.requests.commercial.update');
     Route::post('/pm/site-requests/{expenseRequest}/decision', [ProjectManagerController::class, 'decide'])->name('pm.requests.decision');
     Route::get('/pm/site-requests/{expenseRequest}/commercial-evidence', [ProjectManagerController::class, 'commercialEvidence'])->name('pm.requests.commercial.evidence');

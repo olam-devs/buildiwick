@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ClassifyExpenseRequest;
 use App\Http\Requests\DecideExpenseRequestRequest;
 use App\Http\Requests\SaveExpenseCommercialDetailsRequest;
 use App\Http\Requests\SaveInternalBudgetEntryRequest;
@@ -17,6 +18,7 @@ use App\Models\Project;
 use App\Models\ProjectPhase;
 use App\Models\SupplierPayee;
 use App\Models\SupplierPaymentDestination;
+use App\Services\ExpenseRequestClassificationService;
 use App\Services\ExpenseRequestCommercialService;
 use App\Services\ExpenseRequestDecisionService;
 use App\Services\ProjectManagerBudgetService;
@@ -156,13 +158,27 @@ class ProjectManagerController extends Controller
         abort_unless($request->user()->hasRole('admin') || $request->user()->hasRole('project_manager'), 403);
         abort_unless($request->user()->can('view', $expenseRequest), 403);
 
+        $expenseRequest->load(['project.phases', 'phase', 'labourAgreement', 'internalBudgetEntry', 'supplierPayee', 'commercialPaymentDestination', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy']);
+        $currentBudget = $expenseRequest->project->internalBudgets()->whereIn('status', ['draft', 'finalized', 'approved'])
+            ->orderByRaw("CASE WHEN status = 'draft' THEN 0 ELSE 1 END")->orderByDesc('version')->first();
+
         return view('pm.commercial-form', [
-            'expenseRequest' => $expenseRequest->load(['project', 'phase', 'labourAgreement', 'supplierPayee', 'commercialPaymentDestination', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy']),
+            'expenseRequest' => $expenseRequest,
             'suppliers' => SupplierPayee::where('is_active', true)->orderBy('name')->get(),
             'destinations' => SupplierPaymentDestination::where('is_active', true)->orderBy('supplier_payee_id')->get(),
             'paymentMethods' => Lookup::ofType('payment_method')->get(),
             'impact' => $decisions->impact($expenseRequest),
+            'classification' => $this->lookups(),
+            'budgetEntries' => $currentBudget?->entries()->with('phase')->orderBy('project_phase_id')->orderBy('id')->get() ?? collect(),
         ]);
+    }
+
+    public function classifyRequest(ClassifyExpenseRequest $request, ExpenseRequest $expenseRequest, ExpenseRequestClassificationService $classification)
+    {
+        $classification->classify($expenseRequest, $request->validated(), $request->user());
+
+        return redirect()->route('pm.requests.commercial.edit', $expenseRequest)
+            ->with('success', 'The request was mapped to the selected phase and internal-budget classification.');
     }
 
     public function updateCommercial(SaveExpenseCommercialDetailsRequest $request, ExpenseRequest $expenseRequest, ExpenseRequestCommercialService $commercial)

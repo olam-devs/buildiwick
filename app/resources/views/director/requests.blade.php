@@ -16,6 +16,7 @@
   <div class="tiles request-detail-grid">
     <div class="tile"><div class="label">Category / Subcategory</div><div>{{ \App\Services\ProjectManagerBudgetService::CATEGORIES[$item->main_category] ?? $item->main_category }} · {{ $item->subcategory ?? 'No subcategory' }}</div></div>
     <div class="tile"><div class="label">Labour / Subcontract Agreement</div><div>{{ $item->labourAgreement ? $item->labourAgreement->agreement_code.' · '.$item->labourAgreement->fundi_subcontractor : 'Not linked' }}</div></div>
+    <div class="tile"><div class="label">Internal-Budget Line</div><div>{{ $item->internalBudgetEntry?->item_description ?? 'Compared by phase/category/subcategory' }}</div></div>
     <div class="tile"><div class="label">Description</div><div>{{ $item->item_description }}</div></div>
     <div class="tile"><div class="label">Quantity / Unit</div><div>{{ $item->quantity ?? '1.00' }} · {{ $item->unit ?? 'LS' }}</div></div>
     <div class="tile"><div class="label">Amount Requested</div><div>{{ $item->requested_amount !== null ? 'TSh '.\App\Support\Money::format($item->requested_amount) : 'Not stated by originator' }}</div></div>

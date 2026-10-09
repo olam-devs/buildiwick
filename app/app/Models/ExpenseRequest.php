@@ -26,7 +26,7 @@ class ExpenseRequest extends Model
     ];
 
     protected $fillable = [
-        'request_code', 'project_id', 'project_phase_id', 'labour_agreement_id', 'request_type', 'main_category', 'subcategory',
+        'request_code', 'project_id', 'project_phase_id', 'labour_agreement_id', 'internal_budget_entry_id', 'request_type', 'main_category', 'subcategory',
         'item_description', 'supplier_fundi_client', 'supplier_payee_id', 'invoice_receipt_no', 'quantity', 'unit',
         'unit_cost', 'total_amount', 'requested_amount', 'commercial_unit_rate', 'commercial_total', 'commercial_payment_method',
         'commercial_payment_destination', 'commercial_payment_destination_id', 'commercial_notes', 'commercial_evidence_link', 'commercial_prepared_by',
@@ -62,6 +62,11 @@ class ExpenseRequest extends Model
     public function labourAgreement(): BelongsTo
     {
         return $this->belongsTo(LabourAgreement::class);
+    }
+
+    public function internalBudgetEntry(): BelongsTo
+    {
+        return $this->belongsTo(InternalBudgetEntry::class);
     }
 
     public function supplierPayee(): BelongsTo

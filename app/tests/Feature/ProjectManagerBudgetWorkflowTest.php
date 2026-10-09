@@ -342,6 +342,32 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->actingAs($this->user('site_operator'))->get(route('pm.suppliers.index'))->assertForbidden();
     }
 
+    public function test_pm_can_correct_phase_and_category_or_link_the_exact_internal_budget_line(): void
+    {
+        [$project, $pm] = $this->assignedProject();
+        $phase = $project->phases()->where('stage_code', 'substructure')->firstOrFail();
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
+        $entry = app(ProjectManagerBudgetService::class)->createEntry($budget, $phase, $this->entryPayload([
+            'main_category' => 'materials', 'subcategory' => 'reinforcement_steel',
+            'item_description' => 'Foundation reinforcement steel',
+        ]), $pm);
+        $request = $this->request($project, $project->phases()->firstOrFail(), [
+            'main_category' => 'preliminaries_overheads', 'subcategory' => null,
+        ]);
+
+        $this->actingAs($pm)->put(route('pm.requests.classification.update', $request), [
+            'project_phase_id' => $project->phases()->firstOrFail()->id,
+            'main_category' => 'preliminaries_overheads',
+            'internal_budget_entry_id' => $entry->id,
+        ])->assertRedirect(route('pm.requests.commercial.edit', $request));
+
+        $request->refresh();
+        $this->assertSame($entry->id, $request->internal_budget_entry_id);
+        $this->assertSame($phase->id, $request->project_phase_id);
+        $this->assertSame('materials', $request->main_category);
+        $this->assertSame('reinforcement_steel', $request->subcategory);
+    }
+
     public function test_pm_approval_requires_complete_commercial_details_and_creates_immutable_snapshot_without_payment(): void
     {
         [$project, $pm] = $this->assignedProject();
@@ -359,6 +385,9 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $service = app(ExpenseRequestDecisionService::class);
         $approval = $service->decide($request, 'approve', 'Within budget.', $pm);
         $this->assertSame('pending_director_approval', $request->fresh()->status);
+        $this->actingAs($pm)->put(route('pm.requests.classification.update', $request), [
+            'project_phase_id' => $request->project_phase_id, 'main_category' => 'materials',
+        ])->assertForbidden();
         $this->assertSame('project_manager', $approval->approval_stage);
         $this->assertSame('120.00', $approval->approved_total);
         $this->assertSame('ABC Hardware', $approval->supplier_name_snapshot);
