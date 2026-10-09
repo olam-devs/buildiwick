@@ -81,7 +81,7 @@
   tfoot th{padding:11px 16px;border-top:2px solid var(--line-strong);text-align:left;background:var(--surface-2);}
   @media(max-width:700px){.main{padding:18px 14px 40px}.phase-heading{display:block}.phase-heading .btn{margin-top:8px}.estimate-actions{align-items:flex-start;flex-direction:column}}
 
-  .main{padding:22px 30px 60px;max-width:1180px;}
+  .main{padding:22px 30px 60px;max-width:1180px;min-width:0;width:100%;}
   .crumb{font-size:12px;color:var(--ink-dim);margin-bottom:6px;}
   .crumb a{color:var(--ink-dim);text-decoration:none;} .crumb a:hover{color:var(--primary);}
   .topline{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:22px;flex-wrap:wrap;}
@@ -185,7 +185,7 @@
     </div>
     @endauth
     <nav class="navgroup">
-      <div class="label">Overview</div>
+      <div class="label">{{ auth()->user()->hasRole('director') ? 'Analytics' : 'Overview' }}</div>
       @if (auth()->user()->hasRole('estimator_qs'))
       <a class="navitem {{ request()->routeIs('estimator.projects.*') ? 'active' : '' }}" href="{{ route('estimator.projects.index') }}">Estimator Dashboard</a>
       @elseif (auth()->user()->hasRole('site_operator'))
@@ -214,13 +214,15 @@
         All Projects
       </a>
       @endif
+      @if (auth()->user()->hasRole('director'))
+        <div class="label">Administration</div>
+      @endif
       @can('manageSetup', App\Models\Project::class)
         <a class="navitem {{ request()->routeIs('admin.projects.*') ? 'active' : '' }}" href="{{ route('admin.projects.index') }}">Project Setup</a>
         <a class="navitem {{ request()->routeIs('estimator.projects.*') ? 'active' : '' }}" href="{{ route('estimator.projects.index') }}">Estimator Estimates</a>
       @endcan
-      @if (auth()->user()->hasRole('admin'))
+      @if (auth()->user()->hasRole('director'))
         <a class="navitem {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">User Management</a>
-        <a class="navitem {{ request()->routeIs('director.*') ? 'active' : '' }}" href="{{ route('director.index') }}">Director Analytics</a>
       @endif
     </nav>
     @auth

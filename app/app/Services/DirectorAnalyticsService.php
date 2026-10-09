@@ -128,6 +128,7 @@ class DirectorAnalyticsService
     {
         $labels = $this->phaseLabels ??= Lookup::ofType('construction_stage')->pluck('label', 'code');
         $estimate = $project->estimates->where('status', 'issued')->sortByDesc('version')->first();
+        $estimateEntries = $estimate?->entries ?? collect();
         $estimateValue = $estimate?->total_amount ?? '0.00';
 
         $draftBudgets = $project->internalBudgets->where('status', 'draft')->sortByDesc('version');
@@ -167,6 +168,7 @@ class DirectorAnalyticsService
 
         $phaseAnalytics = [];
         foreach ($project->phases->whereIn('stage_code', self::PHASES)->sortBy('phase_order') as $phase) {
+            $phaseEstimateEntries = $estimateEntries->where('project_phase_id', $phase->id);
             $phaseBudgetEntries = $budgetEntries->where('project_phase_id', $phase->id);
             $phaseRequests = $approvedRequests->where('project_phase_id', $phase->id);
             $phasePayments = $project->expensePayments->where('project_phase_id', $phase->id);
@@ -176,7 +178,10 @@ class DirectorAnalyticsService
             $phaseAnalytics[] = [
                 'id' => $phase->id, 'stage_code' => $phase->stage_code,
                 'label' => $labels[$phase->stage_code] ?? ucwords(str_replace('_', ' ', $phase->stage_code)),
-                'status' => $phase->status, 'budget' => $phaseBudget,
+                'status' => $phase->status,
+                'estimator_base' => Money::sum($phaseEstimateEntries->map(fn ($entry) => $entry->base_total)),
+                'estimator_client' => Money::sum($phaseEstimateEntries->map(fn ($entry) => $entry->line_total)),
+                'budget' => $phaseBudget,
                 'approved' => $phaseCommitments, 'actual' => $phaseActual,
                 'remaining' => Money::difference($phaseBudget, $phaseActual),
                 'has_budget_data' => $phaseBudgetEntries->isNotEmpty(),
@@ -186,18 +191,50 @@ class DirectorAnalyticsService
         }
 
         $categoryAnalytics = [];
+        $subcategoryLabels = Lookup::where('type', 'subcategory')->pluck('label', 'code');
         foreach (ProjectManagerBudgetService::CATEGORIES as $code => $label) {
+            $categoryEstimateEntries = $estimateEntries->where('main_category', $code);
             $categoryBudgetEntries = $budgetEntries->where('main_category', $code);
             $categoryRequests = $approvedRequests->where('main_category', $code);
             $categoryPayments = $project->expensePayments->filter(fn (ExpensePayment $payment) => $payment->expenseRequest?->main_category === $code);
             $categoryBudget = Money::sum($categoryBudgetEntries->map(fn ($entry) => $entry->line_total));
             $categoryCommitments = Money::sum($categoryRequests->map(fn (ExpenseRequest $request) => $request->approved_payable_amount));
             $categoryActual = Money::sum($categoryPayments->pluck('amount'));
+            $subcategoryKeys = $categoryEstimateEntries->pluck('subcategory')
+                ->merge($categoryBudgetEntries->pluck('subcategory'))
+                ->merge($categoryRequests->pluck('subcategory'))
+                ->merge($categoryPayments->map(fn (ExpensePayment $payment) => $payment->expenseRequest?->subcategory))
+                ->map(fn ($value) => $value ?: '__other')->unique()->values();
+            $subcategories = $subcategoryKeys->map(function (string $key) use ($categoryEstimateEntries, $categoryBudgetEntries, $categoryRequests, $categoryPayments, $subcategoryLabels) {
+                $matches = fn ($value) => ($value ?: '__other') === $key;
+                $estimateGroup = $categoryEstimateEntries->filter(fn ($entry) => $matches($entry->subcategory));
+                $budgetGroup = $categoryBudgetEntries->filter(fn ($entry) => $matches($entry->subcategory));
+                $requestGroup = $categoryRequests->filter(fn ($request) => $matches($request->subcategory));
+                $paymentGroup = $categoryPayments->filter(fn (ExpensePayment $payment) => $matches($payment->expenseRequest?->subcategory));
+                $internal = Money::sum($budgetGroup->map(fn ($entry) => $entry->line_total));
+                $actual = Money::sum($paymentGroup->pluck('amount'));
+                return [
+                    'key' => $key,
+                    'label' => $key === '__other' ? 'Other / Unclassified' : ($subcategoryLabels[$key] ?? ucwords(str_replace('_', ' ', $key))),
+                    'estimator_base' => Money::sum($estimateGroup->map(fn ($entry) => $entry->base_total)),
+                    'estimator_client' => Money::sum($estimateGroup->map(fn ($entry) => $entry->line_total)),
+                    'budget' => $internal,
+                    'approved' => Money::sum($requestGroup->map(fn (ExpenseRequest $request) => $request->approved_payable_amount)),
+                    'actual' => $actual,
+                    'remaining' => Money::difference($internal, $actual),
+                    'utilization' => Money::compare($internal, '0') === 0 ? null : Money::percentage($actual, $internal),
+                ];
+            })->values();
             $categoryAnalytics[$code] = [
-                'label' => $label, 'budget' => $categoryBudget,
+                'label' => $label,
+                'estimator_base' => Money::sum($categoryEstimateEntries->map(fn ($entry) => $entry->base_total)),
+                'estimator_client' => Money::sum($categoryEstimateEntries->map(fn ($entry) => $entry->line_total)),
+                'budget' => $categoryBudget,
                 'approved' => $categoryCommitments, 'actual' => $categoryActual,
                 'remaining' => Money::difference($categoryBudget, $categoryActual),
+                'utilization' => Money::compare($categoryBudget, '0') === 0 ? null : Money::percentage($categoryActual, $categoryBudget),
                 'has_budget_data' => $categoryBudgetEntries->isNotEmpty(),
+                'subcategories' => $subcategories,
             ];
         }
 

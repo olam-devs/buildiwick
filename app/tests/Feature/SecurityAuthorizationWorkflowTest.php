@@ -140,7 +140,7 @@ class SecurityAuthorizationWorkflowTest extends TestCase
         $this->actingAs($site)->get(route('pm.suppliers.index'))->assertForbidden();
         $this->actingAs($estimator)->post(route('accountant.payments.store', $request), [])->assertForbidden();
         $this->actingAs($estimator)->get(route('director.index'))->assertForbidden();
-        $this->actingAs($director)->post(route('accountant.invoices.store', $project), [])->assertForbidden();
+        $this->actingAs($director)->post(route('accountant.invoices.store', $project), [])->assertRedirect();
         $invoice = ClientInvoice::create(['invoice_code' => 'INV-SEC-ROLE-1', 'project_id' => $project->id, 'client_id' => $project->client_id, 'status' => 'issued', 'issued_at' => today()->toDateString(), 'due_at' => today()->addDays(10)->toDateString()]);
         $invoice->items()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'item_description' => 'Invoice line', 'unit_price' => '100.00']);
         $this->actingAs($pm)->post(route('accountant.client-payments.store', $invoice), [
@@ -152,7 +152,7 @@ class SecurityAuthorizationWorkflowTest extends TestCase
         $this->actingAs($accounts)->get(route('pm.suppliers.index'))->assertForbidden();
 
         $this->actingAs($site)->get(route('director.index'))->assertForbidden();
-        $this->actingAs($director)->get(route('pm.projects.index'))->assertForbidden();
+        $this->actingAs($director)->get(route('pm.projects.index'))->assertOk();
     }
 
     public function test_pm_estimator_and_site_operator_cannot_change_another_projects_records_by_id(): void

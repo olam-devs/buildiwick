@@ -82,6 +82,13 @@ class User extends Authenticatable
 
     public function hasRole(string $name): bool
     {
+        // "Admin" was an early internal label for the Director's system-wide
+        // authority. Keep legacy authorization checks working while exposing
+        // Director as the single real role in the product.
+        if ($name === 'admin') {
+            return in_array($this->role?->name, ['director', 'admin'], true);
+        }
+
         return $this->role?->name === $name;
     }
 }

@@ -43,15 +43,17 @@
   </section>
 
   <section class="panel form-section">
-    <h3>Project Category Summary · TSh</h3>
-    <div class="tablewrap"><table style="min-width:600px;">
-      <thead><tr><th>Category</th><th>Base Cost</th><th>Markup</th><th>Client Estimate</th></tr></thead>
+    <h3>Estimator Budget Analytics · TSh</h3><p class="form-context">Client-estimate composition by the same categories and subcategories used later by the internal budget and actual site usage.</p>
+    <div class="estimate-bars">@foreach($projectSummary['categories'] as $category)<div class="estimate-bar-row"><div><strong>{{ $category['label'] }}</strong><small>{{ \App\Support\Money::format($category['share']) }}% of client estimate</small></div><div class="estimate-track"><span style="width:{{ min(100,(float)$category['share']) }}%"></span></div><div class="amt">TSh {{ \App\Support\Money::format($category['client']) }}</div></div>@endforeach</div>
+    <div class="tablewrap"><table style="min-width:760px;">
+      <thead><tr><th>Category / Subcategory</th><th>Base Cost</th><th>Markup</th><th>Client Estimate</th><th>Share</th></tr></thead>
       <tbody>
         @foreach ($projectSummary['categories'] as $category)
-          <tr><td>{{ $category['label'] }}</td><td class="amt">{{ \App\Support\Money::format($category['base']) }}</td><td class="amt">{{ \App\Support\Money::format($category['markup']) }}</td><td class="amt">{{ \App\Support\Money::format($category['client']) }}</td></tr>
+          <tr class="category-total"><td><strong>{{ $category['label'] }}</strong></td><td class="amt">{{ \App\Support\Money::format($category['base']) }}</td><td class="amt">{{ \App\Support\Money::format($category['markup']) }}</td><td class="amt">{{ \App\Support\Money::format($category['client']) }}</td><td class="amt">{{ \App\Support\Money::format($category['share']) }}%</td></tr>
+          @foreach($category['subcategories'] as $subcategory)<tr class="subcategory-row"><td>↳ {{ $subcategory['label'] }}</td><td class="amt">{{ \App\Support\Money::format($subcategory['base']) }}</td><td class="amt">{{ \App\Support\Money::format($subcategory['markup']) }}</td><td class="amt">{{ \App\Support\Money::format($subcategory['client']) }}</td><td></td></tr>@endforeach
         @endforeach
       </tbody>
-      <tfoot><tr><th>Project Base Cost</th><th class="amt">{{ \App\Support\Money::format($projectSummary['baseTotal']) }}</th><th class="amt">{{ \App\Support\Money::format($projectSummary['markupTotal']) }}</th><th class="amt">{{ \App\Support\Money::format($projectSummary['clientTotal']) }}</th></tr></tfoot>
+      <tfoot><tr><th>Project Total</th><th class="amt">{{ \App\Support\Money::format($projectSummary['baseTotal']) }}</th><th class="amt">{{ \App\Support\Money::format($projectSummary['markupTotal']) }}</th><th class="amt">{{ \App\Support\Money::format($projectSummary['clientTotal']) }}</th><th class="amt">100%</th></tr></tfoot>
     </table></div>
   </section>
 
@@ -94,7 +96,7 @@
               </tr>
             @endforeach
           </tbody>
-          <tfoot><tr><th colspan="7">Phase totals</th><th class="amt">{{ \App\Support\Money::format($summary['baseTotal']) }}</th><th></th><th></th><th class="amt">{{ \App\Support\Money::format($summary['markupTotal']) }}</th><th class="amt">{{ \App\Support\Money::format($summary['clientTotal']) }}</th>@if($workingEstimate)<th></th>@endif</tr></tfoot>
+          <tfoot><tr><th colspan="7">Phase totals / Project Base Cost</th><th class="amt">{{ \App\Support\Money::format($summary['baseTotal']) }}</th><th></th><th></th><th class="amt">{{ \App\Support\Money::format($summary['markupTotal']) }}</th><th class="amt">{{ \App\Support\Money::format($summary['clientTotal']) }}</th>@if($workingEstimate)<th></th>@endif</tr></tfoot>
         </table></div>
       @endif
     </section>
@@ -104,4 +106,5 @@
 @if ($history->isNotEmpty())
   <section class="panel form-section"><h3>Estimate Versions</h3><div class="tablewrap"><table style="min-width:500px;"><thead><tr><th>Estimate</th><th>Version</th><th>Status</th><th>Prepared</th><th>Client Estimate</th></tr></thead><tbody>@foreach($history as $row)<tr><td>{{ $row->estimate->estimate_code }}</td><td>{{ $row->estimate->version }}</td><td>{{ ucfirst($row->estimate->status) }}</td><td>{{ $row->estimate->prepared_at?->format('d M Y') ?? '—' }}</td><td class="amt">{{ \App\Support\Money::format($row->summary['clientTotal']) }}</td></tr>@endforeach</tbody></table></div></section>
 @endif
+<style>.estimate-bars{display:grid;gap:11px;margin:4px 0 18px}.estimate-bar-row{display:grid;grid-template-columns:180px 1fr 140px;gap:12px;align-items:center}.estimate-bar-row small{display:block;color:var(--ink-dim);margin-top:2px}.estimate-track{height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden}.estimate-track span{display:block;height:100%;background:var(--primary);border-radius:999px}.category-total{background:var(--surface-2)}.subcategory-row td:first-child{padding-left:30px;color:var(--ink-soft)}@media(max-width:700px){.estimate-bar-row{grid-template-columns:1fr}.estimate-bar-row .amt{text-align:left}}</style>
 @endsection

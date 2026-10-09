@@ -157,31 +157,80 @@ class ProjectManagerBudgetService
     {
         $currentBudget = $this->currentBudget($project);
         $budgetEntries = $currentBudget?->entries ?? collect();
-        $requests = $project->expenseRequests()->where('status', '!=', 'cancelled')->get()
-            ->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null || $request->total_amount !== null);
+        $requests = $project->expenseRequests()->where('status', 'approved')->get();
+        $payments = $project->expensePayments()->with('expenseRequest')->get();
         $budget = Money::sum($budgetEntries->map(fn (InternalBudgetEntry $entry) => $entry->line_total));
-        $requested = Money::sum($this->pricedRequestAmounts($requests));
+        $approved = Money::sum($requests->map(fn (ExpenseRequest $request) => $request->approved_payable_amount));
+        $actual = Money::sum($payments->pluck('amount'));
         $categories = [];
         foreach (self::CATEGORIES as $code => $label) {
-            $budgetValue = Money::sum($budgetEntries->where('main_category', $code)->map(fn (InternalBudgetEntry $entry) => $entry->line_total));
-            $requestedValue = Money::sum($this->pricedRequestAmounts($requests->where('main_category', $code)));
-            $categories[$code] = ['label' => $label] + $this->comparison($budgetValue, $requestedValue);
+            $categoryBudget = $budgetEntries->where('main_category', $code);
+            $categoryRequests = $requests->where('main_category', $code);
+            $categoryPayments = $payments->filter(fn ($payment) => $payment->expenseRequest?->main_category === $code);
+            $categories[$code] = ['label' => $label] + $this->costPosition($categoryBudget, $categoryRequests, $categoryPayments);
         }
 
         $byPhase = [];
         foreach ($project->phases->whereIn('stage_code', self::PHASES)->sortBy('phase_order') as $phase) {
-            $phaseBudget = Money::sum($budgetEntries->where('project_phase_id', $phase->id)->map(fn (InternalBudgetEntry $entry) => $entry->line_total));
-            $phaseRequested = Money::sum($this->pricedRequestAmounts($requests->where('project_phase_id', $phase->id)));
+            $phaseBudgetEntries = $budgetEntries->where('project_phase_id', $phase->id);
+            $phaseRequests = $requests->where('project_phase_id', $phase->id);
+            $phasePayments = $payments->where('project_phase_id', $phase->id);
             $phaseCategories = [];
             foreach (self::CATEGORIES as $code => $label) {
-                $catBudget = Money::sum($budgetEntries->where('project_phase_id', $phase->id)->where('main_category', $code)->map(fn (InternalBudgetEntry $entry) => $entry->line_total));
-                $catRequested = Money::sum($this->pricedRequestAmounts($requests->where('project_phase_id', $phase->id)->where('main_category', $code)));
-                $phaseCategories[$code] = ['label' => $label] + $this->comparison($catBudget, $catRequested);
+                $categoryBudget = $phaseBudgetEntries->where('main_category', $code);
+                $categoryRequests = $phaseRequests->where('main_category', $code);
+                $categoryPayments = $phasePayments->filter(fn ($payment) => $payment->expenseRequest?->main_category === $code);
+                $phaseCategories[$code] = ['label' => $label] + $this->costPosition($categoryBudget, $categoryRequests, $categoryPayments);
             }
-            $byPhase[$phase->id] = ['comparison' => $this->comparison($phaseBudget, $phaseRequested), 'categories' => $phaseCategories];
+            $byPhase[$phase->id] = ['comparison' => $this->costPosition($phaseBudgetEntries, $phaseRequests, $phasePayments), 'categories' => $phaseCategories];
         }
 
-        return ['overall' => $this->comparison($budget, $requested), 'categories' => $categories, 'phases' => $byPhase];
+        return ['overall' => $this->costPosition($budgetEntries, $requests, $payments), 'categories' => $categories, 'phases' => $byPhase];
+    }
+
+    private function costPosition(iterable $budgetEntries, iterable $approvedRequests, iterable $payments): array
+    {
+        $budgetEntries = collect($budgetEntries);
+        $approvedRequests = collect($approvedRequests);
+        $payments = collect($payments);
+        $budget = Money::sum($budgetEntries->map(fn (InternalBudgetEntry $entry) => $entry->line_total));
+        $approved = Money::sum($approvedRequests->map(fn (ExpenseRequest $request) => $request->approved_payable_amount));
+        $actual = Money::sum($payments->pluck('amount'));
+        $remaining = Money::difference($budget, $actual);
+        $utilization = Money::compare($budget, '0') === 0 ? null : Money::percentage($actual, $budget);
+
+        $keys = $budgetEntries->pluck('subcategory')
+            ->merge($approvedRequests->pluck('subcategory'))
+            ->merge($payments->map(fn ($payment) => $payment->expenseRequest?->subcategory))
+            ->map(fn ($value) => $value ?: '__other')->unique()->values();
+        $labels = \App\Models\Lookup::where('type', 'subcategory')->pluck('label', 'code');
+        $subcategories = $keys->map(function (string $key) use ($budgetEntries, $approvedRequests, $payments, $labels) {
+            $matches = fn ($value) => ($value ?: '__other') === $key;
+            $budget = Money::sum($budgetEntries->filter(fn ($entry) => $matches($entry->subcategory))->map(fn ($entry) => $entry->line_total));
+            $approved = Money::sum($approvedRequests->filter(fn ($request) => $matches($request->subcategory))->map(fn ($request) => $request->approved_payable_amount));
+            $actual = Money::sum($payments->filter(fn ($payment) => $matches($payment->expenseRequest?->subcategory))->pluck('amount'));
+            return [
+                'key' => $key,
+                'label' => $key === '__other' ? 'Other / Unclassified' : ($labels[$key] ?? ucwords(str_replace('_', ' ', $key))),
+                'budget' => $budget,
+                'approved' => $approved,
+                'actual' => $actual,
+                'remaining' => Money::difference($budget, $actual),
+                'utilization' => Money::compare($budget, '0') === 0 ? null : Money::percentage($actual, $budget),
+            ];
+        })->values();
+
+        return [
+            'budget' => $budget,
+            'approved' => $approved,
+            'actual' => $actual,
+            'remaining' => $remaining,
+            'utilization' => $utilization,
+            'over_budget' => Money::compare($actual, $budget) > 0,
+            'over_budget_amount' => Money::compare($actual, $budget) > 0 ? Money::difference($actual, $budget) : '0.00',
+            'commitment_over_budget' => Money::compare($approved, $budget) > 0,
+            'subcategories' => $subcategories,
+        ];
     }
 
     /** @param iterable<ExpenseRequest> $requests */

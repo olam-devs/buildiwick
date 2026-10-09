@@ -194,22 +194,36 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $materialsPhase = $project->phases()->where('stage_code', 'roofing')->firstOrFail();
         $service->createEntry($budget, $materialsPhase, $this->entryPayload(['main_category' => 'materials', 'quantity' => '1', 'unit_cost' => '100.00']), $pm);
         $service->createEntry($budget, $materialsPhase, $this->entryPayload(['main_category' => 'labour_subcontracts', 'subcategory' => 'fundi_labour', 'quantity' => '1', 'unit_cost' => '300.00']), $pm);
-        $this->request($project, $materialsPhase, ['main_category' => 'materials', 'quantity' => '1', 'total_amount' => '120.00']);
-        $this->request($project, $materialsPhase, ['main_category' => 'labour_subcontracts', 'quantity' => '1', 'total_amount' => '250.00']);
-        $this->request($project, $project->phases()->where('stage_code', 'walling')->firstOrFail(), ['main_category' => 'logistics_equipment', 'quantity' => '1', 'total_amount' => '500.00']);
+        $materialsRequest = $this->request($project, $materialsPhase, ['main_category' => 'materials', 'subcategory' => 'concrete_cement', 'quantity' => '1', 'total_amount' => '120.00', 'status' => 'approved']);
+        $labourRequest = $this->request($project, $materialsPhase, ['main_category' => 'labour_subcontracts', 'subcategory' => 'fundi_labour', 'quantity' => '1', 'total_amount' => '250.00', 'status' => 'approved']);
+        $wallingPhase = $project->phases()->where('stage_code', 'walling')->firstOrFail();
+        $logisticsRequest = $this->request($project, $wallingPhase, ['main_category' => 'logistics_equipment', 'quantity' => '1', 'total_amount' => '500.00', 'status' => 'approved']);
+        foreach ([[$materialsRequest, '120.00'], [$labourRequest, '250.00'], [$logisticsRequest, '500.00']] as [$request, $amount]) {
+            \App\Models\ExpensePayment::create([
+                'payment_code' => 'PAY-CMP-'.fake()->unique()->numerify('#####'),
+                'expense_request_id' => $request->id,
+                'project_id' => $project->id,
+                'project_phase_id' => $request->project_phase_id,
+                'amount' => $amount,
+                'payment_date' => today()->toDateString(),
+                'payment_method' => 'cash',
+            ]);
+        }
         $cancelled = $this->request($project, $materialsPhase, ['main_category' => 'materials', 'quantity' => '1', 'total_amount' => '999.00']);
         $cancelled->update(['status' => 'cancelled']);
 
         $comparison = $service->projectComparison($project);
         $this->assertSame('400.00', $comparison['overall']['budget']);
-        $this->assertSame('870.00', $comparison['overall']['requested']);
+        $this->assertSame('870.00', $comparison['overall']['approved']);
+        $this->assertSame('870.00', $comparison['overall']['actual']);
         $this->assertSame('-470.00', $comparison['overall']['remaining']);
         $this->assertSame('217.50', $comparison['overall']['utilization']);
         $this->assertTrue($comparison['overall']['over_budget']);
         $this->assertSame('-20.00', $comparison['categories']['materials']['remaining']);
         $this->assertSame('120.00', $comparison['categories']['materials']['utilization']);
-        $this->assertSame('370.00', $comparison['phases'][$materialsPhase->id]['comparison']['requested']);
+        $this->assertSame('370.00', $comparison['phases'][$materialsPhase->id]['comparison']['actual']);
         $this->assertSame('30.00', $comparison['phases'][$materialsPhase->id]['comparison']['remaining']);
+        $this->assertSame('120.00', $comparison['categories']['materials']['subcategories']->firstWhere('key', 'concrete_cement')['actual']);
         $this->assertSame('No budget set', $comparison['phases'][$project->phases()->where('stage_code', 'walling')->value('id')]['comparison']['utilization'] === null ? 'No budget set' : 'Unexpected percentage');
     }
 
@@ -218,10 +232,15 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         [$project, $pm] = $this->assignedProject();
         $service = app(ProjectManagerBudgetService::class);
         $phase = $project->phases()->firstOrFail();
-        $this->request($project, $phase, ['quantity' => '1', 'total_amount' => '500000.00']);
+        $request = $this->request($project, $phase, ['quantity' => '1', 'total_amount' => '500000.00', 'status' => 'approved']);
+        \App\Models\ExpensePayment::create([
+            'payment_code' => 'PAY-ZERO-001', 'expense_request_id' => $request->id,
+            'project_id' => $project->id, 'project_phase_id' => $phase->id,
+            'amount' => '500000.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
+        ]);
         $comparison = $service->projectComparison($project);
         $this->assertSame('0.00', $comparison['overall']['budget']);
-        $this->assertSame('500000.00', $comparison['overall']['requested']);
+        $this->assertSame('500000.00', $comparison['overall']['actual']);
         $this->assertSame('-500000.00', $comparison['overall']['remaining']);
         $this->assertNull($comparison['overall']['utilization']);
     }
@@ -407,11 +426,19 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $budget = $service->ensureWorkingBudget($project, $pm);
         $future = $project->phases()->where('stage_code', 'roofing')->firstOrFail();
         $service->createEntry($budget, $future, $this->entryPayload(['unit_cost' => '100.00']), $pm);
-        $this->request($project, $future, ['quantity' => '1', 'total_amount' => '120.00']);
+        $estimate = ProjectEstimate::create(['estimate_code' => 'EST-PM-HIDDEN-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'issued']);
+        $estimate->entries()->create(['project_phase_id' => $future->id, 'main_category' => 'materials', 'subcategory' => 'concrete_cement', 'item_description' => 'Director-only estimate', 'quantity' => '1', 'unit' => 'ls', 'base_unit_cost' => '987654.00', 'markup_percent' => '0']);
+        $request = $this->request($project, $future, ['quantity' => '1', 'total_amount' => '120.00', 'status' => 'approved']);
+        \App\Models\ExpensePayment::create([
+            'payment_code' => 'PAY-PM-WORKSPACE-001', 'expense_request_id' => $request->id,
+            'project_id' => $project->id, 'project_phase_id' => $future->id,
+            'amount' => '120.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
+        ]);
         $response = $this->actingAs($pm)->get(route('pm.projects.show', $project));
         $response->assertOk()->assertSee('Phase 5 — Roofing')->assertSee('Over internal budget by')
             ->assertSee('Site Requests · Read Only')->assertSee('Finalize Budget Baseline')
-            ->assertDontSee('Approve')->assertDontSee('Reject')->assertDontSee('Record Payment');
+            ->assertDontSee('Estimator Base')->assertDontSee('987,654.00')
+            ->assertDontSee('Approve Request')->assertDontSee('Reject Request')->assertDontSee('Record Payment');
     }
 
     private function assignedProject(?string $code = null): array
@@ -450,8 +477,10 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         return ExpenseRequest::create([
             'request_code' => 'REQ-CMP-'.fake()->unique()->numerify('#####'), 'project_id' => $project->id,
             'project_phase_id' => $phase->id, 'main_category' => $override['main_category'] ?? 'materials',
+            'subcategory' => $override['subcategory'] ?? null,
             'item_description' => 'Requested work', 'quantity' => $quantity, 'unit_cost' => $amount,
             'total_amount' => $amount, 'requested_at' => now()->toDateString(), 'submitted_at' => now(),
+            'approved_amount' => ($override['status'] ?? 'pending_approval') === 'approved' ? $amount : null,
             'status' => $override['status'] ?? 'pending_approval',
         ]);
     }

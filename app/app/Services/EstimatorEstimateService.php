@@ -126,6 +126,7 @@ class EstimatorEstimateService
     public function projectSummary(ProjectEstimate $estimate): array
     {
         $entries = $estimate->entries;
+        $subcategoryLabels = \App\Models\Lookup::where('type', 'subcategory')->pluck('label', 'code');
         $categories = [];
         $baseTotal = '0.00';
         $markupTotal = '0.00';
@@ -136,13 +137,29 @@ class EstimatorEstimateService
             $base = Money::sum($group->map(fn (EstimateEntry $entry) => $entry->base_total));
             $markup = Money::sum($group->map(fn (EstimateEntry $entry) => $entry->markup_amount));
             $client = Money::sum($group->map(fn (EstimateEntry $entry) => $entry->line_total));
-            $categories[$code] = compact('label', 'base', 'markup', 'client');
+            $subcategoryKeys = $group->pluck('subcategory')->map(fn ($value) => $value ?: '__other')->unique()->values();
+            $subcategories = $subcategoryKeys->map(function (string $key) use ($group, $subcategoryLabels) {
+                $matches = fn ($entry) => (($entry->subcategory ?: '__other') === $key);
+                $rows = $group->filter($matches);
+                return [
+                    'key' => $key,
+                    'label' => $key === '__other' ? 'Other / Unclassified' : ($subcategoryLabels[$key] ?? ucwords(str_replace('_', ' ', $key))),
+                    'base' => Money::sum($rows->map(fn (EstimateEntry $entry) => $entry->base_total)),
+                    'markup' => Money::sum($rows->map(fn (EstimateEntry $entry) => $entry->markup_amount)),
+                    'client' => Money::sum($rows->map(fn (EstimateEntry $entry) => $entry->line_total)),
+                ];
+            })->values();
+            $categories[$code] = compact('label', 'base', 'markup', 'client', 'subcategories');
             $baseTotal = Money::sum([$baseTotal, $base]);
             $markupTotal = Money::sum([$markupTotal, $markup]);
             $clientTotal = Money::sum([$clientTotal, $client]);
         }
 
         $effectiveMarkup = Money::percentage($markupTotal, $baseTotal);
+        foreach ($categories as &$category) {
+            $category['share'] = Money::compare($clientTotal, '0') === 0 ? '0.00' : Money::percentage($category['client'], $clientTotal);
+        }
+        unset($category);
 
         return compact('categories', 'baseTotal', 'markupTotal', 'clientTotal', 'effectiveMarkup');
     }

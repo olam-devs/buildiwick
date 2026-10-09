@@ -21,7 +21,7 @@ class AdminUserManagementTest extends TestCase
 
     public function test_admin_can_create_a_user_with_role_and_temporary_password(): void
     {
-        $admin = $this->user('admin');
+        $admin = $this->user('director');
         $role = Role::where('name', 'project_manager')->firstOrFail();
 
         $this->actingAs($admin)->post(route('admin.users.store'), [
@@ -42,7 +42,7 @@ class AdminUserManagementTest extends TestCase
 
     public function test_admin_can_change_role_deactivate_and_reset_password(): void
     {
-        $admin = $this->user('admin');
+        $admin = $this->user('director');
         $managed = $this->user('site_operator');
         $newRole = Role::where('name', 'accounts')->firstOrFail();
 
@@ -64,8 +64,8 @@ class AdminUserManagementTest extends TestCase
 
     public function test_admin_cannot_deactivate_or_demote_their_own_account(): void
     {
-        $admin = $this->user('admin');
-        $otherRole = Role::where('name', 'director')->firstOrFail();
+        $admin = $this->user('director');
+        $otherRole = Role::where('name', 'accounts')->firstOrFail();
 
         $this->actingAs($admin)->from(route('admin.users.edit', $admin))->put(route('admin.users.update', $admin), [
             'name' => $admin->name,

@@ -238,12 +238,9 @@ class FinancialIntegritySecurityTest extends TestCase
         }
 
         $anotherUnpaid = $this->issuedInvoice($project, $phase, $accounts, '25.00');
-        try {
-            app(ClientInvoiceService::class)->void($anotherUnpaid, 'Director attempt.', $this->user('director'));
-            $this->fail('Director must not void an invoice.');
-        } catch (\Illuminate\Auth\Access\AuthorizationException) {
-            $this->assertSame('issued', $anotherUnpaid->fresh()->status);
-        }
+        $directorVoided = app(ClientInvoiceService::class)->void($anotherUnpaid, 'Director correction.', $this->user('director'));
+        $this->assertSame('void', $directorVoided->status);
+        $this->assertSame('Director correction.', $directorVoided->void_reason);
     }
 
     public function test_estimate_issue_records_authenticated_actor_and_timestamp(): void
@@ -361,7 +358,7 @@ class FinancialIntegritySecurityTest extends TestCase
         $request->update(['commercial_evidence_link' => $quotePath]);
 
         $this->actingAs($accounts)->get(route('accountant.client-payments.evidence', $clientReceipt))->assertDownload('receipt.pdf');
-        $this->actingAs($director)->get(route('accountant.client-payments.evidence', $clientReceipt))->assertForbidden();
+        $this->actingAs($director)->get(route('accountant.client-payments.evidence', $clientReceipt))->assertDownload('receipt.pdf');
         $this->actingAs($site)->get(route('accountant.client-payments.evidence', $clientReceipt))->assertForbidden();
         $this->actingAs($accounts)->get(route('accountant.payments.evidence', $outgoing))->assertDownload('payment.pdf');
         $this->actingAs($estimator)->get(route('accountant.payments.evidence', $outgoing))->assertForbidden();

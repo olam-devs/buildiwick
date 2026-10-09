@@ -10,8 +10,7 @@ class RoleSeeder extends Seeder
     public function run(): void
     {
         $roles = [
-            ['name' => 'admin', 'description' => 'System administrator — full access, all projects'],
-            ['name' => 'director', 'description' => 'Director — organization-wide read-only executive analytics'],
+            ['name' => 'director', 'description' => 'Director — system administration and organization-wide executive oversight'],
             ['name' => 'accounts', 'description' => 'Accounts & Invoicing — bills, expense payments, client invoicing (phase 2)'],
             ['name' => 'estimator_qs', 'description' => 'Estimator / QS — historical pricing only, no cash or profit'],
             ['name' => 'project_manager', 'description' => 'Project Manager — assigned projects, reviews and approves expenses'],

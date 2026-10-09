@@ -61,7 +61,7 @@ class FocusedUatWorkflowTest extends TestCase
     public function test_admin_new_entry_is_project_level_and_not_on_the_opening_dashboard(): void
     {
         [$project] = $this->project('BWG-UAT-ADMIN-001');
-        $admin = $this->user('admin');
+        $admin = $this->user('director');
 
         $this->actingAs($admin)->get(route('dashboard.index'))->assertOk()->assertDontSee('New Entry');
         $this->actingAs($admin)->get(route('dashboard.show', $project))->assertOk()->assertSee('New Entry');

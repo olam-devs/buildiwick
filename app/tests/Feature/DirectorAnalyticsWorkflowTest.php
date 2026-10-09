@@ -87,10 +87,12 @@ class DirectorAnalyticsWorkflowTest extends TestCase
     public function test_project_analytics_separates_commitment_actual_invoicing_receipt_and_budget_utilization(): void
     {
         [$project, $phase] = $this->project('BWG-DIR-PROJ-001');
-        $this->estimate($project, $phase, 1, 'issued', '1000.00');
+        $estimate = $this->estimate($project, $phase, 1, 'issued', '1000.00');
+        $estimate->entries()->firstOrFail()->update(['subcategory' => 'concrete_cement']);
         $budget = InternalBudget::create(['budget_code' => 'BUD-DIR-PROJ-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'finalized']);
-        $budget->entries()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'item_description' => 'Cement budget', 'quantity' => '1', 'unit_cost' => '100000000.00']);
+        $budget->entries()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'subcategory' => 'concrete_cement', 'item_description' => 'Cement budget', 'quantity' => '1', 'unit_cost' => '100000000.00']);
         $request = $this->expenseRequest($project, $phase, 'approved', '80000000.00', 'materials');
+        $request->update(['subcategory' => 'concrete_cement']);
         ExpensePayment::create(['payment_code' => 'PAY-DIR-PROJ-001', 'expense_request_id' => $request->id, 'project_id' => $project->id, 'project_phase_id' => $phase->id, 'amount' => '60000000.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash']);
         $invoice = $this->invoice($project, $phase, 'issued', '90.00', today()->toDateString(), today()->addDays(10)->toDateString());
         ClientPayment::create(['payment_code' => 'RCP-DIR-PROJ-001', 'client_invoice_id' => $invoice->id, 'project_id' => $project->id, 'client_id' => $project->client_id, 'amount' => '25.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash']);
@@ -111,7 +113,10 @@ class DirectorAnalyticsWorkflowTest extends TestCase
                 && $row['actual_utilization'] === '60.00'
                 && $row['phase_analytics'][0]['approved'] === '80000000.00'
                 && $row['phase_analytics'][0]['actual'] === '60000000.00'
-                && $row['category_analytics']['materials']['budget'] === '100000000.00';
+                && $row['phase_analytics'][0]['estimator_base'] === '1000.00'
+                && $row['category_analytics']['materials']['estimator_base'] === '1000.00'
+                && $row['category_analytics']['materials']['budget'] === '100000000.00'
+                && $row['category_analytics']['materials']['subcategories']->firstWhere('key', 'concrete_cement')['actual'] === '60000000.00';
         });
     }
 
@@ -234,7 +239,7 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         $this->assertFalse($receivables->contains(fn ($row) => in_array($row['invoice']->id, [$draftInvoice->id, $paidInvoice->id], true)));
     }
 
-    public function test_director_can_read_analytics_and_cannot_use_financial_or_operational_write_workflows(): void
+    public function test_director_is_the_system_administrator_and_can_open_every_role_workspace(): void
     {
         [$project, $phase] = $this->project('BWG-DIR-SEC-001');
         $director = $this->user('director');
@@ -243,54 +248,12 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         $this->actingAs($director)->get(route('director.transactions.index'))->assertOk();
         $this->actingAs($director)->get(route('director.receivables.index'))->assertOk();
         $this->actingAs($director)->get(route('director.payables.index'))->assertOk();
-        $this->actingAs($director)->get(route('accountant.index'))->assertForbidden();
-        $this->actingAs($director)->post(route('accountant.invoices.store', $project), [
-            'project_id' => $project->id,
-            'client_id' => $project->client_id,
-            'due_at' => today()->addDays(10)->toDateString(),
-            'items' => [[
-                'project_phase_id' => $phase->id,
-                'main_category' => 'materials',
-                'item_description' => 'Valid invoice line',
-                'quantity' => '1',
-                'unit_price' => '100.00',
-            ]],
-        ])->assertForbidden();
-        $draft = $this->invoice($project, $phase, 'draft', '100.00', null, today()->addDays(10)->toDateString());
-        $this->actingAs($director)->post(route('accountant.invoices.issue', $draft), [])->assertForbidden();
-        $this->actingAs($director)->post(route('accountant.invoices.void', $draft), ['reason' => 'Not permitted'])->assertForbidden();
-        $issued = $this->invoice($project, $phase, 'issued', '100.00', today()->toDateString(), today()->addDays(10)->toDateString());
-        $this->actingAs($director)->post(route('accountant.client-payments.store', $issued), [
-            'client_invoice_id' => $issued->id, 'project_id' => $project->id, 'client_id' => $project->client_id,
-            'amount' => '10.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
-        ])->assertForbidden();
-        $approved = $this->expenseRequest($project, $phase, 'approved', '10.00', 'materials');
-        $this->actingAs($director)->post(route('accountant.payments.store', $approved), [])->assertForbidden();
-        $pending = $this->expenseRequest($project, $phase, 'pending_approval', '10.00', 'materials');
-        $this->actingAs($director)->post(route('pm.requests.decision', $pending), [])->assertForbidden();
-        $this->actingAs($director)->put(route('pm.requests.commercial.update', $pending), [])->assertForbidden();
-        $this->actingAs($director)->post(route('pm.budgets.start', $project), [])->assertForbidden();
-        $this->actingAs($director)->post(route('estimator.estimates.start', $project), [])->assertForbidden();
-        $this->actingAs($director)->post(route('site.requests.store', $project), [])->assertForbidden();
-        $this->actingAs($director)->post('/accountant/transactions', [])->assertStatus(405);
-
-        $draftBudget = InternalBudget::create(['budget_code' => 'BUD-DIR-SEC-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'draft']);
-        $budgetEntry = $draftBudget->entries()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'item_description' => 'Budget line', 'quantity' => '1', 'unit_cost' => '10.00']);
-        $this->actingAs($director)->put(route('pm.budget-entries.update', [$project, $phase, $budgetEntry]), [])->assertForbidden();
-        $this->actingAs($director)->post(route('pm.budgets.finalize', [$project, $draftBudget]), [])->assertForbidden();
-        $draftEstimate = ProjectEstimate::create(['estimate_code' => 'EST-DIR-SEC-001', 'project_id' => $project->id, 'client_id' => $project->client_id, 'version' => 1, 'status' => 'draft']);
-        $estimateEntry = $draftEstimate->entries()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'item_description' => 'Estimate line', 'quantity' => '1', 'unit' => 'ls', 'base_unit_cost' => '10.00', 'markup_percent' => '0']);
-        $this->actingAs($director)->put(route('estimator.entries.update', [$project, $phase, $estimateEntry]), [])->assertForbidden();
-        $this->actingAs($director)->post(route('estimator.estimates.finalize', [$project, $draftEstimate]), [])->assertForbidden();
-
-        $clientPayment = ClientPayment::create(['payment_code' => 'RCP-DIR-SEC-001', 'client_invoice_id' => $issued->id, 'project_id' => $project->id, 'client_id' => $project->client_id, 'amount' => '10.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash']);
-        $expensePayment = ExpensePayment::create(['payment_code' => 'PAY-DIR-SEC-001', 'expense_request_id' => $approved->id, 'project_id' => $project->id, 'project_phase_id' => $phase->id, 'amount' => '5.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash']);
-        $this->actingAs($director)->put('/accountant/client-payments/'.$clientPayment->id, [])->assertNotFound();
-        $this->actingAs($director)->delete('/accountant/client-payments/'.$clientPayment->id)->assertNotFound();
-        $this->actingAs($director)->put('/accountant/payments/'.$expensePayment->id, [])->assertNotFound();
-        $this->actingAs($director)->delete('/accountant/payments/'.$expensePayment->id)->assertNotFound();
-        $this->assertDatabaseHas('client_payments', ['id' => $clientPayment->id, 'amount' => '10.00']);
-        $this->assertDatabaseHas('expense_payments', ['id' => $expensePayment->id, 'amount' => '5.00']);
+        $this->actingAs($director)->get(route('accountant.index'))->assertOk();
+        $this->actingAs($director)->get(route('pm.projects.index'))->assertOk();
+        $this->actingAs($director)->get(route('estimator.projects.index'))->assertOk();
+        $this->actingAs($director)->get(route('site.index'))->assertOk();
+        $this->actingAs($director)->get(route('admin.projects.index'))->assertOk();
+        $this->actingAs($director)->get(route('admin.users.index'))->assertOk();
         $this->actingAs($this->user('admin'))->get(route('director.index'))->assertOk();
     }
 
@@ -317,21 +280,23 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         $receiptBefore = $receipt->fresh()->toArray();
         $countsBefore = [ClientInvoice::count(), ClientPayment::count(), ExpenseRequest::count(), ExpensePayment::count()];
 
-        $migration = require database_path('migrations/2026_09_30_000011_add_read_only_director_role.php');
+        $migration = require database_path('migrations/2026_10_09_000001_merge_admin_role_into_director.php');
         $migration->up();
         $migration->up();
 
         $this->assertSame('director', $directorAccount->fresh()->role->name);
-        $this->assertSame($adminBefore, $admin->fresh()->role_id);
+        $this->assertSame('director', $admin->fresh()->role->name);
+        $this->assertNotSame($adminBefore, $admin->fresh()->role_id);
         $this->assertSame($otherRoleBefore, $otherUser->fresh()->role_id);
         $this->assertSame(1, Role::where('name', 'director')->count());
+        $this->assertDatabaseMissing('roles', ['name' => 'admin']);
         $this->assertSame($countsBefore, [ClientInvoice::count(), ClientPayment::count(), ExpenseRequest::count(), ExpensePayment::count()]);
         $this->assertSame($invoiceBefore, $invoice->fresh()->toArray());
         $this->assertSame($receiptBefore, $receipt->fresh()->toArray());
 
         $this->seed(\Database\Seeders\UserSeeder::class);
         $this->assertSame('director', User::where('email', 'director@buildiwick.test')->firstOrFail()->role->name);
-        $this->assertSame('admin', $admin->fresh()->role->name);
+        $this->assertSame('director', $admin->fresh()->role->name);
     }
 
     private function project(string $code, string $status = 'active'): array

@@ -60,6 +60,6 @@ class AdminUserController extends Controller
 
     private function roles()
     {
-        return Role::orderBy('name')->get();
+        return Role::where('name', '!=', 'admin')->orderBy('name')->get();
     }
 }
