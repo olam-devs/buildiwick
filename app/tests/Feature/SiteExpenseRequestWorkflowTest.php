@@ -105,17 +105,14 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         $this->assertNull($lumpSum->total_amount);
     }
 
-    public function test_categories_and_subcategories_validate_while_nullable_fallback_is_allowed(): void
+    public function test_site_category_fields_are_ignored_until_the_pm_allocates_the_budget(): void
     {
         [$project, $operator] = $this->assignedProject();
         $bad = $this->payload(['main_category' => 'logistics_equipment', 'subcategory' => 'fundi_labour']);
-        $this->actingAs($operator)->from(route('site.requests.create', $project))->post(route('site.requests.store', $project), $bad)
-            ->assertRedirect(route('site.requests.create', $project))->assertSessionHasErrors('subcategory');
-
-        $fallback = $this->payload(['main_category' => 'logistics_equipment', 'subcategory' => null]);
-        $this->actingAs($operator)->post(route('site.requests.store', $project), $fallback)->assertRedirect();
-        $this->assertSame('logistics_equipment', ExpenseRequest::firstOrFail()->main_category);
-        $this->assertNull(ExpenseRequest::firstOrFail()->subcategory);
+        $this->actingAs($operator)->post(route('site.requests.store', $project), $bad)->assertRedirect();
+        $created = ExpenseRequest::firstOrFail();
+        $this->assertSame('unclassified', $created->main_category);
+        $this->assertNull($created->subcategory);
     }
 
     public function test_site_operator_cannot_inject_commercial_fields_into_a_need_request(): void
@@ -135,7 +132,7 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         $this->assertNull($request->total_amount);
     }
 
-    public function test_all_cost_categories_and_construction_units_are_available_to_site_requests(): void
+    public function test_site_can_submit_all_request_types_and_construction_units_while_pm_handles_categories(): void
     {
         [$project, $operator] = $this->assignedProject();
         foreach ([
@@ -148,7 +145,7 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         }
         $this->assertSame(4, ExpenseRequest::count());
         $this->actingAs($operator)->get(route('site.requests.create', $project))
-            ->assertOk()->assertSee('Suggested units move to the top by category')->assertSee('worker_day');
+            ->assertOk()->assertSee('Items Needed')->assertSee('WORKER-DAY');
     }
 
     public function test_request_submission_does_not_change_approval_to_paid_and_only_expense_payment_rows_are_paid(): void
@@ -339,10 +336,10 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         [$project, $operator] = $this->assignedProject();
         $this->actingAs($operator)->from(route('site.requests.create', $project))
             ->post(route('site.requests.store', $project), $this->payload(['request_type' => 'salary_wage', 'requested_amount' => null]))
-            ->assertSessionHasErrors('requested_amount');
+            ->assertSessionHasErrors('items.0.requested_amount');
         $this->actingAs($operator)->from(route('site.requests.create', $project))
             ->post(route('site.requests.store', $project), $this->payload(['request_type' => 'salary_wage', 'requested_amount' => '50000.00']))
-            ->assertSessionHasErrors('main_category');
+            ->assertRedirect();
 
         $this->actingAs($operator)->post(route('site.requests.store', $project), $this->payload([
             'request_type' => 'cash_amount', 'requested_amount' => '75000.00', 'item_description' => 'Petty cash float',

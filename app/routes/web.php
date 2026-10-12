@@ -30,7 +30,6 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/director/payables', [DirectorController::class, 'payables'])->name('director.payables.index');
     Route::get('/director/transactions', [DirectorController::class, 'transactions'])->name('director.transactions.index');
     Route::get('/director/request-approvals', [DirectorController::class, 'requests'])->name('director.requests.index');
-    Route::post('/director/request-approvals/{expenseRequest}/decision', [DirectorController::class, 'decideRequest'])->name('director.requests.decision');
     Route::get('/director/projects.csv', [DirectorController::class, 'exportPortfolio'])->name('director.portfolio.export');
     Route::get('/director/summary.csv', [DirectorController::class, 'exportSummary'])->name('director.summary.export');
     Route::get('/director/transactions.csv', [DirectorController::class, 'exportTransactions'])->name('director.transactions.export');
@@ -67,6 +66,8 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::put('/pm/site-requests/{expenseRequest}/classification', [ProjectManagerController::class, 'classifyRequest'])->name('pm.requests.classification.update');
     Route::put('/pm/site-requests/{expenseRequest}/commercial', [ProjectManagerController::class, 'updateCommercial'])->name('pm.requests.commercial.update');
     Route::post('/pm/site-requests/{expenseRequest}/decision', [ProjectManagerController::class, 'decide'])->name('pm.requests.decision');
+    Route::put('/pm/request-batches/{expenseRequest}/commercial', [ProjectManagerController::class, 'updateBatchCommercial'])->name('pm.request-batches.commercial.update');
+    Route::post('/pm/request-batches/{expenseRequest}/decision', [ProjectManagerController::class, 'decideBatch'])->name('pm.request-batches.decision');
     Route::get('/pm/site-requests/{expenseRequest}/commercial-evidence', [ProjectManagerController::class, 'commercialEvidence'])->name('pm.requests.commercial.evidence');
     Route::get('/pm/suppliers', [SupplierPayeeController::class, 'index'])->name('pm.suppliers.index');
     Route::get('/pm/suppliers/create', [SupplierPayeeController::class, 'create'])->name('pm.suppliers.create');

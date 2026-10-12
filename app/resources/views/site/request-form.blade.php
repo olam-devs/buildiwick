@@ -8,6 +8,9 @@
 <div class="topline"><div><h2>{{ $editing ? 'Edit Expense Request' : 'New Expense Request' }}</h2><p>{{ $project->name }} · {{ $project->project_code }}</p></div></div>
 @if($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 
+@if(!$editing)
+  @include('site.request-batch-form')
+@else
 @if($phaseConfiguration !== 1)
   <section class="panel empty-state"><h3>Request creation is unavailable</h3><p>{{ $phaseConfiguration === 0 ? 'This project has no active construction phase configured.' : 'This project has multiple active construction phases, so the current phase is ambiguous.' }} Ask an administrator to configure exactly one active phase.</p></section>
 @else
@@ -37,7 +40,7 @@
     <div class="field"><label for="evidence">Supporting Evidence</label><input id="evidence" type="file" name="evidence" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"><div class="field-err">PDF, image, Word or Excel document · maximum 20 MB · stored privately.</div>@if($editing && $expenseRequest->evidence_link)<div class="field-err">Existing evidence is retained unless replaced.</div>@endif</div>
   </section>
 
-  <div class="panel request-submit-note"><strong>{{ $isPm ? 'PM-created request:' : 'Need report:' }}</strong> {{ $isPm ? 'After creation, add the supplier/payee, amount, payment instructions, and evidence before submitting it to the Director.' : 'Submit the requirement and context. The Project Manager handles supplier selection and pricing before it reaches the Director.' }}</div>
+  <div class="panel request-submit-note"><strong>{{ $isPm ? 'PM-created request:' : 'Need report:' }}</strong> {{ $isPm ? 'After creation, add supplier, pricing, payment instructions, budget allocation and any evidence before approving it for Accounts.' : 'Submit the requirement and context. The Project Manager handles supplier selection, budget allocation and pricing before approval for Accounts.' }}</div>
   <div style="display:flex;justify-content:flex-end;gap:8px;margin:16px 0 32px;"><a class="btn btn-ghost" href="{{ $isPm ? route('pm.requests.index') : ($editing ? route('site.requests.show', [$project, $expenseRequest]) : route('site.projects.show', $project)) }}">Cancel</a><button class="btn btn-primary" type="submit">{{ $editing ? 'Save Pending Request' : ($isPm ? 'Create and Add Commercial Details' : 'Submit Expense Request') }}</button></div>
 </form>
 <script>
@@ -61,5 +64,6 @@
   requestType.addEventListener('change',guideAmount);guideAmount();
 })();
 </script>
+@endif
 @endif
 @endsection

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreSiteExpenseRequest;
+use App\Http\Requests\StoreSiteExpenseRequestBatch;
 use App\Http\Requests\UpdateSiteExpenseRequest;
 use App\Models\ExpenseRequest;
 use App\Models\Lookup;
@@ -96,11 +96,13 @@ class SiteOperatorController extends Controller
         ]);
     }
 
-    public function store(StoreSiteExpenseRequest $request, Project $project, SiteExpenseRequestService $service)
+    public function store(StoreSiteExpenseRequestBatch $request, Project $project, SiteExpenseRequestService $service)
     {
-        $created = $service->create($project, $request->validated(), $request->user(), $request->file('evidence'));
+        $created = $service->createBatch($project, $request->validated(), $request->user(), $request->file('evidence'));
+        $first = $created->firstOrFail();
 
-        return redirect()->route('site.requests.show', [$project, $created])->with('success', 'Expense request '.$created->request_code.' submitted to the Project Manager.');
+        return redirect()->route('site.requests.show', [$project, $first])
+            ->with('success', 'Site request '.$first->request_batch_code.' with '.$created->count().' item(s) was submitted to the Project Manager.');
     }
 
     public function show(Request $request, Project $project, ExpenseRequest $expenseRequest)
@@ -109,11 +111,16 @@ class SiteOperatorController extends Controller
         abort_unless((int) $expenseRequest->project_id === (int) $project->id, 404);
         $this->authorize('view', $expenseRequest);
         $expenseRequest->load(['project', 'phase', 'labourAgreement', 'requestedBy', 'cancelledBy', 'approvals.decidedBy', 'payments.recordedBy']);
+        $batchItems = ExpenseRequest::query()
+            ->where('request_batch_code', $expenseRequest->request_batch_code ?: $expenseRequest->request_code)
+            ->with(['phase', 'approvals.decidedBy', 'payments.recordedBy'])
+            ->orderBy('request_line_number')->get();
         $canEdit = $request->user()->can('update', $expenseRequest);
 
         return view('site.request-show', [
             'project' => $project,
             'expenseRequest' => $expenseRequest,
+            'batchItems' => $batchItems,
             'canEdit' => $canEdit,
             'showFinancialDetails' => ! $request->user()->hasRole('site_operator'),
             'categoryLabels' => SiteExpenseRequestService::CATEGORIES,

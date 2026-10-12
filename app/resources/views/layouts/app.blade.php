@@ -207,7 +207,7 @@
       <a class="navitem {{ request()->routeIs('accountant.projects.*') ? 'active' : '' }}" href="{{ route('accountant.projects.index') }}">Projects</a>
       @elseif (auth()->user()->hasRole('director'))
       <a class="navitem {{ request()->routeIs('director.index') || request()->routeIs('director.projects.*') ? 'active' : '' }}" href="{{ route('director.index') }}">Executive Dashboard</a>
-      <a class="navitem {{ request()->routeIs('director.requests.*') ? 'active' : '' }}" href="{{ route('director.requests.index') }}">Request Approvals</a>
+      <a class="navitem {{ request()->routeIs('director.requests.*') ? 'active' : '' }}" href="{{ route('director.requests.index') }}">Request Oversight</a>
       <a class="navitem {{ request()->routeIs('director.receivables.*') ? 'active' : '' }}" href="{{ route('director.receivables.index') }}">Receivables</a>
       <a class="navitem {{ request()->routeIs('director.payables.*') ? 'active' : '' }}" href="{{ route('director.payables.index') }}">Approved Payables</a>
       <a class="navitem {{ request()->routeIs('director.transactions.*') ? 'active' : '' }}" href="{{ route('director.transactions.index') }}">Transactions</a>

@@ -26,7 +26,7 @@ class ExpenseRequest extends Model
     ];
 
     protected $fillable = [
-        'request_code', 'project_id', 'project_phase_id', 'labour_agreement_id', 'internal_budget_entry_id', 'request_type', 'main_category', 'subcategory',
+        'request_code', 'request_batch_code', 'request_line_number', 'project_id', 'project_phase_id', 'labour_agreement_id', 'internal_budget_entry_id', 'request_type', 'main_category', 'subcategory',
         'item_description', 'supplier_fundi_client', 'supplier_payee_id', 'invoice_receipt_no', 'quantity', 'unit',
         'unit_cost', 'total_amount', 'requested_amount', 'commercial_unit_rate', 'commercial_total', 'commercial_payment_method',
         'commercial_payment_destination', 'commercial_payment_destination_id', 'commercial_notes', 'commercial_evidence_link', 'commercial_prepared_by',
@@ -41,6 +41,7 @@ class ExpenseRequest extends Model
             'commercial_unit_rate' => 'decimal:2', 'commercial_total' => 'decimal:2', 'approved_amount' => 'decimal:2',
             'requested_at' => 'date', 'submitted_at' => 'datetime', 'commercial_prepared_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'request_line_number' => 'integer',
         ];
     }
 

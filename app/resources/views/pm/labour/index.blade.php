@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Labour & Subcontracts · Project Manager')
 @section('content')
-<div class="topline"><div><h2>Labour &amp; Subcontracts</h2><p>Manage labour or subcontract terms here. Site and PM requests can then reference the agreement; Accounts records payment only after Director approval.</p></div><a class="btn btn-ghost" href="{{ route('pm.requests.index', ['category' => 'labour_subcontracts']) }}">Labour Requests</a></div>
+<div class="topline"><div><h2>Labour &amp; Subcontracts</h2><p>Manage labour or subcontract terms here. Site and PM requests can then reference the agreement; Accounts records payment after PM approval.</p></div><a class="btn btn-ghost" href="{{ route('pm.requests.index', ['category' => 'labour_subcontracts']) }}">Labour Requests</a></div>
 <section class="panel form-section"><h3>Create Agreement</h3><div class="estimate-actions">@foreach($projects as $project)<a class="btn btn-primary" href="{{ route('pm.labour.create', $project) }}">{{ $project->name }}</a>@endforeach</div></section>
 <div class="tablewrap"><table><thead><tr><th>Agreement</th><th>Project</th><th>Worker / Fundi / Subcontractor</th><th>Type</th><th>Scope</th><th>Agreed Value</th><th>Director-Approved Requests</th><th>Actual Paid</th><th>Outstanding</th><th>Status</th><th>Raise Request</th></tr></thead><tbody>
 @forelse($agreements as $agreement)

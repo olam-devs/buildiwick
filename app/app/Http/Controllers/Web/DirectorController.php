@@ -7,53 +7,36 @@ use App\Models\ExpenseRequest;
 use App\Models\Project;
 use App\Services\AccountantReportingService;
 use App\Services\DirectorAnalyticsService;
-use App\Services\ExpenseRequestDecisionService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DirectorController extends Controller
 {
-    public function requests(Request $request, ExpenseRequestDecisionService $decisions)
+    public function requests(Request $request)
     {
         $this->authorize('view-director-analytics');
         $filters = $request->validate([
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
             'request_type' => ['nullable', 'in:'.implode(',', array_keys(ExpenseRequest::TYPES))],
             'category' => ['nullable', 'in:materials,labour_subcontracts,logistics_equipment,preliminaries_overheads'],
+            'status' => ['nullable', 'in:all,pending_approval,approved,rejected'],
         ]);
         $query = ExpenseRequest::query()
             ->with(['project', 'phase', 'labourAgreement', 'internalBudgetEntry', 'requestedBy', 'supplierPayee', 'commercialPaymentDestination', 'latestPmApproval.decidedBy'])
-            ->where('status', 'pending_director_approval')
+            ->where('status', '!=', 'cancelled')
             ->when($request->integer('project_id'), fn ($builder, int $projectId) => $builder->where('project_id', $projectId))
             ->when($filters['request_type'] ?? null, fn ($builder, string $type) => $builder->where('request_type', $type))
             ->when($filters['category'] ?? null, fn ($builder, string $category) => $builder->where('main_category', $category))
-            ->orderBy('submitted_at');
+            ->when(($filters['status'] ?? 'all') !== 'all', fn ($builder) => $builder->where('status', $filters['status']))
+            ->orderByDesc('submitted_at');
         $requests = $query->get();
-        $impacts = $requests->mapWithKeys(fn (ExpenseRequest $item) => [$item->id => $decisions->impact($item)]);
 
         return view('director.requests', [
             'requests' => $requests,
-            'impacts' => $impacts,
             'projects' => Project::orderBy('name')->get(['id', 'name']),
             'filters' => $filters,
         ]);
-    }
-
-    public function decideRequest(Request $request, ExpenseRequest $expenseRequest, ExpenseRequestDecisionService $decisions)
-    {
-        $this->authorize('view-director-analytics');
-        abort_unless($request->user()->hasRole('director'), 403);
-        $validated = $request->validate([
-            'decision' => ['required', 'in:approve,reject'],
-            'notes' => ['required', 'string', 'max:4000'],
-        ]);
-        $decisions->decideAsDirector($expenseRequest, $validated['decision'], $validated['notes'], $request->user());
-        $message = $validated['decision'] === 'approve'
-            ? 'Director approval recorded. The request is now available to Accounts for payment.'
-            : 'Director rejection recorded. The request was not sent to Accounts.';
-
-        return redirect()->route('director.requests.index')->with('success', $message);
     }
 
     public function index(Request $request, DirectorAnalyticsService $analytics)

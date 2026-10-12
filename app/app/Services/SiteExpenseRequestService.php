@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\Money;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -104,6 +105,65 @@ class SiteExpenseRequestService
         }
     }
 
+    /** @return Collection<int, ExpenseRequest> */
+    public function createBatch(Project $project, array $data, User $actor, ?UploadedFile $evidence = null): Collection
+    {
+        Gate::forUser($actor)->authorize('create', [ExpenseRequest::class, $project]);
+        $storedPath = null;
+
+        try {
+            return $this->database->transaction(function () use ($project, $data, $actor, $evidence, &$storedPath): Collection {
+                $lockedProject = Project::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
+                Gate::forUser($actor)->authorize('create', [ExpenseRequest::class, $lockedProject]);
+                $phase = $this->activePhase($lockedProject, lock: true);
+                $storedPath = $evidence?->store('expense-requests/'.$lockedProject->id, 'local');
+                $temporaryBatch = 'SRQ-TMP-'.Str::ulid();
+                $created = collect();
+
+                foreach (array_values($data['items']) as $index => $item) {
+                    $requestType = $item['request_type'] ?? 'item';
+                    $provisionalCategory = in_array($requestType, ['salary_wage'], true)
+                        ? 'labour_subcontracts'
+                        : 'unclassified';
+                    $request = $lockedProject->expenseRequests()->create([
+                        'request_code' => 'REQ-TMP-'.Str::ulid(),
+                        'request_batch_code' => $temporaryBatch,
+                        'request_line_number' => $index + 1,
+                        'project_phase_id' => $phase->id,
+                        'labour_agreement_id' => $item['labour_agreement_id'] ?? null,
+                        'request_type' => $requestType,
+                        'main_category' => $provisionalCategory,
+                        'subcategory' => null,
+                        'item_description' => $item['item_description'],
+                        'quantity' => $this->normalizeQuantity($item['quantity'] ?? null),
+                        'unit' => $item['unit'] ?? null,
+                        'requested_amount' => $item['requested_amount'] ?? null,
+                        'requested_at' => $data['requested_at'],
+                        'submitted_at' => now(),
+                        'status' => 'pending_approval',
+                        'requested_by' => $actor->id,
+                        'evidence_link' => $storedPath,
+                        'evidence_original_name' => $evidence?->getClientOriginalName(),
+                        'notes' => $item['notes'] ?? null,
+                    ]);
+                    $request->update(['request_code' => 'REQ-'.str_pad((string) $request->id, 6, '0', STR_PAD_LEFT)]);
+                    $created->push($request);
+                }
+
+                $batchCode = 'SRQ-'.str_pad((string) $created->first()->id, 6, '0', STR_PAD_LEFT);
+                ExpenseRequest::query()->whereIn('id', $created->pluck('id'))->update(['request_batch_code' => $batchCode]);
+
+                return ExpenseRequest::query()->whereIn('id', $created->pluck('id'))
+                    ->with(['project', 'phase', 'requestedBy'])->orderBy('request_line_number')->get();
+            });
+        } catch (Throwable $exception) {
+            if ($storedPath) {
+                Storage::disk('local')->delete($storedPath);
+            }
+            throw $exception;
+        }
+    }
+
     public function update(ExpenseRequest $expenseRequest, array $data, User $actor, ?UploadedFile $evidence = null): ExpenseRequest
     {
         $storedPath = null;
@@ -168,7 +228,7 @@ class SiteExpenseRequestService
         $requests = $project->expenseRequests()->with('payments')->where('status', '!=', 'cancelled')->get();
         $priced = $requests->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null || $request->total_amount !== null);
         $requested = Money::sum($priced->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->total_amount));
-        $pending = $requests->whereIn('status', ['pending_approval', 'pending_director_approval']);
+        $pending = $requests->where('status', 'pending_approval');
         $approved = $requests->where('status', 'approved');
         $rejected = $requests->where('status', 'rejected');
         $pendingAmount = Money::sum($pending->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null || $request->total_amount !== null)->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->total_amount));
@@ -183,7 +243,7 @@ class SiteExpenseRequestService
             $categories[$code] = [
                 'label' => $label,
                 'requests' => $group->count(),
-                'pending' => $group->whereIn('status', ['pending_approval', 'pending_director_approval'])->count(),
+                'pending' => $group->where('status', 'pending_approval')->count(),
                 'approved' => $group->where('status', 'approved')->count(),
                 'rejected' => $group->where('status', 'rejected')->count(),
                 'requested' => Money::sum($group->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null || $request->total_amount !== null)->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->total_amount)),
@@ -198,7 +258,7 @@ class SiteExpenseRequestService
             'requested' => $requested,
             'pending_count' => $pending->count(),
             'pending_amount' => $pendingAmount,
-            'pending_director_count' => $requests->where('status', 'pending_director_approval')->count(),
+            'pending_director_count' => 0,
             'approved_count' => $approved->count(),
             'approved_amount' => $approvedAmount,
             'rejected_count' => $rejected->count(),

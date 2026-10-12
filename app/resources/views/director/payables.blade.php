@@ -2,7 +2,7 @@
 @section('title', 'Approved Payables · Director')
 @section('content')
 @php($money = '\App\Support\Money')
-<div class="topline"><div><h2>Outstanding Approved Payables</h2><p>Current position from Director-approved ExpenseRequests, net of actual ExpensePayment events.</p></div><a class="btn btn-ghost" href="{{ route('director.index') }}">Executive Dashboard</a></div>
+<div class="topline"><div><h2>Outstanding Approved Payables</h2><p>Current position from PM-approved expense requests, net of actual payment events.</p></div><a class="btn btn-ghost" href="{{ route('director.index') }}">Executive Dashboard</a></div>
 <form method="GET" class="panel form-section"><div class="row2"><div class="field"><label for="project_id">Project</label><select name="project_id" id="project_id"><option value="">All Projects</option>@foreach($projects as $project)<option value="{{ $project->id }}" @selected((string) request('project_id') === (string) $project->id)>{{ $project->name }}</option>@endforeach</select></div><div style="align-self:end"><button class="btn btn-ghost" type="submit">Filter Projects</button></div></div></form>
 <div class="tablewrap"><table><thead><tr><th>Request</th><th>Project</th><th>Phase</th><th>Category</th><th>Item</th><th>Approved</th><th>Paid</th><th>Outstanding</th><th>Action</th></tr></thead><tbody>
 @forelse($payables as $item)

@@ -19,13 +19,20 @@ class ExpenseRequestDecisionService
 
     public function impact(ExpenseRequest $request): array
     {
-        $budget = $this->budgets->budgetFor($request->project, $request->project_phase_id, $request->main_category);
-        $approved = Money::sum($request->project->expenseRequests()
-            ->whereIn('status', ['pending_director_approval', 'approved'])
-            ->where('id', '!=', $request->id)
-            ->where('project_phase_id', $request->project_phase_id)
-            ->where('main_category', $request->main_category)
-            ->get()
+        $request->loadMissing('internalBudgetEntry');
+        $budget = $request->internalBudgetEntry
+            ? $request->internalBudgetEntry->line_total
+            : $this->budgets->budgetFor($request->project, $request->project_phase_id, $request->main_category);
+        $approvedQuery = $request->project->expenseRequests()
+            ->where('status', 'approved')
+            ->where('id', '!=', $request->id);
+        if ($request->internal_budget_entry_id) {
+            $approvedQuery->where('internal_budget_entry_id', $request->internal_budget_entry_id);
+        } else {
+            $approvedQuery->where('project_phase_id', $request->project_phase_id)
+                ->where('main_category', $request->main_category);
+        }
+        $approved = Money::sum($approvedQuery->get()
             ->map(fn (ExpenseRequest $item) => $item->commercial_total ?? $item->approved_amount ?? $item->total_amount ?? '0.00'));
         $thisRequest = $request->commercial_total ?? '0.00';
         $projected = Money::sum([$approved, $thisRequest]);
@@ -68,41 +75,54 @@ class ExpenseRequestDecisionService
                 throw ValidationException::withMessages(['notes' => 'An over-budget approval requires a variance justification.']);
             }
 
-            return $this->recordDecision($locked, 'project_manager', 'approved', 'pending_director_approval', $notes, $actor, $impact);
+            return $this->recordDecision($locked, 'project_manager', 'approved', 'approved', $notes, $actor, $impact);
         });
     }
 
-    public function decideAsDirector(ExpenseRequest $request, string $decision, string $notes, User $actor): ExpenseRequestApproval
+    public function decideBatch(ExpenseRequest $anchor, string $decision, string $notes, User $actor): array
     {
-        if (! $actor->hasRole('director')) {
-            throw ValidationException::withMessages(['decision' => 'Only the Director can complete the final approval stage.']);
+        if (! $actor->hasRole('project_manager')) {
+            throw ValidationException::withMessages(['decision' => 'Only the assigned Project Manager can approve a Site request.']);
         }
         if (trim($notes) === '') {
-            throw ValidationException::withMessages(['notes' => $decision === 'reject' ? 'A Director rejection reason is required.' : 'Director decision notes are required.']);
+            throw ValidationException::withMessages(['notes' => $decision === 'reject' ? 'A rejection reason is required.' : 'Approval notes are required.']);
         }
 
-        return $this->database->transaction(function () use ($request, $decision, $notes, $actor): ExpenseRequestApproval {
-            $locked = ExpenseRequest::query()->with(['supplierPayee', 'commercialPaymentDestination'])->lockForUpdate()->findOrFail($request->id);
-            if ($locked->status !== 'pending_director_approval'
-                || ! $locked->approvals()->where('approval_stage', 'project_manager')->where('decision', 'approved')->exists()
-                || $locked->approvals()->where('approval_stage', 'director')->exists()
-                || $locked->payments()->exists()) {
-                throw ValidationException::withMessages(['decision' => 'This request is not awaiting a Director decision.']);
+        return $this->database->transaction(function () use ($anchor, $decision, $notes, $actor): array {
+            $batchCode = $anchor->request_batch_code ?: $anchor->request_code;
+            $requests = ExpenseRequest::query()->with(['supplierPayee', 'commercialPaymentDestination'])
+                ->where('request_batch_code', $batchCode)->lockForUpdate()->orderBy('request_line_number')->get();
+            if ($requests->isEmpty()) {
+                throw ValidationException::withMessages(['decision' => 'This Site request has no items.']);
             }
 
-            $this->assertCommerciallyComplete($locked);
-            $status = $decision === 'approve' ? 'approved' : 'rejected';
+            $approvals = [];
+            foreach ($requests as $request) {
+                Gate::forUser($actor)->authorize($decision === 'approve' ? 'approve' : 'reject', $request);
+                if ($request->status !== 'pending_approval' || $request->approvals()->where('approval_stage', 'project_manager')->exists() || $request->payments()->exists()) {
+                    throw ValidationException::withMessages(['decision' => 'Every item must still be pending before the whole request can be decided.']);
+                }
+                if ($decision === 'approve') {
+                    $this->assertCommerciallyComplete($request);
+                    $approvals[] = $this->recordDecision($request, 'project_manager', 'approved', 'approved', $notes, $actor, $this->impact($request));
+                } else {
+                    $approvals[] = $this->recordDecision($request, 'project_manager', 'rejected', 'rejected', $notes, $actor);
+                }
+            }
 
-            return $this->recordDecision($locked, 'director', $status, $status, $notes, $actor);
+            return $approvals;
         });
     }
 
     private function assertCommerciallyComplete(ExpenseRequest $request): void
     {
+        if (str_starts_with((string) $request->request_batch_code, 'SRQ-') && ! $request->internal_budget_entry_id) {
+            throw ValidationException::withMessages(['decision' => 'Every item must be linked to an exact internal-budget line before approval.']);
+        }
         if (! $request->supplierPayee || ! $request->supplierPayee->is_active
             || $request->commercial_unit_rate === null || $request->commercial_total === null
-            || ! $request->commercial_payment_method || ! $request->commercial_evidence_link) {
-            throw ValidationException::withMessages(['decision' => 'Supplier, rate, commercial total, payment method, and commercial evidence are required before approval.']);
+            || ! $request->commercial_payment_method) {
+            throw ValidationException::withMessages(['decision' => 'Supplier, rate, commercial total and payment method are required for every item before approval.']);
         }
         $methodNeedsDestination = in_array($request->commercial_payment_method, ['bank_transfer', 'mobile_money', 'cheque'], true);
         if ($methodNeedsDestination && ! $request->commercialPaymentDestination) {
@@ -140,7 +160,7 @@ class ExpenseRequestDecisionService
             'decided_at' => now(),
             'notes' => $notes,
         ]);
-        $request->update(['status' => $status, 'approved_amount' => in_array($status, ['pending_director_approval', 'approved'], true) ? $request->commercial_total : null]);
+        $request->update(['status' => $status, 'approved_amount' => $status === 'approved' ? $request->commercial_total : null]);
 
         return $approval;
     }

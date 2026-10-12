@@ -384,7 +384,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         ]);
         $service = app(ExpenseRequestDecisionService::class);
         $approval = $service->decide($request, 'approve', 'Within budget.', $pm);
-        $this->assertSame('pending_director_approval', $request->fresh()->status);
+        $this->assertSame('approved', $request->fresh()->status);
         $this->actingAs($pm)->put(route('pm.requests.classification.update', $request), [
             'project_phase_id' => $request->project_phase_id, 'main_category' => 'materials',
         ])->assertForbidden();
@@ -412,11 +412,11 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             $this->assertArrayHasKey('notes', $exception->errors());
         }
         $approval = $service->decide($request, 'approve', 'No budget was set; urgent site need.', $pm);
-        $this->assertSame('pending_director_approval', $approval->expenseRequest->fresh()->status);
+        $this->assertSame('approved', $approval->expenseRequest->fresh()->status);
         $this->assertNull(app(ExpenseRequestDecisionService::class)->impact($request)['utilization']);
     }
 
-    public function test_pm_can_create_a_typed_request_but_accounts_only_receive_it_after_director_approval(): void
+    public function test_pm_can_create_classify_and_approve_a_typed_request_directly_for_accounts(): void
     {
         [$project, $pm] = $this->assignedProject();
         $director = $this->user('director');
@@ -441,6 +441,17 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->assertSame('salary_wage', $request->request_type);
         $this->assertSame('300000.00', $request->requested_amount);
         $this->assertSame($agreement->id, $request->labour_agreement_id);
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
+        $entry = app(ProjectManagerBudgetService::class)->createEntry($budget, $request->phase, $this->entryPayload([
+            'main_category' => 'labour_subcontracts', 'subcategory' => 'direct_labour',
+            'item_description' => 'Weekly masonry labour budget', 'unit_cost' => '300000.00',
+        ]), $pm);
+        $this->actingAs($pm)->put(route('pm.requests.classification.update', $request), [
+            'project_phase_id' => $request->project_phase_id,
+            'main_category' => 'labour_subcontracts',
+            'subcategory' => 'direct_labour',
+            'internal_budget_entry_id' => $entry->id,
+        ])->assertRedirect();
 
         $supplier = SupplierPayee::create(['name' => 'Mason Team Lead', 'type' => 'service_provider', 'is_active' => true]);
         $this->actingAs($pm)->put(route('pm.requests.commercial.update', $request), [
@@ -452,17 +463,14 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'decision' => 'approve', 'notes' => 'Verified against attendance.',
         ])->assertRedirect();
 
-        $this->assertSame('pending_director_approval', $request->fresh()->status);
-        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertDontSee($request->request_code);
-        $this->actingAs($accounts)->get(route('accountant.requests.show', $request))->assertNotFound();
+        $this->assertSame('approved', $request->fresh()->status);
+        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertSee($request->request_code);
+        $this->actingAs($accounts)->get(route('accountant.requests.show', $request))->assertOk();
         $this->actingAs($director)->get(route('director.requests.index'))->assertOk()->assertSee($request->request_code);
-        $this->actingAs($director)->post(route('director.requests.decision', $request), [
-            'decision' => 'approve', 'notes' => 'Director confirms the wage payment.',
-        ])->assertRedirect(route('director.requests.index'));
 
         $request->refresh();
         $this->assertSame('approved', $request->status);
-        $this->assertSame(['project_manager', 'director'], $request->approvals()->orderBy('id')->pluck('approval_stage')->all());
+        $this->assertSame(['project_manager'], $request->approvals()->orderBy('id')->pluck('approval_stage')->all());
         $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertSee($request->request_code);
         $this->assertDatabaseCount('expense_payments', 0);
     }
@@ -517,6 +525,68 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             ->assertSee('Site Requests · Read Only')->assertSee('Finalize Budget Baseline')
             ->assertDontSee('Estimator Base')->assertDontSee('987,654.00')
             ->assertDontSee('Approve Request')->assertDontSee('Reject Request')->assertDontSee('Record Payment');
+    }
+
+    public function test_site_item_list_is_grouped_by_supplier_allocated_to_budget_and_pm_approved_directly_for_accounts(): void
+    {
+        [$project, $pm] = $this->assignedProject();
+        $site = $this->user('site_operator');
+        $accounts = $this->user('accounts');
+        $director = $this->user('director');
+        $project->assignedUsers()->attach($site->id);
+
+        $this->actingAs($site)->post(route('site.requests.store', $project), [
+            'requested_at' => today()->toDateString(),
+            'items' => [
+                ['request_type' => 'item', 'item_description' => 'Cement 42.5R', 'quantity' => '10', 'unit' => 'bag', 'requested_amount' => '150000.00', 'notes' => 'Use approved brand'],
+                ['request_type' => 'item', 'item_description' => 'Binding wire', 'quantity' => '5', 'unit' => 'kg', 'requested_amount' => '25000.00', 'notes' => '1.6 mm'],
+            ],
+        ])->assertRedirect();
+
+        $items = ExpenseRequest::query()->where('request_batch_code', 'like', 'SRQ-%')->orderBy('request_line_number')->get();
+        $this->assertCount(2, $items);
+        $this->assertSame($items[0]->request_batch_code, $items[1]->request_batch_code);
+        $this->assertSame('unclassified', $items[0]->main_category);
+
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
+        $entry = app(ProjectManagerBudgetService::class)->createEntry($budget, $items[0]->phase, $this->entryPayload([
+            'item_description' => 'General concrete materials', 'unit_cost' => '500000.00',
+        ]), $pm);
+        $supplier = SupplierPayee::create(['name' => 'Grouped Building Supplier', 'type' => 'supplier', 'is_active' => true]);
+        $this->actingAs($pm)->get(route('pm.requests.commercial.edit', $items[0]))->assertOk()
+            ->assertSee('Supplier Grouping and Commercial Preparation')
+            ->assertSee('Cement 42.5R')->assertSee('Binding wire')
+            ->assertSee('Approve All Items for Accounts');
+        $payload = ['items' => []];
+        foreach ($items as $index => $item) {
+            $payload['items'][$item->id] = [
+                'internal_budget_entry_id' => $entry->id,
+                'supplier_payee_id' => $supplier->id,
+                'commercial_unit_rate' => $index === 0 ? '14000.00' : '4500.00',
+                'commercial_payment_method' => 'cash',
+                'commercial_notes' => 'Grouped under one supplier.',
+            ];
+        }
+        $this->actingAs($pm)->put(route('pm.request-batches.commercial.update', $items[0]), $payload)->assertRedirect();
+        $this->actingAs($pm)->post(route('pm.request-batches.decision', $items[0]), [
+            'decision' => 'approve', 'notes' => 'Prices and budget allocations verified.',
+        ])->assertRedirect();
+
+        $items->each(function (ExpenseRequest $item) use ($entry, $supplier): void {
+            $item->refresh();
+            $this->assertSame('approved', $item->status);
+            $this->assertSame($entry->id, $item->internal_budget_entry_id);
+            $this->assertSame($supplier->id, $item->supplier_payee_id);
+            $this->assertSame(['project_manager'], $item->approvals()->pluck('approval_stage')->all());
+        });
+        $lineImpact = app(ExpenseRequestDecisionService::class)->impact($items[0]->fresh());
+        $this->assertSame($entry->line_total, $lineImpact['budget']);
+        $this->assertSame('22500.00', $lineImpact['approved_commitments']);
+        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()
+            ->assertSee('Cement 42.5R')->assertSee('Binding wire');
+        $this->actingAs($director)->get(route('director.requests.index'))->assertOk()
+            ->assertSee('Cement 42.5R')->assertSee('Binding wire')->assertSee('No Director approval step');
+        $this->actingAs($director)->post('/director/request-approvals/'.$items[0]->id.'/decision')->assertNotFound();
     }
 
     private function assignedProject(?string $code = null): array

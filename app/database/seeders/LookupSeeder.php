@@ -123,8 +123,8 @@ class LookupSeeder extends Seeder
         ]);
 
         $this->seedType('expense_request_status', [
-            ['pending_approval', 'Pending PM Approval'], ['pending_director_approval', 'Pending Director Approval'],
-            ['approved', 'Director Approved'], ['rejected', 'Rejected'], ['cancelled', 'Cancelled'],
+            ['pending_approval', 'Pending PM Approval'], ['pending_director_approval', 'Legacy Pending Director Approval'],
+            ['approved', 'PM Approved for Accounts'], ['rejected', 'Rejected'], ['cancelled', 'Cancelled'],
         ]);
 
         $this->seedType('client_invoice_status', [
