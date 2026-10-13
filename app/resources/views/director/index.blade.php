@@ -8,6 +8,7 @@
 
 <section class="tiles director-alerts">
   <div class="tile"><div class="label">Projects shown</div><div class="value">{{ $projects->count() }}</div><div class="sub">Open a project for its analytics</div></div>
+  <a class="tile alert-link" href="{{ route('admin.projects.index') }}"><div class="label">Projects Needing Setup</div><div class="value">{{ $actionCounts['setup_incomplete'] }}</div><div class="sub">Missing client or a required role assignment</div></a>
   <div class="tile"><div class="label">Over-budget projects</div><div class="value">{{ $actionCounts['over_budget'] }}</div><div class="sub">Approved commitments exceed budget</div></div>
   <a class="tile alert-link" href="{{ route('director.receivables.index') }}"><div class="label">Receivable Attention</div><div class="value">{{ $actionCounts['overdue_invoices'] }} overdue</div><div class="sub">TSh {{ \App\Support\Money::format($actionCounts['overdue_receivables']) }} outstanding</div></a>
 </section>

@@ -64,6 +64,14 @@ class DirectorController extends Controller
             'over_budget' => $report['projects']->where('over_budget', true)->count(),
             'overdue_invoices' => $report['summary']['overdue_invoice_count'],
             'overdue_receivables' => $report['summary']['overdue_receivables'],
+            'setup_incomplete' => Project::query()->with('assignedUsers.role')->get()->filter(function (Project $project): bool {
+                $roles = $project->assignedUsers->map(fn ($user) => $user->role?->name)->filter();
+
+                return ! $project->client_id
+                    || ! $roles->contains('estimator_qs')
+                    || ! $roles->contains('project_manager')
+                    || ! $roles->contains('site_operator');
+            })->count(),
         ];
 
         return view('director.index', compact('projects', 'actionCounts', 'range', 'filters'));
