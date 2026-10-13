@@ -56,9 +56,11 @@ Visit `http://127.0.0.1:8000/login`. Local/demo accounts use password `password`
 |---|---|---|
 | director@buildiwick.test | Director | Read-only organization and project financial analytics |
 | grace@buildiwick.test | Accounts | Everything (not project-scoped) |
-| twalib@buildiwick.test | Estimator/QS | Materials pricing only, no cash |
-| neema@buildiwick.test | Project Manager | Kinondoni Residence + KICD Outdoor Lounge only |
-| amani@buildiwick.test | Site Operator | Same two projects, write-only |
+| twalib@buildiwick.test | Estimator/QS | Assigned projects, including the complete demo project; no cash |
+| neema@buildiwick.test | Project Manager | Kinondoni, KICD, and the complete demo project |
+| amani@buildiwick.test | Site Operator | Same three projects; site requirements only |
+
+The seeded project **Bahari View Family Villa — DEMO** is wholly fictional training data. It deliberately contains mixed workflow states across all roles: an issued estimate, finalized internal budget, pending and approved requests, full and partial supplier payments, an overdue part-paid client invoice, a current invoice, and a draft invoice that Accounts can continue testing.
 
 ## Design & planning references
 

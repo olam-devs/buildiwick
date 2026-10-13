@@ -2,6 +2,22 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-13 — Cross-Role Demo Project and MVP Workflow Simplification
+
+**Added a complete fictional training project that can be followed through every MVP role without changing the 16 tracker-derived projects.**
+
+- Added `Bahari View Family Villa — DEMO` (`BWG-DEMO-2026-001`) with a fictional client, complete role assignments, seven construction phases, an issued Estimator estimate, and a finalized PM internal budget.
+- Seeded realistic mixed workflow states: a Site request waiting for PM preparation, three PM-approved supplier items, one fully paid item, one part-paid item, one unpaid payable, a labour agreement, two issued client invoices, one client receipt, and a draft invoice left for continued Accounts testing.
+- Added fictional suppliers and payment destinations with `.test` contacts and visibly labelled demo account values. The demo seeder is idempotent and is included in the normal database seed sequence.
+- Added a feature test that runs the demo seeder twice, verifies the financial states, and confirms that the project is visible to Director, Estimator, PM, Site Operator, and Accounts.
+- Simplified the PM and Accounts dashboards, collapsed inactive PM budget phases, added short working-order guides, highlighted incomplete Director project setup, and corrected obsolete Director-approval wording in the labour view.
+- Verified locally in the browser across all five roles. The full suite passes **139 tests / 1,300 assertions**.
+- Pushed the work to `develop`. The shared sandbox still requires its documented manual pull/cache/seed deployment; pushing alone does not change the server database.
+
+### Demo-data decision
+
+- The new demo project is the only intentionally invented project dataset. It is isolated in `DemoProjectSeeder`, explicitly labelled DEMO in the UI, and must remain distinguishable from the 16 projects sourced from the client tracker.
+
 ## 2026-10-03 — Branch Reconciliation and Independent Verification
 
 **Prepared the Phase 11 `main` snapshot to return to the shared `develop` workflow without promoting or changing production.**

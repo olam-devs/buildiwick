@@ -17,6 +17,10 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Illustrative training data only. Every name, amount, contact and account in
+ * this seeder is fictional and explicitly labelled DEMO in user-facing data.
+ */
 class DemoProjectSeeder extends Seeder
 {
     public const PROJECT_CODE = 'BWG-DEMO-2026-001';
