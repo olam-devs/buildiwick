@@ -8,6 +8,8 @@ Every session or PR adds an entry here — dated, plain language, written for a 
 
 - Added `Bahari View Family Villa — DEMO` (`BWG-DEMO-2026-001`) with a fictional client, complete role assignments, seven construction phases, an issued Estimator estimate, and a finalized PM internal budget.
 - Standardized every demo estimate line to Buildiwick’s usual **15% client markup**.
+- Clarified that Director “financial activity” dates are reporting dates, not the current construction phase. Added a calendar-based end-of-day historical reconstruction, a persistent phase-history table, optional cost graphs, and an expandable/minimizable sidebar across roles.
+- Removed Estimator Client Value from operational phase/category comparison tables; the Director still sees the value once in the separate current client position.
 - Seeded realistic mixed workflow states: a Site request waiting for PM preparation, three PM-approved supplier items, one fully paid item, one part-paid item, one unpaid payable, a labour agreement, two issued client invoices, one client receipt, and a draft invoice left for continued Accounts testing.
 - Added fictional suppliers and payment destinations with `.test` contacts and visibly labelled demo account values. The demo seeder is idempotent and is included in the normal database seed sequence.
 - Added a feature test that runs the demo seeder twice, verifies the financial states, and confirms that the project is visible to Director, Estimator, PM, Site Operator, and Accounts.

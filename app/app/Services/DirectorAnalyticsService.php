@@ -5,8 +5,8 @@ namespace App\Services;
 use App\Models\ClientInvoice;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
-use App\Models\Project;
 use App\Models\Lookup;
+use App\Models\Project;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -37,6 +37,68 @@ class DirectorAnalyticsService
         return $this->projectRow($loaded, $from, $to);
     }
 
+    public function projectSnapshot(Project $project, CarbonImmutable $asOf): array
+    {
+        $loaded = $this->loadProjects($project->id)->first();
+        abort_unless($loaded, 404);
+
+        $cutoff = $asOf->endOfDay();
+        $labels = $this->phaseLabels ??= Lookup::ofType('construction_stage')->pluck('label', 'code');
+        $estimate = $loaded->estimates
+            ->where('status', 'issued')
+            ->filter(fn ($item) => CarbonImmutable::parse($item->issued_at ?? $item->created_at)->lte($cutoff))
+            ->sortByDesc('version')->first();
+        $budgetRecord = $loaded->internalBudgets
+            ->whereIn('status', ['finalized', 'approved'])
+            ->filter(fn ($item) => CarbonImmutable::parse($item->finalized_at ?? $item->approved_at ?? $item->created_at)->lte($cutoff))
+            ->sortByDesc('version')->first();
+        $approvedRequests = $loaded->expenseRequests->where('status', 'approved')->filter(function (ExpenseRequest $request) use ($cutoff) {
+            $approvedAt = $request->latestPmApproval?->decided_at ?? $request->submitted_at ?? $request->requested_at ?? $request->created_at;
+
+            return $approvedAt && CarbonImmutable::parse($approvedAt)->lte($cutoff);
+        });
+        $expensePayments = $loaded->expensePayments->filter(fn ($payment) => CarbonImmutable::parse($payment->payment_date)->lte($cutoff));
+        $clientPayments = $loaded->clientPayments->filter(fn ($payment) => CarbonImmutable::parse($payment->payment_date)->lte($cutoff));
+        $issuedInvoices = $loaded->invoices->where('status', 'issued')
+            ->filter(fn (ClientInvoice $invoice) => $invoice->issued_at && CarbonImmutable::parse($invoice->issued_at)->lte($cutoff));
+
+        $invoiced = Money::sum($issuedInvoices->map(fn (ClientInvoice $invoice) => $invoice->total_amount));
+        $received = Money::sum($clientPayments->pluck('amount'));
+        $expenses = Money::sum($expensePayments->pluck('amount'));
+        $commitments = Money::sum($approvedRequests->map(fn (ExpenseRequest $request) => $request->approved_payable_amount));
+        $budget = $budgetRecord?->total_amount ?? '0.00';
+        $phaseStates = $loaded->phases->whereIn('stage_code', self::PHASES)->sortBy('phase_order')->map(function ($phase) use ($cutoff, $labels) {
+            $started = $phase->actual_start_date ?? $phase->started_at;
+            $completed = $phase->actual_completion_date ?? $phase->completed_at;
+            $status = $completed && CarbonImmutable::parse($completed)->lte($cutoff)
+                ? 'completed'
+                : (($started && CarbonImmutable::parse($started)->lte($cutoff)) ? 'active' : 'not_started');
+
+            return [
+                'label' => $labels[$phase->stage_code] ?? ucwords(str_replace('_', ' ', $phase->stage_code)),
+                'status' => $status,
+            ];
+        })->values();
+
+        $receivables = Money::difference($invoiced, $received);
+
+        return [
+            'as_of' => $asOf,
+            'current_phase' => $phaseStates->firstWhere('status', 'active')['label'] ?? null,
+            'completed_phases' => $phaseStates->where('status', 'completed')->count(),
+            'phase_count' => $phaseStates->count(),
+            'estimated_client_value' => $estimate?->total_amount ?? '0.00',
+            'budget' => $budget,
+            'approved_commitments' => $commitments,
+            'actual_expenses' => $expenses,
+            'invoiced' => $invoiced,
+            'received' => $received,
+            'receivables' => Money::compare($receivables, '0') < 0 ? '0.00' : $receivables,
+            'cash_balance' => Money::difference($received, $expenses),
+            'phase_states' => $phaseStates,
+        ];
+    }
+
     public function receivables(?int $projectId = null): Collection
     {
         return $this->loadProjects()->when($projectId, fn (Collection $projects) => $projects->where('id', $projectId))
@@ -45,7 +107,9 @@ class DirectorAnalyticsService
                     $total = $invoice->total_amount;
                     $received = $invoice->paid_to_date;
                     $outstanding = $invoice->outstanding_amount;
-                    if (Money::compare($outstanding, '0') <= 0) return null;
+                    if (Money::compare($outstanding, '0') <= 0) {
+                        return null;
+                    }
 
                     $due = $invoice->due_at ? CarbonImmutable::parse($invoice->due_at) : null;
                     $overdue = $invoice->overdue;
@@ -71,7 +135,9 @@ class DirectorAnalyticsService
                     $approved = $request->approved_payable_amount;
                     $paid = $request->paid_to_date;
                     $outstanding = $request->approved_outstanding_amount;
-                    if (Money::compare($outstanding, '0') <= 0) return null;
+                    if (Money::compare($outstanding, '0') <= 0) {
+                        return null;
+                    }
 
                     return ['request' => $request, 'project' => $project, 'approved' => $approved, 'paid' => $paid, 'outstanding' => $outstanding];
                 })->filter();
@@ -150,14 +216,20 @@ class DirectorAnalyticsService
             $total = $invoice->total_amount;
             $received = $invoice->paid_to_date;
             $outstanding = $invoice->outstanding_amount;
-            if (Money::compare($outstanding, '0') <= 0) return null;
+            if (Money::compare($outstanding, '0') <= 0) {
+                return null;
+            }
+
             return ['invoice' => $invoice, 'project' => $project, 'total' => $total, 'received' => $received, 'outstanding' => $outstanding, 'overdue' => $invoice->overdue];
         })->filter()->values();
         $payableRows = $approvedRequests->map(function (ExpenseRequest $request) use ($project) {
             $approved = $request->approved_payable_amount;
             $paid = $request->paid_to_date;
             $outstanding = $request->approved_outstanding_amount;
-            if (Money::compare($outstanding, '0') <= 0) return null;
+            if (Money::compare($outstanding, '0') <= 0) {
+                return null;
+            }
+
             return ['request' => $request, 'project' => $project, 'approved' => $approved, 'paid' => $paid, 'outstanding' => $outstanding];
         })->filter()->values();
 
@@ -213,6 +285,7 @@ class DirectorAnalyticsService
                 $paymentGroup = $categoryPayments->filter(fn (ExpensePayment $payment) => $matches($payment->expenseRequest?->subcategory));
                 $internal = Money::sum($budgetGroup->map(fn ($entry) => $entry->line_total));
                 $actual = Money::sum($paymentGroup->pluck('amount'));
+
                 return [
                     'key' => $key,
                     'label' => $key === '__other' ? 'Other / Unclassified' : ($subcategoryLabels[$key] ?? ucwords(str_replace('_', ' ', $key))),
@@ -243,6 +316,20 @@ class DirectorAnalyticsService
         $activePhase = $project->activePhase;
         $budgetUtilization = Money::compare($budget, '0') === 0 ? null : Money::percentage($actualExpenses, $budget);
         $commitmentUtilization = Money::compare($budget, '0') === 0 ? null : Money::percentage($approvedCommitments, $budget);
+        $phaseHistory = $standardPhases->sortBy('phase_order')->map(function ($phase) use ($labels) {
+            $started = $phase->actual_start_date ?? $phase->started_at;
+            $completed = $phase->actual_completion_date ?? $phase->completed_at;
+
+            return [
+                'label' => $labels[$phase->stage_code] ?? ucwords(str_replace('_', ' ', $phase->stage_code)),
+                'status' => $phase->status,
+                'started_at' => $started,
+                'completed_at' => $completed,
+                'duration_days' => $started && $completed
+                    ? CarbonImmutable::parse($started)->diffInDays(CarbonImmutable::parse($completed)) + 1
+                    : null,
+            ];
+        })->values();
 
         return [
             'project' => $project,
@@ -269,6 +356,7 @@ class DirectorAnalyticsService
             'expenses_period' => Money::sum($expensePeriod->pluck('amount')),
             'category_analytics' => $categoryAnalytics,
             'phase_analytics' => $phaseAnalytics,
+            'phase_history' => $phaseHistory,
             'receivable_rows' => $receivableRows,
             'payable_rows' => $payableRows,
         ];
@@ -278,7 +366,7 @@ class DirectorAnalyticsService
     {
         return Project::query()->with([
             'client', 'activePhase', 'phases', 'estimates.entries', 'internalBudgets.entries',
-            'expenseRequests.phase', 'expenseRequests.payments', 'expensePayments.expenseRequest', 'clientPayments',
+            'expenseRequests.phase', 'expenseRequests.payments', 'expenseRequests.latestPmApproval', 'expensePayments.expenseRequest', 'clientPayments',
             'invoices.client', 'invoices.items', 'invoices.payments',
         ])->when($projectId, fn ($query) => $query->whereKey($projectId))->orderBy('name')->get();
     }
@@ -306,14 +394,18 @@ class DirectorAnalyticsService
 
         return collect($months)->map(function (array $month) {
             $month['net'] = Money::difference($month['in'], $month['out']);
+
             return $month;
         })->values();
     }
 
     private function within(mixed $date, CarbonImmutable $from, CarbonImmutable $to): bool
     {
-        if (! $date) return false;
+        if (! $date) {
+            return false;
+        }
         $date = CarbonImmutable::parse($date);
+
         return $date->gte($from->startOfDay()) && $date->lte($to->endOfDay());
     }
 }
