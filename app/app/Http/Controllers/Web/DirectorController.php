@@ -80,10 +80,13 @@ class DirectorController extends Controller
     public function project(Request $request, Project $project, DirectorAnalyticsService $analytics)
     {
         $this->authorize('view-director-analytics');
+        $snapshotInput = $request->validate(['as_of' => ['nullable', 'date', 'before_or_equal:today']]);
         $range = $this->dateRange($request);
         $row = $analytics->project($project, $range['from'], $range['to']);
+        $asOf = isset($snapshotInput['as_of']) ? CarbonImmutable::parse($snapshotInput['as_of']) : null;
+        $snapshot = $asOf ? $analytics->projectSnapshot($project, $asOf) : null;
 
-        return view('director.project', compact('row', 'range'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot'));
     }
 
     public function receivables(Request $request, DirectorAnalyticsService $analytics)

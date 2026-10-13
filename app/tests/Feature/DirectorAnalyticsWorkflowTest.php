@@ -13,8 +13,10 @@ use App\Models\ProjectEstimate;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\DirectorAnalyticsService;
+use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Database\Seeders\LookupSeeder;
+use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -99,7 +101,16 @@ class DirectorAnalyticsWorkflowTest extends TestCase
 
         $director = $this->user('director');
         $response = $this->actingAs($director)->get(route('director.projects.show', $project));
-        $response->assertOk()->assertSee($project->name)->assertSee('Current Phase')->assertSee('60.00')->assertSee('80.00');
+        $response->assertOk()
+            ->assertSee($project->name)
+            ->assertSee('Current Phase')
+            ->assertSee('Phase History')
+            ->assertSee('Trace the Project at the End of a Day')
+            ->assertSee('Show graphs')
+            ->assertSee('Financial Activity for Selected Dates')
+            ->assertSee('60.00')
+            ->assertSee('80.00');
+        $this->assertSame(0, substr_count($response->getContent(), 'Estimator Client Value'));
         $response->assertViewHas('row', function (array $row) {
             return $row['budget'] === '100000000.00'
                 && $row['approved_commitments'] === '80000000.00'
@@ -118,6 +129,47 @@ class DirectorAnalyticsWorkflowTest extends TestCase
                 && $row['category_analytics']['materials']['budget'] === '100000000.00'
                 && $row['category_analytics']['materials']['subcategories']->firstWhere('key', 'concrete_cement')['actual'] === '60000000.00';
         });
+    }
+
+    public function test_calendar_snapshot_reconstructs_recorded_phase_and_financial_position_at_day_end(): void
+    {
+        [$project, $firstPhase] = $this->project('BWG-DIR-HISTORY-001');
+        $firstPhase->update([
+            'status' => 'completed',
+            'started_at' => '2026-01-01',
+            'completed_at' => '2026-01-10',
+        ]);
+        $project->phases()->create([
+            'stage_code' => 'substructure',
+            'phase_order' => 2,
+            'status' => 'active',
+            'started_at' => '2026-01-11',
+        ]);
+        $invoice = $this->invoice($project, $firstPhase, 'issued', '100.00', '2026-01-05', '2026-02-05');
+        foreach ([['RCP-HISTORY-001', '40.00', '2026-01-06'], ['RCP-HISTORY-002', '20.00', '2026-01-15']] as [$code, $amount, $date]) {
+            ClientPayment::create(['payment_code' => $code, 'client_invoice_id' => $invoice->id, 'project_id' => $project->id, 'client_id' => $project->client_id, 'amount' => $amount, 'payment_date' => $date, 'payment_method' => 'cash']);
+        }
+        $request = $this->expenseRequest($project, $firstPhase, 'approved', '50.00', 'materials');
+        $request->update(['submitted_at' => '2026-01-04 09:00:00']);
+        foreach ([['PAY-HISTORY-001', '10.00', '2026-01-07'], ['PAY-HISTORY-002', '20.00', '2026-01-16']] as [$code, $amount, $date]) {
+            ExpensePayment::create(['payment_code' => $code, 'expense_request_id' => $request->id, 'project_id' => $project->id, 'project_phase_id' => $firstPhase->id, 'amount' => $amount, 'payment_date' => $date, 'payment_method' => 'cash']);
+        }
+
+        $snapshot = app(DirectorAnalyticsService::class)->projectSnapshot($project, CarbonImmutable::parse('2026-01-10'));
+
+        $this->assertNull($snapshot['current_phase']);
+        $this->assertSame(1, $snapshot['completed_phases']);
+        $this->assertSame('100.00', $snapshot['invoiced']);
+        $this->assertSame('40.00', $snapshot['received']);
+        $this->assertSame('10.00', $snapshot['actual_expenses']);
+        $this->assertSame('30.00', $snapshot['cash_balance']);
+        $this->assertSame('50.00', $snapshot['approved_commitments']);
+
+        $this->actingAs($this->user('director'))
+            ->get(route('director.projects.show', [$project, 'as_of' => '2026-01-10']))
+            ->assertOk()
+            ->assertSee('Recorded position at end of 10 Jan 2026')
+            ->assertSee('10 days');
     }
 
     public function test_approved_request_and_issued_invoice_change_commitment_and_receivable_but_not_actual_cash(): void
@@ -224,17 +276,19 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         ExpensePayment::create(['payment_code' => 'PAY-DIR-REG-001', 'expense_request_id' => $approved->id, 'project_id' => $project->id, 'project_phase_id' => $phase->id, 'amount' => '25.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash']);
         $paidRequest = $this->expenseRequest($project, $phase, 'approved', '20.00', 'materials');
         ExpensePayment::create(['payment_code' => 'PAY-DIR-REG-002', 'expense_request_id' => $paidRequest->id, 'project_id' => $project->id, 'project_phase_id' => $phase->id, 'amount' => '20.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash']);
-        foreach (['pending_approval', 'rejected', 'cancelled'] as $status) $this->expenseRequest($project, $phase, $status, '900.00', 'materials');
+        foreach (['pending_approval', 'rejected', 'cancelled'] as $status) {
+            $this->expenseRequest($project, $phase, $status, '900.00', 'materials');
+        }
 
         $analytics = app(DirectorAnalyticsService::class);
         $receivables = $analytics->receivables($project->id);
         $payables = $analytics->payables($project->id);
         $this->assertCount(2, $receivables);
-        $this->assertSame('120.00', \App\Support\Money::sum($receivables->pluck('outstanding')));
-        $this->assertSame('60.00', \App\Support\Money::sum($receivables->where('overdue', true)->pluck('outstanding')));
+        $this->assertSame('120.00', Money::sum($receivables->pluck('outstanding')));
+        $this->assertSame('60.00', Money::sum($receivables->where('overdue', true)->pluck('outstanding')));
         $this->assertTrue($receivables->firstWhere('invoice.id', $overdue->id)['overdue']);
         $this->assertCount(1, $payables);
-        $this->assertSame('75.00', \App\Support\Money::sum($payables->pluck('outstanding')));
+        $this->assertSame('75.00', Money::sum($payables->pluck('outstanding')));
         $this->assertSame('40.00', $receivables->firstWhere('invoice.id', $partPaid->id)['received']);
         $this->assertFalse($receivables->contains(fn ($row) => in_array($row['invoice']->id, [$draftInvoice->id, $paidInvoice->id], true)));
     }
@@ -294,7 +348,7 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         $this->assertSame($invoiceBefore, $invoice->fresh()->toArray());
         $this->assertSame($receiptBefore, $receipt->fresh()->toArray());
 
-        $this->seed(\Database\Seeders\UserSeeder::class);
+        $this->seed(UserSeeder::class);
         $this->assertSame('director', User::where('email', 'director@buildiwick.test')->firstOrFail()->role->name);
         $this->assertSame('director', $admin->fresh()->role->name);
     }

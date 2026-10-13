@@ -23,10 +23,15 @@
   a{color:inherit;}
   button, input, select{font-family:inherit;}
 
-  .shell{display:grid;grid-template-columns:232px 1fr;min-height:100%;}
-  @media (max-width:860px){ .shell{grid-template-columns:1fr;} .sidebar{display:none;} }
+  .shell{display:grid;grid-template-columns:232px 1fr;min-height:100%;transition:grid-template-columns .18s ease;}
+  .shell.sidebar-collapsed{grid-template-columns:0 1fr;}
+  .shell.sidebar-collapsed .sidebar{visibility:hidden;opacity:0;pointer-events:none;overflow:hidden;padding-left:0;padding-right:0;}
+  .sidebar-toggle{position:fixed;z-index:35;top:18px;left:214px;width:34px;height:34px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink-soft);box-shadow:0 2px 8px rgba(16,24,32,.10);cursor:pointer;transition:left .18s ease;}
+  .sidebar-toggle:hover{color:var(--primary-dark);border-color:var(--primary);}
+  .sidebar-collapsed .sidebar-toggle{left:12px;}
+  @media (max-width:860px){ .shell{grid-template-columns:1fr;} .sidebar,.sidebar-toggle{display:none;} }
 
-  .sidebar{background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:18px;}
+  .sidebar{background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:18px;transition:opacity .14s ease;}
   .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 14px;border-bottom:1px solid var(--line);margin-bottom:2px;}
   .brand .mark{width:26px;height:26px;border-radius:6px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none;}
   .brand span{font-weight:700;font-size:14.5px;letter-spacing:-0.01em;}
@@ -237,6 +242,7 @@
     </div>
     @endauth
   </aside>
+  <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Minimize sidebar" aria-expanded="true" title="Minimize sidebar">&#x2039;</button>
   <main class="main">
     @if (session('success'))<div class="flash">{{ session('success') }}</div>@endif
     @yield('content')
@@ -244,5 +250,25 @@
 </div>
 
 @stack('drawers')
+<script>
+(() => {
+  const shell = document.querySelector('.shell');
+  const toggle = document.getElementById('sidebar-toggle');
+  if (!shell || !toggle) return;
+  const apply = collapsed => {
+    shell.classList.toggle('sidebar-collapsed', collapsed);
+    toggle.innerHTML = collapsed ? '&#x203A;' : '&#x2039;';
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Minimize sidebar');
+    toggle.title = collapsed ? 'Expand sidebar' : 'Minimize sidebar';
+  };
+  apply(localStorage.getItem('buildiwick-sidebar-collapsed') === '1');
+  toggle.addEventListener('click', () => {
+    const collapsed = !shell.classList.contains('sidebar-collapsed');
+    apply(collapsed);
+    localStorage.setItem('buildiwick-sidebar-collapsed', collapsed ? '1' : '0');
+  });
+})();
+</script>
 </body>
 </html>
