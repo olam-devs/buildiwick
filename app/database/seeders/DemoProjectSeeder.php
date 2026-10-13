@@ -99,23 +99,23 @@ class DemoProjectSeeder extends Seeder
                     'valid_until' => today()->addMonths(2),
                     'prepared_by' => $estimator->id,
                     'issued_by' => $estimator->id,
-                    'notes' => 'Issued demo client estimate with 12% markup.',
+                    'notes' => 'Issued demo client estimate with Buildiwick’s usual 15% markup.',
                 ]
             );
             $estimateEntries = [
-                ['preliminaries', 'preliminaries_overheads', 'site_office_accommodation', 'Site mobilisation, temporary office and storage', 1, 'ls', 4700000, 12],
-                ['substructure', 'materials', 'concrete_cement', 'Cement 42.5R for foundations', 650, 'bag', 18500, 12],
-                ['substructure', 'materials', 'reinforcement_steel', 'High-yield reinforcement steel', 4.5, 'tonne', 2600000, 12],
-                ['substructure', 'materials', 'aggregates', 'Sand and aggregate deliveries', 18, 'trip', 420000, 12],
-                ['substructure', 'labour_subcontracts', 'fundi_labour', 'Foundation excavation, steel fixing and concrete labour', 1, 'ls', 11000000, 12],
-                ['substructure', 'logistics_equipment', 'plant_machinery_hire', 'Excavator hire', 5, 'day', 750000, 12],
-                ['superstructure', 'materials', 'reinforcement_steel', 'Structural frame concrete and reinforcement package', 1, 'ls', 42000000, 12],
-                ['walling', 'materials', 'masonry', 'Blocks, mortar and lintels', 1, 'ls', 28000000, 12],
-                ['roofing', 'materials', 'timber_formwork', 'Roof structure and covering', 1, 'ls', 32000000, 12],
-                ['finishing', 'materials', 'finishes', 'Floor, wall, ceiling and paint finishes', 1, 'ls', 54000000, 12],
-                ['finishing', 'materials', 'plumbing_drainage', 'Plumbing and sanitary fixtures', 1, 'ls', 18000000, 12],
-                ['finishing', 'materials', 'electrical', 'Electrical installation and fittings', 1, 'ls', 16000000, 12],
-                ['external_works', 'labour_subcontracts', 'subcontractor', 'Boundary wall, drainage and landscaping', 1, 'ls', 22000000, 12],
+                ['preliminaries', 'preliminaries_overheads', 'site_office_accommodation', 'Site mobilisation, temporary office and storage', 1, 'ls', 4700000, 15],
+                ['substructure', 'materials', 'concrete_cement', 'Cement 42.5R for foundations', 650, 'bag', 18500, 15],
+                ['substructure', 'materials', 'reinforcement_steel', 'High-yield reinforcement steel', 4.5, 'tonne', 2600000, 15],
+                ['substructure', 'materials', 'aggregates', 'Sand and aggregate deliveries', 18, 'trip', 420000, 15],
+                ['substructure', 'labour_subcontracts', 'fundi_labour', 'Foundation excavation, steel fixing and concrete labour', 1, 'ls', 11000000, 15],
+                ['substructure', 'logistics_equipment', 'plant_machinery_hire', 'Excavator hire', 5, 'day', 750000, 15],
+                ['superstructure', 'materials', 'reinforcement_steel', 'Structural frame concrete and reinforcement package', 1, 'ls', 42000000, 15],
+                ['walling', 'materials', 'masonry', 'Blocks, mortar and lintels', 1, 'ls', 28000000, 15],
+                ['roofing', 'materials', 'timber_formwork', 'Roof structure and covering', 1, 'ls', 32000000, 15],
+                ['finishing', 'materials', 'finishes', 'Floor, wall, ceiling and paint finishes', 1, 'ls', 54000000, 15],
+                ['finishing', 'materials', 'plumbing_drainage', 'Plumbing and sanitary fixtures', 1, 'ls', 18000000, 15],
+                ['finishing', 'materials', 'electrical', 'Electrical installation and fittings', 1, 'ls', 16000000, 15],
+                ['external_works', 'labour_subcontracts', 'subcontractor', 'Boundary wall, drainage and landscaping', 1, 'ls', 22000000, 15],
             ];
             foreach ($estimateEntries as [$phase, $category, $subcategory, $description, $quantity, $unit, $cost, $markup]) {
                 $estimate->entries()->updateOrCreate(
