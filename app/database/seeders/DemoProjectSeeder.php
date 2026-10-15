@@ -138,11 +138,13 @@ class DemoProjectSeeder extends Seeder
                 [
                     'project_id' => $project->id,
                     'version' => 1,
-                    'status' => 'finalized',
+                    'status' => 'approved',
                     'created_by' => $pm->id,
                     'finalized_by' => $pm->id,
                     'finalized_at' => now()->subWeeks(5),
-                    'notes' => 'PM operational baseline for the demo project.',
+                    'approved_by' => $director->id,
+                    'approved_at' => now()->subWeeks(5)->addDay(),
+                    'notes' => 'PM operational baseline verified by the Director for the demo project.',
                 ]
             );
             $budgetDefinitions = [

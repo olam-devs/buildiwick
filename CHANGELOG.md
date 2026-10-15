@@ -2,6 +2,24 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-15 — Excel Exports, Verified Internal Budgets, and Project Workspaces
+
+**Turned multi-project role screens into project workspaces and completed the requested document/export and internal-budget controls.**
+
+- Replaced all existing CSV downloads with formatted Excel `.xlsx` workbooks and added downloads for all project requests (including labour-only filtering), labour/subcontract agreements, Estimator estimates, PM internal budgets, and client invoices. Workbooks include titles, context, typed currency/date cells, filters, frozen headers, print setup, and totals for estimate/budget/invoice formats.
+- Changed the internal-budget lifecycle so PM submission is locked while awaiting Director verification. The Director can approve it as the active baseline or return the same version to draft with review notes. Older finalized baselines are grandfathered to approved by an additive migration.
+- Restricted new request allocation and approval to entries in a Director-approved internal-budget version. An awaiting or draft budget cannot be used to send a request to Accounts.
+- Removed Site Operator pricing and estimate fields from request creation, request detail, and PM review context. Site now supplies description, type, quantity/unit, and specifications; PM supplies supplier and prices.
+- Added persistent project-specific sidebars for Director, PM, Accountant, Estimator, and Site Operator pages. Project-filtered links remain scoped until the user chooses **Close Project**.
+- Split Director, PM, and Accountant project detail into smaller overview/phase/activity/billing/cost views so a project no longer presents every detailed table at once. Existing optional Director graphs remain optional.
+- Added PhpSpreadsheet 5.10 and workbook-content regression coverage. Full suite passes **141 tests / 1,333 assertions**; Composer reports no known security advisories.
+
+### Workflow decisions
+
+- Director remains separate from the Admin bypass but is no longer purely read-only: internal-budget verification is its one explicit workflow decision.
+- Site-entered amounts are never accepted for new request batches. Commercial value starts with PM preparation.
+- New request batches cannot be approved against a draft or merely submitted internal budget; the budget version must be Director-approved.
+
 ## 2026-10-13 — Cross-Role Demo Project and MVP Workflow Simplification
 
 **Added a complete fictional training project that can be followed through every MVP role without changing the 16 tracker-derived projects.**

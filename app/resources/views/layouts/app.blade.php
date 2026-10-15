@@ -49,6 +49,8 @@
   .navitem.active{background:var(--primary-soft);color:var(--primary-dark);font-weight:600;}
   .navitem.active svg{opacity:1;}
   .navitem:not(.active):hover{background:var(--surface-2);}
+  .project-workspace-card{padding:10px;margin-bottom:7px;border:1px solid var(--line);border-radius:8px;background:var(--primary-soft)}
+  .project-workspace-card .label{padding:0 0 4px;color:var(--primary-dark)}.project-workspace-card strong,.project-workspace-card small{display:block}.project-workspace-card strong{font-size:12.5px}.project-workspace-card small{font-size:10.5px;color:var(--ink-dim);margin-top:2px}.navitem.close-workspace{margin-top:8px;border:1px solid var(--line);justify-content:center}
   .form-section{margin-bottom:14px;}
   .form-section h3{margin-bottom:16px;}
   .phase-schedule{border-top:1px solid var(--line);padding-top:14px;margin-top:8px;}
@@ -191,6 +193,38 @@
     </div>
     @endauth
     <nav class="navgroup">
+      @if($workspaceProject ?? null)
+      <div class="project-workspace-card"><div class="label">Project Workspace</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
+      @if(auth()->user()->hasRole('director'))
+        <a class="navitem {{ request()->routeIs('director.projects.show') ? 'active' : '' }}" href="{{ route('director.projects.show', $workspaceProject) }}">Project Overview</a>
+        <a class="navitem {{ request()->routeIs('director.requests.*') ? 'active' : '' }}" href="{{ route('director.requests.index', ['project_id'=>$workspaceProject->id]) }}">Request Oversight</a>
+        <a class="navitem {{ request()->routeIs('director.receivables.*') ? 'active' : '' }}" href="{{ route('director.receivables.index', ['project_id'=>$workspaceProject->id]) }}">Receivables</a>
+        <a class="navitem {{ request()->routeIs('director.payables.*') ? 'active' : '' }}" href="{{ route('director.payables.index', ['project_id'=>$workspaceProject->id]) }}">Approved Payables</a>
+        <a class="navitem" href="{{ route('admin.projects.show', $workspaceProject) }}">Project Setup</a>
+        <a class="navitem close-workspace" href="{{ route('director.index') }}">Close Project</a>
+      @elseif(auth()->user()->hasRole('project_manager'))
+        <a class="navitem {{ request()->routeIs('pm.projects.show') || request()->routeIs('pm.budget*') ? 'active' : '' }}" href="{{ route('pm.projects.show', $workspaceProject) }}">Overview &amp; Internal Budget</a>
+        <a class="navitem {{ request()->routeIs('pm.requests.*') ? 'active' : '' }}" href="{{ route('pm.requests.index', ['project_id'=>$workspaceProject->id]) }}">Project Requests</a>
+        <a class="navitem {{ request()->routeIs('pm.labour.*') ? 'active' : '' }}" href="{{ route('pm.labour.index', ['project_id'=>$workspaceProject->id]) }}">Labour &amp; Subcontracts</a>
+        <a class="navitem" href="{{ route('pm.requests.create', $workspaceProject) }}">Create PM Request</a>
+        <a class="navitem close-workspace" href="{{ route('pm.projects.index') }}">Close Project</a>
+      @elseif(auth()->user()->hasRole('accountant') || auth()->user()->hasRole('accounts'))
+        <a class="navitem {{ request()->routeIs('accountant.projects.show') ? 'active' : '' }}" href="{{ route('accountant.projects.show', $workspaceProject) }}">Project Overview</a>
+        <a class="navitem {{ request()->routeIs('accountant.requests.*') ? 'active' : '' }}" href="{{ route('accountant.requests.index', ['project_id'=>$workspaceProject->id]) }}">Approved Payments</a>
+        <a class="navitem {{ request()->routeIs('accountant.invoices.*') ? 'active' : '' }}" href="{{ route('accountant.invoices.index', ['project_id'=>$workspaceProject->id]) }}">Client Invoices</a>
+        <a class="navitem {{ request()->routeIs('accountant.projects.transactions') ? 'active' : '' }}" href="{{ route('accountant.projects.transactions', $workspaceProject) }}">Transactions</a>
+        <a class="navitem {{ request()->routeIs('accountant.projects.statement') ? 'active' : '' }}" href="{{ route('accountant.projects.statement', $workspaceProject) }}">Project Statement</a>
+        <a class="navitem" href="{{ route('accountant.invoices.create', $workspaceProject) }}">Create Invoice</a>
+        <a class="navitem close-workspace" href="{{ route('accountant.projects.index') }}">Close Project</a>
+      @elseif(auth()->user()->hasRole('estimator_qs'))
+        <a class="navitem active" href="{{ route('estimator.projects.show', $workspaceProject) }}">Project Estimate</a>
+        <a class="navitem close-workspace" href="{{ route('estimator.projects.index') }}">Close Project</a>
+      @elseif(auth()->user()->hasRole('site_operator'))
+        <a class="navitem {{ request()->routeIs('site.projects.show') ? 'active' : '' }}" href="{{ route('site.projects.show', $workspaceProject) }}">Project Overview</a>
+        <a class="navitem {{ request()->routeIs('site.requests.create') ? 'active' : '' }}" href="{{ route('site.requests.create', $workspaceProject) }}">New Site Request</a>
+        <a class="navitem close-workspace" href="{{ route('site.index') }}">Close Project</a>
+      @endif
+      @else
       <div class="label">{{ auth()->user()->hasRole('director') ? 'Analytics' : 'Overview' }}</div>
       @if (auth()->user()->hasRole('estimator_qs'))
       <a class="navitem {{ request()->routeIs('estimator.projects.*') ? 'active' : '' }}" href="{{ route('estimator.projects.index') }}">Estimator Dashboard</a>
@@ -231,6 +265,7 @@
       @endcan
       @if (auth()->user()->hasRole('director'))
         <a class="navitem {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">User Management</a>
+      @endif
       @endif
     </nav>
     @auth

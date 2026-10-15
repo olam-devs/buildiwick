@@ -10,13 +10,13 @@ class InternalBudgetPolicy
 {
     public function viewAny(User $user): bool
     {
-        return in_array($user->role?->name, ['admin', 'project_manager'], true);
+        return in_array($user->role?->name, ['admin', 'director', 'project_manager'], true);
     }
 
     public function view(User $user, InternalBudget $budget): bool
     {
         return match ($user->role?->name) {
-            'admin' => true,
+            'admin', 'director' => true,
             'project_manager' => $user->assignedProjects()->whereKey($budget->project_id)->exists(),
             default => false,
         };
@@ -24,7 +24,7 @@ class InternalBudgetPolicy
 
     public function viewProject(User $user, Project $project): bool
     {
-        return $user->hasRole('admin')
+        return $user->hasRole('admin') || $user->hasRole('director')
             || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($project->id)->exists());
     }
 
@@ -35,7 +35,7 @@ class InternalBudgetPolicy
 
     public function approve(User $user, InternalBudget $budget): bool
     {
-        return $user->hasRole('admin');
+        return $user->hasRole('director') || $user->hasRole('admin');
     }
 
     public function update(User $user, InternalBudget $budget): bool

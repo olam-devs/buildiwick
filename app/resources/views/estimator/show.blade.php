@@ -6,13 +6,14 @@
   <div><h2>{{ $project->name }}</h2><p>{{ $project->project_code }} · {{ $project->client?->name ?? 'Client not linked' }} · {{ $project->location ?? 'Location not set' }}</p></div>
   @if ($workingEstimate)
     <div class="estimate-actions">
+      <a class="btn btn-ghost" href="{{ route('estimator.estimates.export', [$project, $workingEstimate]) }}">Download Excel</a>
       <span class="dot-status attn">Working draft · v{{ $workingEstimate->version }}</span>
       @if ($workingEstimate->entries->isNotEmpty())
         <form method="POST" action="{{ route('estimator.estimates.finalize', [$project, $workingEstimate]) }}" onsubmit="return confirm('Issue this estimate? The version will be locked for editing.');">@csrf<button class="btn btn-primary" type="submit">Issue Estimate</button></form>
       @endif
     </div>
   @elseif ($displayEstimate)
-    <div class="estimate-actions"><span class="dot-status {{ $displayEstimate->status === 'issued' ? 'active' : 'zero' }}">{{ ucfirst($displayEstimate->status) }} · v{{ $displayEstimate->version }}</span><form method="POST" action="{{ route('estimator.estimates.start', $project) }}">@csrf<button class="btn btn-primary" type="submit">Start New Version</button></form></div>
+    <div class="estimate-actions"><span class="dot-status {{ $displayEstimate->status === 'issued' ? 'active' : 'zero' }}">{{ ucfirst($displayEstimate->status) }} · v{{ $displayEstimate->version }}</span><a class="btn btn-ghost" href="{{ route('estimator.estimates.export', [$project, $displayEstimate]) }}">Download Excel</a><form method="POST" action="{{ route('estimator.estimates.start', $project) }}">@csrf<button class="btn btn-primary" type="submit">Start New Version</button></form></div>
   @endif
 </div>
 

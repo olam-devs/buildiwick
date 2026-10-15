@@ -19,6 +19,7 @@ use App\Models\Project;
 use App\Models\ProjectPhase;
 use App\Models\SupplierPayee;
 use App\Models\SupplierPaymentDestination;
+use App\Services\ExcelExportService;
 use App\Services\ExpenseRequestBatchCommercialService;
 use App\Services\ExpenseRequestClassificationService;
 use App\Services\ExpenseRequestCommercialService;
@@ -84,6 +85,34 @@ class ProjectManagerController extends Controller
         ]);
     }
 
+    public function exportRequests(Request $request, ExcelExportService $excel)
+    {
+        abort_unless($request->user()->hasRole('project_manager') || $request->user()->hasRole('admin'), 403);
+        $filters = $request->validate([
+            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'category' => ['nullable', 'in:materials,labour_subcontracts,logistics_equipment,preliminaries_overheads'],
+        ]);
+        $requests = ExpenseRequest::with(['project', 'phase', 'requestedBy', 'supplierPayee', 'internalBudgetEntry'])
+            ->where('status', '!=', 'cancelled')
+            ->when($request->user()->hasRole('project_manager'), fn ($query) => $query->whereIn('project_id', $request->user()->assignedProjects()->select('projects.id')))
+            ->when($request->integer('project_id'), fn ($query, int $projectId) => $query->where('project_id', $projectId))
+            ->when($filters['category'] ?? null, fn ($query, string $category) => $query->where('main_category', $category))
+            ->orderBy('project_id')->orderByDesc('submitted_at')->get();
+        $rows = $requests->map(fn (ExpenseRequest $item) => [
+            $item->request_batch_code ?: $item->request_code, $item->request_code, $item->project->project_code,
+            $item->project->name, $item->phase?->stage_label, ExpenseRequest::TYPES[$item->request_type] ?? $item->request_type,
+            ProjectManagerBudgetService::CATEGORIES[$item->main_category] ?? $item->main_category, $item->subcategory,
+            $item->item_description, $item->quantity, $item->unit, $item->requestedBy?->name, $item->submitted_at,
+            $item->supplierPayee?->name, $item->internalBudgetEntry?->item_description, $item->commercial_unit_rate,
+            $item->commercial_total, ucwords(str_replace('_', ' ', $item->status)), $item->notes,
+        ]);
+        $title = ($filters['category'] ?? null) === 'labour_subcontracts' ? 'Labour & Subcontract Requests' : 'Project Requests';
+
+        return $excel->download(strtolower(str_replace(' ', '-', $title)), $title,
+            ['Batch', 'Request', 'Project Code', 'Project', 'Phase', 'Type', 'Category', 'Subcategory', 'Description', 'Quantity', 'Unit', 'Submitted By', 'Submitted At', 'Supplier / Payee', 'Internal Budget Line', 'PM Unit Price', 'PM Total', 'Status', 'Site Notes'],
+            $rows, [], [15, 16], [12]);
+    }
+
     public function createRequest(Request $request, Project $project)
     {
         abort_unless($request->user()->hasRole('project_manager'), 403);
@@ -123,9 +152,35 @@ class ProjectManagerController extends Controller
         $agreements = LabourAgreement::query()
             ->with(['project', 'expenseRequests.payments'])
             ->whereIn('project_id', $projects->pluck('id'))
+            ->when($request->integer('project_id'), fn ($query, int $projectId) => $query->where('project_id', $projectId))
             ->orderByDesc('agreement_date')->get();
 
         return view('pm.labour.index', compact('projects', 'agreements'));
+    }
+
+    public function exportLabourAgreements(Request $request, ExcelExportService $excel)
+    {
+        abort_unless($request->user()->hasRole('project_manager') || $request->user()->hasRole('admin'), 403);
+        $projectIds = $request->user()->hasRole('project_manager')
+            ? $request->user()->assignedProjects()->pluck('projects.id')
+            : Project::pluck('id');
+        $agreements = LabourAgreement::with(['project', 'expenseRequests.payments'])
+            ->whereIn('project_id', $projectIds)
+            ->when($request->integer('project_id'), fn ($query, int $projectId) => $query->where('project_id', $projectId))
+            ->orderBy('project_id')->orderBy('agreement_code')->get();
+        $rows = $agreements->map(function (LabourAgreement $agreement) {
+            $approved = Money::sum($agreement->expenseRequests->where('status', 'approved')->map(fn ($item) => $item->approved_payable_amount));
+            $paid = (string) $agreement->paidToDate();
+
+            return [$agreement->agreement_code, $agreement->project->project_code, $agreement->project->name,
+                $agreement->fundi_subcontractor, $agreement->labour_type, $agreement->scope_of_work,
+                $agreement->agreement_date, $agreement->start_date, $agreement->expected_completion,
+                $agreement->agreed_value, $approved, $paid, Money::difference($agreement->agreed_value, $paid), $agreement->status];
+        });
+
+        return $excel->download('labour-and-subcontract-agreements', 'Labour & Subcontract Agreements',
+            ['Agreement', 'Project Code', 'Project', 'Worker / Fundi / Subcontractor', 'Type', 'Scope', 'Agreement Date', 'Start Date', 'Expected Completion', 'Agreed Value', 'PM Approved Requests', 'Actual Paid', 'Outstanding', 'Status'],
+            $rows, [], [9, 10, 11, 12], [6, 7, 8]);
     }
 
     public function createLabourAgreement(Request $request, Project $project)
@@ -167,8 +222,8 @@ class ProjectManagerController extends Controller
         foreach ($batchItems as $item) {
             abort_unless($request->user()->can('view', $item), 403);
         }
-        $currentBudget = $expenseRequest->project->internalBudgets()->whereIn('status', ['draft', 'finalized', 'approved'])
-            ->orderByRaw("CASE WHEN status = 'draft' THEN 0 ELSE 1 END")->orderByDesc('version')->first();
+        $currentBudget = $expenseRequest->project->internalBudgets()->where('status', 'approved')
+            ->orderByDesc('version')->first();
 
         return view('pm.commercial-form', [
             'expenseRequest' => $expenseRequest,
@@ -360,7 +415,24 @@ class ProjectManagerController extends Controller
         abort_unless((int) $budget->project_id === (int) $project->id, 404);
         $budgets->finalize($budget, $request->user());
 
-        return redirect()->route('pm.projects.show', $project)->with('success', 'Internal budget finalized as a planning baseline.');
+        return redirect()->route('pm.projects.show', $project)->with('success', 'Internal budget submitted for Director verification. It is locked until approved or returned.');
+    }
+
+    public function exportBudget(Request $request, Project $project, InternalBudget $budget, ExcelExportService $excel)
+    {
+        abort_unless((int) $budget->project_id === (int) $project->id, 404);
+        $this->authorize('view', $budget);
+        $budget->load(['entries.phase', 'createdBy', 'approvedBy']);
+        $rows = $budget->entries->sortBy(fn ($entry) => [$entry->phase?->phase_order, $entry->id])->map(fn ($entry) => [
+            $entry->phase?->stage_label, ProjectManagerBudgetService::CATEGORIES[$entry->main_category] ?? $entry->main_category,
+            $entry->subcategory, $entry->item_description, $entry->supplier_fundi_client,
+            $entry->quantity ?? 1, $entry->unit ?? 'LS', $entry->unit_cost, $entry->line_total, $entry->notes,
+        ]);
+        $rows->push(['', '', '', 'BUDGET TOTAL', '', '', '', '', $budget->total_amount, '']);
+
+        return $excel->download($budget->budget_code, 'Internal Budget - '.$project->name,
+            ['Phase', 'Category', 'Subcategory', 'Description', 'Expected Supplier / Fundi', 'Quantity', 'Unit', 'Unit Cost (TSh)', 'Budget Total (TSh)', 'Notes'],
+            $rows, [$budget->budget_code, 'Version '.$budget->version, 'Status: '.ucwords(str_replace('_', ' ', $budget->status)), 'Director: '.($budget->approvedBy?->name ?? 'Awaiting verification')], [7, 8]);
     }
 
     private function currentBudget(Project $project): ?InternalBudget

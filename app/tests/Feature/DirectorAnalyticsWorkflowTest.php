@@ -18,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Database\Seeders\LookupSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 class DirectorAnalyticsWorkflowTest extends TestCase
@@ -41,7 +42,7 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         $this->estimate($project, $phase, 2, 'issued', '100.00');
         $this->estimate($other, $otherPhase, 1, 'issued', '300.00');
 
-        $budget = InternalBudget::create(['budget_code' => 'BUD-DIR-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'finalized']);
+        $budget = InternalBudget::create(['budget_code' => 'BUD-DIR-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'approved']);
         $budget->entries()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'item_description' => 'Planned cement', 'quantity' => '1', 'unit_cost' => '100.00']);
 
         $approved = $this->expenseRequest($project, $phase, 'approved', '80.00', 'materials');
@@ -91,7 +92,7 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         [$project, $phase] = $this->project('BWG-DIR-PROJ-001');
         $estimate = $this->estimate($project, $phase, 1, 'issued', '1000.00');
         $estimate->entries()->firstOrFail()->update(['subcategory' => 'concrete_cement']);
-        $budget = InternalBudget::create(['budget_code' => 'BUD-DIR-PROJ-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'finalized']);
+        $budget = InternalBudget::create(['budget_code' => 'BUD-DIR-PROJ-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'approved']);
         $budget->entries()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'subcategory' => 'concrete_cement', 'item_description' => 'Cement budget', 'quantity' => '1', 'unit_cost' => '100000000.00']);
         $request = $this->expenseRequest($project, $phase, 'approved', '80000000.00', 'materials');
         $request->update(['subcategory' => 'concrete_cement']);
@@ -228,7 +229,7 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         [$zeroProject, $zeroPhase] = $this->project('BWG-DIR-ZERO-001');
         $this->expenseRequest($zeroProject, $zeroPhase, 'approved', '10.00', 'materials');
         [$overProject, $overPhase] = $this->project('BWG-DIR-OVER-001');
-        $budget = InternalBudget::create(['budget_code' => 'BUD-DIR-OVER-001', 'project_id' => $overProject->id, 'version' => 1, 'status' => 'finalized']);
+        $budget = InternalBudget::create(['budget_code' => 'BUD-DIR-OVER-001', 'project_id' => $overProject->id, 'version' => 1, 'status' => 'approved']);
         $budget->entries()->create(['project_phase_id' => $overPhase->id, 'main_category' => 'materials', 'item_description' => 'Budgeted item', 'quantity' => '1', 'unit_cost' => '100.00']);
         $approved = $this->expenseRequest($overProject, $overPhase, 'approved', '120.00', 'materials');
         ExpensePayment::create(['payment_code' => 'PAY-DIR-OVER-001', 'expense_request_id' => $approved->id, 'project_id' => $overProject->id, 'project_phase_id' => $overPhase->id, 'amount' => '150.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash']);
@@ -256,7 +257,11 @@ class DirectorAnalyticsWorkflowTest extends TestCase
         $director = $this->user('director');
         $this->actingAs($director)->get(route('director.index'))
             ->assertOk()->assertSee('1')->assertSee('75.00')->assertSee('Receivable Attention');
-        $this->actingAs($director)->get(route('director.portfolio.export'))->assertOk()->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $export = $this->actingAs($director)->get(route('director.portfolio.export'));
+        $export->assertOk()->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $sheet = IOFactory::load($export->baseResponse->getFile()->getPathname())->getActiveSheet();
+        $this->assertSame('Director Project Portfolio', $sheet->getCell('A1')->getValue());
+        $this->assertSame('Project Code', $sheet->getCell('A4')->getValue());
         $this->actingAs($director)->get(route('director.summary.export'))->assertOk();
         $this->actingAs($director)->get(route('director.transactions.export'))->assertOk();
     }

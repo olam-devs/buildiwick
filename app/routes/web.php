@@ -25,17 +25,19 @@ Route::post('/logout', [AuthController::class, 'logout']);
 
 Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/director', [DirectorController::class, 'index'])->name('director.index');
+    Route::get('/director/exports/projects.xlsx', [DirectorController::class, 'exportPortfolio'])->name('director.portfolio.export');
+    Route::get('/director/exports/summary.xlsx', [DirectorController::class, 'exportSummary'])->name('director.summary.export');
+    Route::get('/director/exports/transactions.xlsx', [DirectorController::class, 'exportTransactions'])->name('director.transactions.export');
     Route::get('/director/projects/{project}', [DirectorController::class, 'project'])->name('director.projects.show');
+    Route::post('/director/projects/{project}/budgets/{budget}/decision', [DirectorController::class, 'decideBudget'])->name('director.budgets.decision');
     Route::get('/director/receivables', [DirectorController::class, 'receivables'])->name('director.receivables.index');
     Route::get('/director/payables', [DirectorController::class, 'payables'])->name('director.payables.index');
     Route::get('/director/transactions', [DirectorController::class, 'transactions'])->name('director.transactions.index');
     Route::get('/director/request-approvals', [DirectorController::class, 'requests'])->name('director.requests.index');
-    Route::get('/director/projects.csv', [DirectorController::class, 'exportPortfolio'])->name('director.portfolio.export');
-    Route::get('/director/summary.csv', [DirectorController::class, 'exportSummary'])->name('director.summary.export');
-    Route::get('/director/transactions.csv', [DirectorController::class, 'exportTransactions'])->name('director.transactions.export');
 
     Route::get('/estimator/projects', [EstimatorController::class, 'index'])->name('estimator.projects.index');
     Route::get('/estimator/projects/{project}', [EstimatorController::class, 'show'])->name('estimator.projects.show');
+    Route::get('/estimator/projects/{project}/estimates/{estimate}.xlsx', [EstimatorController::class, 'export'])->name('estimator.estimates.export');
     Route::post('/estimator/projects/{project}/estimates', [EstimatorController::class, 'startEstimate'])->name('estimator.estimates.start');
     Route::get('/estimator/projects/{project}/phases/{phase}/entries/create', [EstimatorController::class, 'createEntry'])->name('estimator.entries.create');
     Route::post('/estimator/projects/{project}/phases/{phase}/entries', [EstimatorController::class, 'storeEntry'])->name('estimator.entries.store');
@@ -57,7 +59,9 @@ Route::middleware(['auth', 'active-account'])->group(function () {
 
     Route::get('/pm/projects', [ProjectManagerController::class, 'index'])->name('pm.projects.index');
     Route::get('/pm/site-requests', [ProjectManagerController::class, 'requests'])->name('pm.requests.index');
+    Route::get('/pm/site-requests.xlsx', [ProjectManagerController::class, 'exportRequests'])->name('pm.requests.export');
     Route::get('/pm/labour-agreements', [ProjectManagerController::class, 'labourAgreements'])->name('pm.labour.index');
+    Route::get('/pm/labour-agreements.xlsx', [ProjectManagerController::class, 'exportLabourAgreements'])->name('pm.labour.export');
     Route::get('/pm/projects/{project}/labour-agreements/create', [ProjectManagerController::class, 'createLabourAgreement'])->name('pm.labour.create');
     Route::post('/pm/projects/{project}/labour-agreements', [ProjectManagerController::class, 'storeLabourAgreement'])->name('pm.labour.store');
     Route::get('/pm/projects/{project}/requests/create', [ProjectManagerController::class, 'createRequest'])->name('pm.requests.create');
@@ -86,6 +90,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/accountant/invoices', [AccountantController::class, 'invoices'])->name('accountant.invoices.index');
     Route::get('/accountant/projects/{project}/invoices/create', [AccountantController::class, 'createInvoice'])->name('accountant.invoices.create');
     Route::post('/accountant/projects/{project}/invoices', [AccountantController::class, 'storeInvoice'])->name('accountant.invoices.store');
+    Route::get('/accountant/invoices/{clientInvoice}.xlsx', [AccountantController::class, 'exportInvoice'])->name('accountant.invoices.export');
     Route::get('/accountant/invoices/{clientInvoice}', [AccountantController::class, 'invoice'])->name('accountant.invoices.show');
     Route::post('/accountant/invoices/{clientInvoice}/issue', [AccountantController::class, 'issueInvoice'])->name('accountant.invoices.issue');
     Route::post('/accountant/invoices/{clientInvoice}/void', [AccountantController::class, 'voidInvoice'])->name('accountant.invoices.void');
@@ -103,6 +108,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/pm/projects/{project}', [ProjectManagerController::class, 'show'])->name('pm.projects.show');
     Route::post('/pm/projects/{project}/budgets', [ProjectManagerController::class, 'startBudget'])->name('pm.budgets.start');
     Route::post('/pm/projects/{project}/budgets/{budget}/finalize', [ProjectManagerController::class, 'finalize'])->name('pm.budgets.finalize');
+    Route::get('/pm/projects/{project}/budgets/{budget}.xlsx', [ProjectManagerController::class, 'exportBudget'])->name('pm.budgets.export');
     Route::get('/pm/projects/{project}/phases/{phase}/budget-entries/create', [ProjectManagerController::class, 'createEntry'])->name('pm.budget-entries.create');
     Route::post('/pm/projects/{project}/phases/{phase}/budget-entries', [ProjectManagerController::class, 'storeEntry'])->name('pm.budget-entries.store');
     Route::get('/pm/projects/{project}/phases/{phase}/budget-entries/{entry}/edit', [ProjectManagerController::class, 'editEntry'])->name('pm.budget-entries.edit');

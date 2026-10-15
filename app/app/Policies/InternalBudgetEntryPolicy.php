@@ -2,12 +2,13 @@
 
 namespace App\Policies;
 
+use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
 use App\Models\User;
 
 class InternalBudgetEntryPolicy
 {
-    public function create(User $user, \App\Models\InternalBudget $budget): bool
+    public function create(User $user, InternalBudget $budget): bool
     {
         return $budget->status === 'draft'
             && ($user->hasRole('admin') || ($user->hasRole('project_manager')

@@ -22,5 +22,5 @@ Laravel Boost was never installed for this project — that's a deliberate omiss
 - `app/Http/Controllers/Web` — the real Blade-rendered product: `AuthController`, `DashboardController`, `EntryController`.
 - `app/Http/Controllers/Api` — JSON API, same requests/policies reused.
 - `app/Http/Requests` — `StoreTransactionRequest`, `StoreLabourAgreementRequest`, shared by both Web and Api controllers.
-- `app/Services/TransactionRecorder.php` — the one place a `Transaction` row gets created. Both entry points call this; don't duplicate its logic in a new controller.
+- `app/Services/TransactionRecorder.php` — the one place a `Transaction` row gets created. Both entry points call this; don't duplicate its logic in a new controller. `ExcelExportService` is the shared formatted `.xlsx` writer; do not reintroduce per-controller CSV streams.
 - `resources/views` — Blade templates. `layouts/app.blade.php` is the shared shell (sidebar, styles, the New Entry drawer include); `partials/new-entry-drawer.blade.php` is the entry form itself, fed lookups/projects/agreements via a View Composer in `AppServiceProvider`.

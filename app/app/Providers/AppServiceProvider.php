@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\ClientInvoice;
 use App\Models\EstimateEntry;
+use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
 use App\Models\LabourAgreement;
@@ -90,6 +92,19 @@ class AppServiceProvider extends ServiceProvider
                 'drawerLookups' => Lookup::where('is_active', true)->orderBy('sort_order')->get()->groupBy('type'),
                 'drawerAgreements' => LabourAgreement::whereIn('project_id', $projectIds)->get(['id', 'project_id', 'fundi_subcontractor', 'scope_of_work']),
             ]);
+        });
+
+        View::composer('layouts.app', function ($view) {
+            $project = request()->route('project');
+            if (! $project instanceof Project) {
+                $project = match (true) {
+                    request()->route('expenseRequest') instanceof ExpenseRequest => request()->route('expenseRequest')->project,
+                    request()->route('clientInvoice') instanceof ClientInvoice => request()->route('clientInvoice')->project,
+                    request()->filled('project_id') => Project::find(request()->integer('project_id')),
+                    default => null,
+                };
+            }
+            $view->with('workspaceProject', $project);
         });
     }
 }

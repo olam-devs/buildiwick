@@ -18,7 +18,6 @@ class StoreSiteExpenseRequestBatch extends FormRequest
                 'item_description' => $this->input('item_description'),
                 'quantity' => $this->input('quantity'),
                 'unit' => $this->input('unit'),
-                'requested_amount' => $this->input('requested_amount'),
                 'notes' => $this->input('notes'),
                 'labour_agreement_id' => $this->input('labour_agreement_id'),
             ]]]);
@@ -47,24 +46,11 @@ class StoreSiteExpenseRequestBatch extends FormRequest
             'items.*.item_description' => ['required', 'string', 'max:1000'],
             'items.*.quantity' => ['nullable', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'items.*.unit' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'unit')->where('is_active', true)],
-            'items.*.requested_amount' => ['nullable', 'numeric', 'decimal:0,2', 'min:0.01', 'max:999999999999.99'],
             'items.*.notes' => ['nullable', 'string', 'max:2000'],
             'items.*.labour_agreement_id' => [
                 'nullable', 'integer',
                 Rule::exists('labour_agreements', 'id')->where('project_id', $this->route('project')?->id),
             ],
         ];
-    }
-
-    public function after(): array
-    {
-        return [function ($validator): void {
-            foreach ($this->input('items', []) as $index => $item) {
-                if (in_array($item['request_type'] ?? null, ['salary_wage', 'cash_amount'], true)
-                    && empty($item['requested_amount'])) {
-                    $validator->errors()->add("items.$index.requested_amount", 'Enter the amount requested for every salary, wage or cash item.');
-                }
-            }
-        }];
     }
 }

@@ -137,7 +137,7 @@ class SiteExpenseRequestService
                         'item_description' => $item['item_description'],
                         'quantity' => $this->normalizeQuantity($item['quantity'] ?? null),
                         'unit' => $item['unit'] ?? null,
-                        'requested_amount' => $item['requested_amount'] ?? null,
+                        'requested_amount' => null,
                         'requested_at' => $data['requested_at'],
                         'submitted_at' => now(),
                         'status' => 'pending_approval',

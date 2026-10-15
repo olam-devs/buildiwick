@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Services\EstimatorEstimateService;
+use App\Services\ExcelExportService;
 use App\Support\CostEntryOptions;
 use Illuminate\Http\Request;
 
@@ -145,6 +146,23 @@ class EstimatorController extends Controller
         $estimates->finalize($estimate, $request->user());
 
         return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate issued and locked for invoicing.');
+    }
+
+    public function export(Request $request, Project $project, ProjectEstimate $estimate, ExcelExportService $excel)
+    {
+        abort_unless((int) $estimate->project_id === (int) $project->id, 404);
+        $this->authorize('view', $estimate);
+        $estimate->load(['entries.phase', 'client', 'preparedBy', 'issuedBy']);
+        $rows = $estimate->entries->sortBy(fn ($entry) => [$entry->phase?->phase_order, $entry->id])->map(fn ($entry) => [
+            $entry->phase?->stage_label, $entry->main_category, $entry->subcategory, $entry->item_description,
+            $entry->quantity ?? 1, $entry->unit ?? 'LS', $entry->base_unit_cost, $entry->base_total,
+            $entry->markup_percent, $entry->client_unit_cost, $entry->markup_amount, $entry->line_total, $entry->notes,
+        ]);
+        $rows->push(['', 'PROJECT TOTAL', '', '', '', '', '', '', '', '', '', $estimate->total_amount, '']);
+
+        return $excel->download($estimate->estimate_code, 'Project Estimate - '.$project->name,
+            ['Phase', 'Category', 'Subcategory', 'Item / Description', 'Quantity', 'Unit', 'Base Unit Cost', 'Base Total', 'Markup %', 'Client Unit Price', 'Markup Amount', 'Client Total', 'Notes'],
+            $rows, [$estimate->estimate_code, 'Client: '.($estimate->client?->name ?? 'Not linked'), 'Version '.$estimate->version, 'Status: '.ucfirst($estimate->status)], [6, 7, 9, 10, 11]);
     }
 
     private function lookupData(): array

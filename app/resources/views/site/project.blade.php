@@ -23,7 +23,7 @@
   <div class="tile"><div class="label">Pending Requests</div><div class="value">{{ $summary['pending_count'] }}</div></div>
   <div class="tile"><div class="label">Approved Requests</div><div class="value">{{ $summary['approved_count'] }}</div></div>
   <div class="tile"><div class="label">Rejected Requests</div><div class="value">{{ $summary['rejected_count'] }}</div></div>
-  <div class="tile"><div class="label">Awaiting PM Pricing/Review</div><div class="value">{{ $summary['awaiting_pricing_count'] }}</div></div>
+  <div class="tile"><div class="label">Awaiting PM Review</div><div class="value">{{ $summary['awaiting_pricing_count'] }}</div></div>
   @if($showFinancialDetails && $summary['requested'] !== '0.00')<div class="tile"><div class="label">Total Requested (Historical Priced)</div><div class="value">{{ \App\Support\Money::format($summary['requested']) }}</div></div>@endif
 </section>
 

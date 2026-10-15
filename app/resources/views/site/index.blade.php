@@ -7,7 +7,7 @@
   <section class="panel empty-state"><h3>No projects are currently assigned to you.</h3><p>Your assigned projects will appear here.</p></section>
 @else
   <div class="tablewrap"><table class="site-project-table">
-    <thead><tr><th>Project</th><th>Code</th><th>Current Phase</th><th>Materials Requests</th><th>Labour &amp; Subcontracts Requests</th><th>Logistics &amp; Equipment Requests</th><th>Preliminaries &amp; Site Overheads Requests</th><th>Total Requests</th><th>Pending Requests</th><th>Awaiting PM Pricing/Review</th><th>Status</th><th>Action</th></tr></thead>
+    <thead><tr><th>Project</th><th>Code</th><th>Current Phase</th><th>Materials Requests</th><th>Labour &amp; Subcontracts Requests</th><th>Logistics &amp; Equipment Requests</th><th>Preliminaries &amp; Site Overheads Requests</th><th>Total Requests</th><th>Pending Requests</th><th>Awaiting PM Review</th><th>Status</th><th>Action</th></tr></thead>
     <tbody>
       @foreach($projects as $row)
         @php($hasRequests = $row->summary['total_requests'] > 0)
