@@ -2,6 +2,20 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-15 — Accountant Supplier-Group Payment Workspace
+
+**Corrected the approved-request workspace so Accounts operates entirely from PM-approved supplier groups.**
+
+- Removed the Site Operator’s original-request section, Site submitter, Site notes, and requested-value context from the Accountant request page.
+- Moved supplier name, type, contact person, phone, email, address, approved payment method, destination, and quotation links to the top of each supplier group.
+- Placed each group’s approved items, internal-budget allocations, group totals, payment history, and payment controls together. Payments remain recorded against the exact item so budget usage and audit history do not become ambiguous when one supplier group contains several items.
+- Replaced the visible PM grouping checkbox column with whole-row interaction: hover highlights the item card, clicking anywhere outside its form controls selects it, and keyboard Enter/Space selection is supported.
+- Full suite passes: **145 tests / 1,406 assertions**.
+
+### Workflow decision
+
+- Accounts receives the PM-approved commercial instruction only. The supplier group is the payment workspace, but each payment continues to post to a specific approved item.
+
 ## 2026-10-15 — Clickable Request Summaries, Supplier Groups, and Document Polish
 
 **Made request navigation and Accounts processing match the agreed complete-request workflow.**

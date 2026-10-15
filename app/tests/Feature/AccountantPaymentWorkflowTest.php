@@ -57,7 +57,7 @@ class AccountantPaymentWorkflowTest extends TestCase
     public function test_accountant_sees_one_complete_request_with_supplier_groups_and_item_totals(): void
     {
         [$project, $accountant] = $this->projectAndAccountant();
-        $hardware = SupplierPayee::create(['name' => 'Harbour Hardware', 'type' => 'supplier', 'is_active' => true]);
+        $hardware = SupplierPayee::create(['name' => 'Harbour Hardware', 'type' => 'supplier', 'contact_person' => 'Halima', 'phone' => '0711 000 111', 'address' => 'Kurasini, Dar es Salaam', 'is_active' => true]);
         $plant = SupplierPayee::create(['name' => 'Coastal Plant Hire', 'type' => 'supplier', 'is_active' => true]);
         $first = $this->approvedRequest($project, '100.00');
         $first->update(['request_batch_code' => 'SRQ-GROUP-001', 'request_line_number' => 1, 'supplier_payee_id' => $hardware->id, 'item_description' => 'Cement']);
@@ -70,7 +70,9 @@ class AccountantPaymentWorkflowTest extends TestCase
 
         $this->actingAs($accountant)->get(route('accountant.requests.show', $first))
             ->assertOk()->assertSee('2 supplier group(s)')->assertSee('Harbour Hardware')
+            ->assertSee('Halima')->assertSee('0711 000 111')->assertSee('Kurasini, Dar es Salaam')
             ->assertSee('Coastal Plant Hire')->assertSee('Excavator hire')->assertSee('350.00')
+            ->assertSee('Pay This Supplier Group')->assertDontSee('Original Request')->assertDontSee('Requested By')
             ->assertSee('project_id='.$project->id.'&amp;filter=all', false);
 
         app(ExpensePaymentRecorder::class)->record($first->fresh(), ['amount' => '50.00', 'payment_date' => now()->toDateString(), 'payment_method' => 'bank_transfer'], $accountant);
@@ -122,7 +124,9 @@ class AccountantPaymentWorkflowTest extends TestCase
         [$project, $accountant] = $this->projectAndAccountant();
         $request = $this->approvedRequest($project, '250.00');
         $this->actingAs($accountant)->get(route('accountant.requests.show', $request))
-            ->assertOk()->assertSee('Approved Commercial Instruction')->assertSee('ABC Hardware')->assertSee('12345');
+            ->assertOk()->assertSee('Supplier Groups, Approved Items and Payments')->assertSee('ABC Hardware')
+            ->assertSee('Asha')->assertSee('12345')->assertSee('Pay This Supplier Group')
+            ->assertDontSee('Original Request')->assertDontSee('Requested By');
         $payment = app(ExpensePaymentRecorder::class)->record($request, ['amount' => '250.00', 'payment_date' => now()->toDateString(), 'payment_method' => 'bank_transfer'], $accountant, UploadedFile::fake()->create('bank-confirmation.pdf', 100, 'application/pdf'));
         $this->assertSame('bank-confirmation.pdf', $payment->evidence_original_name);
         Storage::disk('local')->assertExists($payment->evidence_link);
