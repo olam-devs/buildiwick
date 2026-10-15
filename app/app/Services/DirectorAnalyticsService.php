@@ -67,7 +67,7 @@ class DirectorAnalyticsService
         $expenses = Money::sum($expensePayments->pluck('amount'));
         $commitments = Money::sum($approvedRequests->map(fn (ExpenseRequest $request) => $request->approved_payable_amount));
         $budget = $budgetRecord?->total_amount ?? '0.00';
-        $phaseStates = $loaded->phases->whereIn('stage_code', self::PHASES)->sortBy('phase_order')->map(function ($phase) use ($cutoff, $labels) {
+        $phaseStates = $loaded->phases->sortBy('phase_order')->map(function ($phase) use ($cutoff) {
             $started = $phase->actual_start_date ?? $phase->started_at;
             $completed = $phase->actual_completion_date ?? $phase->completed_at;
             $status = $completed && CarbonImmutable::parse($completed)->lte($cutoff)
@@ -75,7 +75,7 @@ class DirectorAnalyticsService
                 : (($started && CarbonImmutable::parse($started)->lte($cutoff)) ? 'active' : 'not_started');
 
             return [
-                'label' => $labels[$phase->stage_code] ?? ucwords(str_replace('_', ' ', $phase->stage_code)),
+                'label' => $phase->stage_label,
                 'status' => $status,
             ];
         })->values();
@@ -239,7 +239,7 @@ class DirectorAnalyticsService
         $invoicedCurrent = Money::sum($issuedInvoices->map(fn (ClientInvoice $invoice) => $invoice->total_amount));
 
         $phaseAnalytics = [];
-        foreach ($project->phases->whereIn('stage_code', self::PHASES)->sortBy('phase_order') as $phase) {
+        foreach ($project->phases->sortBy('phase_order') as $phase) {
             $phaseEstimateEntries = $estimateEntries->where('project_phase_id', $phase->id);
             $phaseBudgetEntries = $budgetEntries->where('project_phase_id', $phase->id);
             $phaseRequests = $approvedRequests->where('project_phase_id', $phase->id);
@@ -249,7 +249,7 @@ class DirectorAnalyticsService
             $phaseActual = Money::sum($phasePayments->pluck('amount'));
             $phaseAnalytics[] = [
                 'id' => $phase->id, 'stage_code' => $phase->stage_code,
-                'label' => $labels[$phase->stage_code] ?? ucwords(str_replace('_', ' ', $phase->stage_code)),
+                'label' => $phase->stage_label,
                 'status' => $phase->status,
                 'estimator_base' => Money::sum($phaseEstimateEntries->map(fn ($entry) => $entry->base_total)),
                 'estimator_client' => Money::sum($phaseEstimateEntries->map(fn ($entry) => $entry->line_total)),
@@ -311,17 +311,17 @@ class DirectorAnalyticsService
             ];
         }
 
-        $standardPhases = $project->phases->whereIn('stage_code', self::PHASES);
+        $standardPhases = $project->phases;
         $completedPhases = $standardPhases->where('status', 'completed')->count();
         $activePhase = $project->activePhase;
         $budgetUtilization = Money::compare($budget, '0') === 0 ? null : Money::percentage($actualExpenses, $budget);
         $commitmentUtilization = Money::compare($budget, '0') === 0 ? null : Money::percentage($approvedCommitments, $budget);
-        $phaseHistory = $standardPhases->sortBy('phase_order')->map(function ($phase) use ($labels) {
+        $phaseHistory = $standardPhases->sortBy('phase_order')->map(function ($phase) {
             $started = $phase->actual_start_date ?? $phase->started_at;
             $completed = $phase->actual_completion_date ?? $phase->completed_at;
 
             return [
-                'label' => $labels[$phase->stage_code] ?? ucwords(str_replace('_', ' ', $phase->stage_code)),
+                'label' => $phase->stage_label,
                 'status' => $phase->status,
                 'started_at' => $started,
                 'completed_at' => $completed,

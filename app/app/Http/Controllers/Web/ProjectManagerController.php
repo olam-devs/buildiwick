@@ -119,7 +119,7 @@ class ProjectManagerController extends Controller
         abort_unless($request->user()->hasRole('project_manager'), 403);
         $this->authorize('create', [ExpenseRequest::class, $project]);
         $activePhases = $project->phases()->where('status', 'active')
-            ->whereIn('stage_code', SiteExpenseRequestService::PHASES)->orderBy('phase_order')->get();
+            ->orderBy('phase_order')->get();
 
         return view('site.request-form', [
             'project' => $project,
@@ -335,7 +335,7 @@ class ProjectManagerController extends Controller
     {
         abort_unless($request->user()->hasRole('admin') || $request->user()->hasRole('project_manager'), 403);
         $this->authorize('viewProject', [InternalBudget::class, $project]);
-        $project->load(['client', 'activePhase', 'phases' => fn ($query) => $query->whereIn('stage_code', ProjectManagerBudgetService::PHASES)->orderBy('phase_order')]);
+        $project->load(['client', 'activePhase', 'phases' => fn ($query) => $query->orderBy('phase_order')]);
         $working = $project->internalBudgets()->where('status', 'draft')->with('entries.enteredBy')->first();
         $current = $working ?? $project->internalBudgets()->whereIn('status', ['finalized', 'approved'])->orderByDesc('version')->with('entries.enteredBy')->first();
         $comparison = $budgets->projectComparison($project);
@@ -381,7 +381,7 @@ class ProjectManagerController extends Controller
     public function createEntry(Request $request, Project $project, ProjectPhase $phase, ProjectManagerBudgetService $budgets)
     {
         $this->authorize('viewProject', [InternalBudget::class, $project]);
-        abort_unless((int) $phase->project_id === (int) $project->id && in_array($phase->stage_code, ProjectManagerBudgetService::PHASES, true), 404);
+        abort_unless((int) $phase->project_id === (int) $project->id, 404);
         $budget = $budgets->ensureWorkingBudget($project, $request->user());
         $this->authorize('create', [InternalBudgetEntry::class, $budget]);
 
@@ -391,7 +391,7 @@ class ProjectManagerController extends Controller
     public function storeEntry(SaveInternalBudgetEntryRequest $request, Project $project, ProjectPhase $phase, ProjectManagerBudgetService $budgets)
     {
         $this->authorize('viewProject', [InternalBudget::class, $project]);
-        abort_unless((int) $phase->project_id === (int) $project->id && in_array($phase->stage_code, ProjectManagerBudgetService::PHASES, true), 404);
+        abort_unless((int) $phase->project_id === (int) $project->id, 404);
         $budget = $budgets->ensureWorkingBudget($project, $request->user());
         $budgets->createEntry($budget, $phase, $request->validated(), $request->user());
 
@@ -418,8 +418,8 @@ class ProjectManagerController extends Controller
     {
         abort_unless((int) $phase->project_id === (int) $project->id && (int) $entry->project_phase_id === (int) $phase->id, 404);
         $this->authorize('delete', $entry);
-        $validated = $request->validate(['edit_reason' => ['required', 'string', 'max:2000']]);
-        $budgets->deleteEntry($entry, $validated['edit_reason'], $request->user());
+        $validated = $request->validate(['edit_reason' => [$entry->budget->version > 1 ? 'required' : 'nullable', 'string', 'max:2000']]);
+        $budgets->deleteEntry($entry, $validated['edit_reason'] ?? null, $request->user());
 
         return redirect()->route('pm.projects.show', $project)->with('success', 'Draft budget entry deleted.');
     }
@@ -438,15 +438,16 @@ class ProjectManagerController extends Controller
         $this->authorize('view', $budget);
         $budget->load(['entries.phase', 'createdBy', 'approvedBy']);
         $rows = $budget->entries->sortBy(fn ($entry) => [$entry->phase?->phase_order, $entry->id])->map(fn ($entry) => [
-            $entry->phase?->stage_label, ProjectManagerBudgetService::CATEGORIES[$entry->main_category] ?? $entry->main_category,
+            $entry->work_area ?: 'General', $entry->phase?->stage_label, $entry->work_section ?: 'General work', $entry->item_reference,
+            ProjectManagerBudgetService::CATEGORIES[$entry->main_category] ?? $entry->main_category,
             $entry->subcategory, $entry->item_description, $entry->supplier_fundi_client,
             $entry->quantity ?? 1, $entry->unit ?? 'LS', $entry->unit_cost, $entry->line_total, $entry->notes,
         ]);
-        $rows->push(['', '', '', 'BUDGET TOTAL', '', '', '', '', $budget->total_amount, '']);
+        $rows->push(['', '', '', '', '', '', 'BUDGET TOTAL', '', '', '', '', $budget->total_amount, '']);
 
         return $excel->download($budget->budget_code, 'Internal Budget - '.$project->name,
-            ['Phase', 'Category', 'Subcategory', 'Description', 'Expected Supplier / Fundi', 'Quantity', 'Unit', 'Unit Cost (TSh)', 'Budget Total (TSh)', 'Notes'],
-            $rows, [$budget->budget_code, 'Version '.$budget->version, 'Status: '.ucwords(str_replace('_', ' ', $budget->status)), 'Director review: '.($budget->approvedBy?->name ?? ($budget->status === 'approved' ? 'Grandfathered baseline' : 'Awaiting verification'))], [7, 8]);
+            ['Work Area / Building', 'Phase', 'Work Section', 'Item Ref.', 'Category', 'Subcategory', 'Description', 'Expected Supplier / Fundi', 'Quantity', 'Unit', 'Unit Cost (TSh)', 'Budget Total (TSh)', 'Notes'],
+            $rows, [$budget->budget_code, 'Project: '.$project->name, 'Location: '.($project->location ?? 'Not set'), 'Version '.$budget->version, 'Status: '.ucwords(str_replace('_', ' ', $budget->status)), 'Director review: '.($budget->approvedBy?->name ?? ($budget->status === 'approved' ? 'Grandfathered baseline' : 'Awaiting verification'))], [10, 11]);
     }
 
     private function currentBudget(Project $project): ?InternalBudget

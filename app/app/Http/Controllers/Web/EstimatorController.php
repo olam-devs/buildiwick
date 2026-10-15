@@ -12,6 +12,7 @@ use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Services\EstimatorEstimateService;
 use App\Services\ExcelExportService;
+use App\Services\ProjectPhaseService;
 use App\Support\CostEntryOptions;
 use Illuminate\Http\Request;
 
@@ -47,14 +48,14 @@ class EstimatorController extends Controller
         return view('estimator.index', compact('projects'));
     }
 
-    public function show(Request $request, Project $project, EstimatorEstimateService $estimates)
+    public function show(Request $request, Project $project, EstimatorEstimateService $estimates, ProjectPhaseService $phases)
     {
         $this->authorize('viewProject', [ProjectEstimate::class, $project]);
 
         $project->load([
             'client',
             'activePhase',
-            'phases' => fn ($query) => $query->whereIn('stage_code', EstimatorEstimateService::PHASES)->orderBy('phase_order'),
+            'phases' => fn ($query) => $query->orderBy('phase_order'),
         ]);
         $workingEstimate = $project->estimates()->where('status', 'draft')->with('entries.enteredBy')->first();
         $displayEstimate = $workingEstimate ?? $project->estimates()->whereIn('status', ['issued', 'superseded'])->orderByDesc('version')->with('entries.enteredBy')->first();
@@ -75,7 +76,40 @@ class EstimatorController extends Controller
         $unitLabels = Lookup::where('type', 'unit')->pluck('label', 'code');
         $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'estimate')->with('editor')->latest()->get();
 
-        return view('estimator.show', compact('project', 'workingEstimate', 'displayEstimate', 'phaseSummaries', 'projectSummary', 'history', 'subcategoryLabels', 'unitLabels', 'editLogs'));
+        $phasesLocked = $phases->isLocked($project);
+
+        return view('estimator.show', compact('project', 'workingEstimate', 'displayEstimate', 'phaseSummaries', 'projectSummary', 'history', 'subcategoryLabels', 'unitLabels', 'editLogs', 'phasesLocked'));
+    }
+
+    public function storePhase(Request $request, Project $project, ProjectPhaseService $phases)
+    {
+        $validated = $this->phaseData($request);
+        $phases->create($project, $validated, $request->user());
+
+        return back()->with('success', 'Project phase added.');
+    }
+
+    public function updatePhase(Request $request, Project $project, ProjectPhase $phase, ProjectPhaseService $phases)
+    {
+        abort_unless((int) $phase->project_id === (int) $project->id, 404);
+        $phases->update($phase, $this->phaseData($request), $request->user());
+
+        return back()->with('success', 'Project phase updated.');
+    }
+
+    public function deletePhase(Request $request, Project $project, ProjectPhase $phase, ProjectPhaseService $phases)
+    {
+        abort_unless((int) $phase->project_id === (int) $project->id, 404);
+        $phases->delete($phase, $request->user());
+
+        return back()->with('success', 'Draft phase and its draft entries were deleted.');
+    }
+
+    public function resetPhases(Request $request, Project $project, ProjectPhaseService $phases)
+    {
+        $phases->reset($project, $request->user());
+
+        return back()->with('success', 'Draft phase structure was reset to the default template.');
     }
 
     public function startEstimate(Request $request, Project $project, EstimatorEstimateService $estimates)
@@ -147,8 +181,8 @@ class EstimatorController extends Controller
     {
         abort_unless((int) $phase->project_id === (int) $project->id && (int) $entry->project_phase_id === (int) $phase->id, 404);
         $this->authorize('delete', $entry);
-        $validated = $request->validate(['edit_reason' => ['required', 'string', 'max:2000']]);
-        $estimates->deleteEntry($entry, $validated['edit_reason'], $request->user());
+        $validated = $request->validate(['edit_reason' => [$entry->estimate->version > 1 ? 'required' : 'nullable', 'string', 'max:2000']]);
+        $estimates->deleteEntry($entry, $validated['edit_reason'] ?? null, $request->user());
 
         return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate entry deleted.');
     }
@@ -167,15 +201,16 @@ class EstimatorController extends Controller
         $this->authorize('view', $estimate);
         $estimate->load(['entries.phase', 'client', 'preparedBy', 'issuedBy']);
         $rows = $estimate->entries->sortBy(fn ($entry) => [$entry->phase?->phase_order, $entry->id])->map(fn ($entry) => [
-            $entry->phase?->stage_label, $entry->main_category, $entry->subcategory, $entry->item_description,
+            $entry->work_area ?: 'General', $entry->phase?->stage_label, $entry->work_section ?: 'General work', $entry->item_reference,
+            $entry->main_category, $entry->subcategory, $entry->item_description,
             $entry->quantity ?? 1, $entry->unit ?? 'LS', $entry->base_unit_cost, $entry->base_total,
             $entry->markup_percent, $entry->client_unit_cost, $entry->markup_amount, $entry->line_total, $entry->notes,
         ]);
-        $rows->push(['', 'PROJECT TOTAL', '', '', '', '', '', '', '', '', '', $estimate->total_amount, '']);
+        $rows->push(['', '', '', '', 'PROJECT TOTAL', '', '', '', '', '', '', '', '', '', $estimate->total_amount, '']);
 
         return $excel->download($estimate->estimate_code, 'Project Estimate - '.$project->name,
-            ['Phase', 'Category', 'Subcategory', 'Item / Description', 'Quantity', 'Unit', 'Base Unit Cost', 'Base Total', 'Markup %', 'Client Unit Price', 'Markup Amount', 'Client Total', 'Notes'],
-            $rows, [$estimate->estimate_code, 'Client: '.($estimate->client?->name ?? 'Not linked'), 'Version '.$estimate->version, 'Status: '.ucfirst($estimate->status)], [6, 7, 9, 10, 11]);
+            ['Work Area / Building', 'Phase', 'Work Section', 'Item Ref.', 'Category', 'Subcategory', 'Item / Description', 'Quantity', 'Unit', 'Base Unit Cost', 'Base Total', 'Markup %', 'Client Unit Price', 'Markup Amount', 'Client Total', 'Notes'],
+            $rows, [$estimate->estimate_code, 'Client: '.($estimate->client?->name ?? 'Not linked'), 'Location: '.($project->location ?? 'Not set'), 'Version '.$estimate->version, 'Status: '.ucfirst($estimate->status)], [9, 10, 12, 13, 14]);
     }
 
     private function lookupData(): array
@@ -186,5 +221,14 @@ class EstimatorController extends Controller
             'units' => Lookup::ofType('unit')->get(),
             'unitRecommendations' => CostEntryOptions::unitRecommendations(),
         ];
+    }
+
+    private function phaseData(Request $request): array
+    {
+        return $request->validate([
+            'phase_name' => ['required', 'string', 'max:150'],
+            'planned_start_date' => ['nullable', 'date'],
+            'planned_completion_date' => ['nullable', 'date', 'after_or_equal:planned_start_date'],
+        ]);
     }
 }

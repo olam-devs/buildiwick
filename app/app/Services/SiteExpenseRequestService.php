@@ -35,9 +35,7 @@ class SiteExpenseRequestService
     public function activePhase(Project $project, bool $lock = false): ProjectPhase
     {
         // Restrict operational phases to the established seven stages, never `other_general`.
-        $query = $project->phases()->where('status', 'active')->whereIn('stage_code', [
-            'preliminaries', 'substructure', 'superstructure', 'walling', 'roofing', 'finishing', 'external_works',
-        ]);
+        $query = $project->phases()->where('status', 'active');
         if ($lock) {
             $query->lockForUpdate();
         }

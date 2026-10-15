@@ -13,7 +13,7 @@ class ProjectPhase extends Model
     use HasFactory;
 
     protected $fillable = [
-        'project_id', 'stage_code', 'phase_order', 'planned_start_date', 'planned_completion_date',
+        'project_id', 'stage_code', 'phase_name', 'phase_order', 'planned_start_date', 'planned_completion_date',
         'actual_start_date', 'actual_completion_date', 'physical_progress_percentage',
         'status', 'started_at', 'completed_at', 'notes', 'created_by',
     ];
@@ -79,6 +79,8 @@ class ProjectPhase extends Model
 
     protected function stageLabel(): Attribute
     {
-        return Attribute::get(fn () => Lookup::where('type', 'construction_stage')->where('code', $this->stage_code)->value('label'));
+        return Attribute::get(fn () => $this->phase_name
+            ?: Lookup::where('type', 'construction_stage')->where('code', $this->stage_code)->value('label')
+            ?: str($this->stage_code)->replace(['_', '-'], ' ')->title()->toString());
     }
 }

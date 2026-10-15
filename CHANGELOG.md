@@ -2,6 +2,22 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-15 — Project-Specific Phases and BOQ Hierarchy
+
+**Aligned estimate and internal-budget setup with the supplied material schedule and quotation/BOQ samples.**
+
+- Estimators can add, rename, date, delete, and reset phases for each project while the estimate is still a draft. The default seven phases remain a starter template, not a fixed project structure.
+- Draft estimate and internal-budget lines can be edited or deleted without a justification. Once an estimate is issued or an internal budget is approved, later edits still require a reason and preserve the prior version and audit history.
+- Phase structure locks after an issued estimate, an approved budget/request, a recorded expense payment, or an issued invoice so approved records cannot be removed by cascading phase deletion.
+- Added optional **Work Area / Building**, **Work Section**, and **Item Reference** fields to estimate and internal-budget lines. Their screens and Excel exports now follow the sample hierarchy: work area → phase → section → line item.
+- All operational and Director analytics now include the project’s custom phases instead of filtering back to the original hard-coded seven.
+- Identified the supplied six-page commercial document as a quotation/BOQ, so it informs the estimate format rather than being misclassified as an invoice.
+- Full suite passes: **144 tests / 1,371 assertions**.
+
+### Workflow decision
+
+- Draft means freely editable and restartable. Approval/issuance is the boundary that introduces immutability, mandatory reasons, and audit retention.
+
 ## 2026-10-15 — Audited Budget/Estimate Editing and Labour Request Review
 
 **Replaced misleading new-version/new-request actions with the review and edit workflows requested by the team.**

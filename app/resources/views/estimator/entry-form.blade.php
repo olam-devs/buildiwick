@@ -13,6 +13,11 @@
   <section class="panel form-section">
     <h3>Estimate Line</h3>
     <p class="form-context">Project, working estimate, phase, creator, and creation date are assigned by the system. This workspace supports future phases as well as the current operational phase.</p>
+    <div class="row3">
+      <div class="field"><label for="work_area">Work Area / Building</label><input name="work_area" id="work_area" value="{{ old('work_area', $entry?->work_area) }}" maxlength="150" placeholder="e.g. Main Building"></div>
+      <div class="field"><label for="work_section">Work Section</label><input name="work_section" id="work_section" value="{{ old('work_section', $entry?->work_section) }}" maxlength="255" placeholder="e.g. Reinforced concrete"></div>
+      <div class="field"><label for="item_reference">Item Ref.</label><input name="item_reference" id="item_reference" value="{{ old('item_reference', $entry?->item_reference) }}" maxlength="100" placeholder="e.g. 2.3.1"></div>
+    </div>
     <div class="row2">
       <div class="field"><label for="main_category">Main Category <span class="req">*</span></label><select name="main_category" id="main_category" required><option value="">Select category</option>@foreach($lookups['categories'] as $item)<option value="{{ $item->code }}" @selected(old('main_category', $entry?->main_category) === $item->code)>{{ $item->label }}</option>@endforeach</select></div>
       <div class="field"><label for="subcategory">Subcategory</label><select name="subcategory" id="subcategory"><option value="">No subcategory / Other</option>@foreach($lookups['subcategories'] as $item)<option value="{{ $item->code }}" data-parent="{{ $item->parent_code }}" @selected(old('subcategory', $entry?->subcategory) === $item->code)>{{ $item->label }}</option>@endforeach</select><div class="field-err">For categories without seeded subcategories, leave this blank.</div></div>
@@ -39,7 +44,7 @@
     </tbody></table></div>
     <p class="field-err">Preview uses integer-cent arithmetic in the browser. Saved and reported amounts are recalculated authoritatively on the server using fixed-point decimal arithmetic.</p>
   </section>
-  @if($editing || $estimate->version > 1)<section class="panel form-section"><h3>Change Justification</h3><div class="field"><label for="edit_reason">Why is this estimate being changed? <span class="req">*</span></label><textarea id="edit_reason" name="edit_reason" maxlength="2000" required>{{ old('edit_reason') }}</textarea><div class="field-err">This reason will be kept in the project edit log and shown to the Director.</div></div></section>@endif
+  @if($estimate->version > 1)<section class="panel form-section"><h3>Change Justification</h3><div class="field"><label for="edit_reason">Why is this approved estimate being changed? <span class="req">*</span></label><textarea id="edit_reason" name="edit_reason" maxlength="2000" required>{{ old('edit_reason') }}</textarea><div class="field-err">This reason will be kept in the project edit log and shown to the Director.</div></div></section>@endif
   <div style="display:flex;justify-content:flex-end;gap:8px;margin:16px 0 32px;"><a class="btn btn-ghost" href="{{ route('estimator.projects.show', $project) }}">Cancel</a><button class="btn btn-primary" type="submit">{{ $editing ? 'Save Estimate Entry' : 'Add Estimate Entry' }}</button></div>
 </form>
 

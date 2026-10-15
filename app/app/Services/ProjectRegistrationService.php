@@ -147,6 +147,7 @@ class ProjectRegistrationService
             $schedule = $data['phases'][$stage];
             $project->phases()->create([
                 'stage_code' => $stage,
+                'phase_name' => Lookup::where('type', 'construction_stage')->where('code', $stage)->value('label'),
                 'phase_order' => $index + 1,
                 'planned_start_date' => $schedule['planned_start_date'],
                 'planned_completion_date' => $schedule['planned_completion_date'],

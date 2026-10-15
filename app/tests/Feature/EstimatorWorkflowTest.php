@@ -391,6 +391,51 @@ class EstimatorWorkflowTest extends TestCase
         $this->actingAs($this->user('admin'))->get(route('estimator.projects.show', $project))->assertOk()->assertSee('50.0000%')->assertSee('50.00');
     }
 
+    public function test_estimator_can_manage_project_specific_phases_until_estimate_is_issued(): void
+    {
+        [$project, $estimator] = $this->projectAndEstimatorAssignment();
+
+        $this->actingAs($estimator)->post(route('estimator.phases.store', $project), [
+            'phase_name' => 'Electrical First Fix',
+            'planned_start_date' => '2026-08-01',
+            'planned_completion_date' => '2026-08-14',
+        ])->assertRedirect();
+        $custom = $project->phases()->where('phase_name', 'Electrical First Fix')->firstOrFail();
+
+        $this->actingAs($estimator)->put(route('estimator.phases.update', [$project, $custom]), [
+            'phase_name' => 'Electrical and Plumbing First Fix',
+            'planned_start_date' => '2026-08-02',
+            'planned_completion_date' => '2026-08-16',
+        ])->assertRedirect();
+        $this->assertSame('Electrical and Plumbing First Fix', $custom->fresh()->stage_label);
+
+        $estimate = app(EstimatorEstimateService::class)->ensureWorkingEstimate($project, $estimator);
+        app(EstimatorEstimateService::class)->createEntry($estimate, $custom->fresh(), $this->entryPayload($estimate, $custom, [
+            'work_area' => 'Main Building', 'work_section' => 'First fix', 'item_reference' => '6.1',
+        ]), $estimator);
+        app(EstimatorEstimateService::class)->finalize($estimate, $estimator);
+
+        $this->actingAs($estimator)->delete(route('estimator.phases.delete', [$project, $custom]))
+            ->assertSessionHasErrors('phases');
+        $this->assertDatabaseHas('project_phases', ['id' => $custom->id]);
+    }
+
+    public function test_initial_draft_entries_can_be_edited_and_deleted_without_a_reason(): void
+    {
+        [$project, $estimator] = $this->projectAndEstimatorAssignment();
+        $estimate = app(EstimatorEstimateService::class)->ensureWorkingEstimate($project, $estimator);
+        $phase = $project->phases()->firstOrFail();
+        $entry = app(EstimatorEstimateService::class)->createEntry($estimate, $phase, $this->entryPayload($estimate, $phase), $estimator);
+
+        $this->actingAs($estimator)->put(route('estimator.entries.update', [$project, $phase, $entry]), $this->entryPayload($estimate, $phase, [
+            'item_description' => 'Updated freely while draft',
+        ]))->assertRedirect();
+        $this->assertSame('Updated freely while draft', $entry->fresh()->item_description);
+
+        $this->actingAs($estimator)->delete(route('estimator.entries.delete', [$project, $phase, $entry]))->assertRedirect();
+        $this->assertDatabaseMissing('estimate_entries', ['id' => $entry->id]);
+    }
+
     private function projectAndEstimatorAssignment(): array
     {
         $project = $this->projectWithSevenPhases('BWG-EST-'.fake()->unique()->numerify('#####'));
