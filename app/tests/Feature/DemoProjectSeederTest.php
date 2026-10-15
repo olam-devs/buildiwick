@@ -33,6 +33,7 @@ class DemoProjectSeederTest extends TestCase
         $this->assertSame('302145250.00', $estimate->total_amount);
         $this->assertSame('approved', $project->internalBudgets()->firstOrFail()->status);
         $this->assertSame(4, $project->expenseRequests()->count());
+        $this->assertTrue($project->expenseRequests()->get()->every(fn ($request) => $request->requested_amount === null && $request->supplier_fundi_client === null));
         $demoBatch = $project->expenseRequests()->where('request_batch_code', 'SRQ-DEMO-001')->get();
         $this->assertCount(3, $demoBatch);
         $this->assertSame(2, $demoBatch->pluck('supplier_payee_id')->unique()->count());
