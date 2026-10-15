@@ -48,6 +48,10 @@ class AccountantPaymentWorkflowTest extends TestCase
         $this->actingAs($accountant)->get(route('accountant.projects.show', $project))
             ->assertOk()->assertSee('Total Approved Requests')->assertDontSee('Pending PM Review')
             ->assertSee('project_id='.$project->id.'&amp;filter=all', false);
+        $this->actingAs($accountant)->get(route('accountant.requests.index', ['project_id' => $project->id, 'filter' => 'all']))
+            ->assertOk()->assertSee($project->name.' · Approved Payments')
+            ->assertSee('project_id='.$project->id.'&amp;filter=part_paid', false)
+            ->assertSee('project_id='.$project->id.'&amp;filter=paid', false);
     }
 
     public function test_accountant_sees_one_complete_request_with_supplier_groups_and_item_totals(): void

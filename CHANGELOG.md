@@ -6,14 +6,14 @@ Every session or PR adds an entry here — dated, plain language, written for a 
 
 **Made request navigation and Accounts processing match the agreed complete-request workflow.**
 
-- Made Accountant dashboard and project request summaries clickable. Project summaries open the matching approved, awaiting-payment, part-paid, or paid queue already filtered to that project; global queues show the project name and link back into its workspace.
+- Made Accountant dashboard and project request summaries clickable. Project summaries open the matching approved, awaiting-payment, part-paid, or paid queue already filtered to that project; its status tabs preserve that project scope, while global queues show the project name and link back into its workspace.
 - Restricted Accountant request surfaces and counts to PM-approved requests. Pending PM review, rejected requests, and cancelled requests remain outside Accounts.
 - Changed PM and Accountant request queues to one row per complete request batch rather than one row per item. Opening an approved request shows its complete total, supplier-group totals, the items inside every group, each item's internal-budget allocation, and item-level paid/outstanding values.
 - Kept item-level accounting underneath the grouped display so one request can contain several suppliers without losing precise budget allocation, payment, evidence, or audit history.
 - Updated the fictional demo request to contain three items in one request across two supplier groups, and populated its seven custom phase names plus BOQ work-area, work-section, and item-reference fields.
 - Reorganized printable internal invoices into a professional header, client/project metadata, phase-aware lines, totals, notes, and print-only layout. Improved all generated Excel workbooks with Buildiwick document properties, consistent typography, print headers/footers, repeatable headings, and print areas; invoice workbooks now include reference, status, received, and outstanding context.
 - Added regression coverage for approved-only Accounts views, clickable project filters, complete-request supplier grouping/totals, and the updated demo format.
-- Full suite passes: **145 tests / 1,390 assertions**.
+- Full suite passes: **145 tests / 1,394 assertions**.
 
 ### Workflow decision
 
