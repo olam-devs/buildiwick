@@ -65,20 +65,21 @@ class DemoProjectSeeder extends Seeder
             $project->assignedUsers()->syncWithoutDetaching([$estimator->id, $pm->id, $siteOperator->id]);
 
             $phaseDefinitions = [
-                ['preliminaries', 1, 'completed', today()->subWeeks(6), today()->subWeeks(4)],
-                ['substructure', 2, 'active', today()->subWeeks(4), null],
-                ['superstructure', 3, 'not_started', null, null],
-                ['walling', 4, 'not_started', null, null],
-                ['roofing', 5, 'not_started', null, null],
-                ['finishing', 6, 'not_started', null, null],
-                ['external_works', 7, 'not_started', null, null],
+                ['preliminaries', 'Site Preparation & Preliminaries', 1, 'completed', today()->subWeeks(6), today()->subWeeks(4)],
+                ['substructure', 'Substructure', 2, 'active', today()->subWeeks(4), null],
+                ['superstructure', 'Ground Floor & Upper Structure', 3, 'not_started', null, null],
+                ['walling', 'Walling & Openings', 4, 'not_started', null, null],
+                ['roofing', 'Roof Structure & Covering', 5, 'not_started', null, null],
+                ['finishing', 'Finishes & Building Services', 6, 'not_started', null, null],
+                ['external_works', 'External Works', 7, 'not_started', null, null],
             ];
             $phases = collect();
-            foreach ($phaseDefinitions as [$stage, $order, $status, $startedAt, $completedAt]) {
+            foreach ($phaseDefinitions as [$stage, $phaseName, $order, $status, $startedAt, $completedAt]) {
                 $phases[$stage] = ProjectPhase::updateOrCreate(
                     ['project_id' => $project->id, 'stage_code' => $stage],
                     [
                         'phase_order' => $order,
+                        'phase_name' => $phaseName,
                         'status' => $status,
                         'started_at' => $startedAt,
                         'completed_at' => $completedAt,
@@ -117,10 +118,16 @@ class DemoProjectSeeder extends Seeder
                 ['finishing', 'materials', 'electrical', 'Electrical installation and fittings', 1, 'ls', 16000000, 15],
                 ['external_works', 'labour_subcontracts', 'subcontractor', 'Boundary wall, drainage and landscaping', 1, 'ls', 22000000, 15],
             ];
+            $sectionNames = ['materials' => 'Materials Schedule', 'labour_subcontracts' => 'Labour & Subcontracts', 'logistics_equipment' => 'Plant & Equipment', 'preliminaries_overheads' => 'Preliminaries & Site Overheads'];
+            $estimateLine = 0;
             foreach ($estimateEntries as [$phase, $category, $subcategory, $description, $quantity, $unit, $cost, $markup]) {
+                $estimateLine++;
                 $estimate->entries()->updateOrCreate(
                     ['project_phase_id' => $phases[$phase]->id, 'item_description' => $description],
                     [
+                        'work_area' => 'Main Building',
+                        'work_section' => $sectionNames[$category],
+                        'item_reference' => 'E-'.str_pad((string) $estimateLine, 3, '0', STR_PAD_LEFT),
                         'main_category' => $category,
                         'subcategory' => $subcategory,
                         'quantity' => $quantity,
@@ -163,10 +170,15 @@ class DemoProjectSeeder extends Seeder
                 'external' => ['external_works', 'labour_subcontracts', 'subcontractor', 'External works package', 1, 'ls', 20000000],
             ];
             $budgetEntries = collect();
+            $budgetLine = 0;
             foreach ($budgetDefinitions as $key => [$phase, $category, $subcategory, $description, $quantity, $unit, $cost]) {
+                $budgetLine++;
                 $budgetEntries[$key] = $budget->entries()->updateOrCreate(
                     ['project_phase_id' => $phases[$phase]->id, 'item_description' => $description],
                     [
+                        'work_area' => 'Main Building',
+                        'work_section' => $sectionNames[$category],
+                        'item_reference' => 'B-'.str_pad((string) $budgetLine, 3, '0', STR_PAD_LEFT),
                         'main_category' => $category,
                         'subcategory' => $subcategory,
                         'quantity' => $quantity,
@@ -275,7 +287,7 @@ class DemoProjectSeeder extends Seeder
                 'notes' => 'Mixed Y12 and Y16 bars according to foundation schedule.',
             ]);
             $excavator = $this->request([
-                'request_code' => 'REQ-DEMO-002-01', 'request_batch_code' => 'SRQ-DEMO-002', 'request_line_number' => 1,
+                'request_code' => 'REQ-DEMO-002-01', 'request_batch_code' => 'SRQ-DEMO-001', 'request_line_number' => 3,
                 'project_id' => $project->id, 'project_phase_id' => $phases['substructure']->id,
                 'internal_budget_entry_id' => $budgetEntries['excavator']->id, 'request_type' => 'service',
                 'main_category' => 'logistics_equipment', 'subcategory' => 'plant_machinery_hire',

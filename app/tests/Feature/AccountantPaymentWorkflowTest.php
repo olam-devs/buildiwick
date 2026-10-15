@@ -45,6 +45,28 @@ class AccountantPaymentWorkflowTest extends TestCase
             ->assertDontSee($pending->request_code)->assertDontSee($rejected->request_code)->assertDontSee($cancelled->request_code);
         $this->actingAs($accountant)->get(route('accountant.index'))
             ->assertOk()->assertSee('Approved Awaiting Payment')->assertSee('Amount Awaiting Payment');
+        $this->actingAs($accountant)->get(route('accountant.projects.show', $project))
+            ->assertOk()->assertSee('Total Approved Requests')->assertDontSee('Pending PM Review')
+            ->assertSee('project_id='.$project->id.'&amp;filter=all', false);
+    }
+
+    public function test_accountant_sees_one_complete_request_with_supplier_groups_and_item_totals(): void
+    {
+        [$project, $accountant] = $this->projectAndAccountant();
+        $hardware = SupplierPayee::create(['name' => 'Harbour Hardware', 'type' => 'supplier', 'is_active' => true]);
+        $plant = SupplierPayee::create(['name' => 'Coastal Plant Hire', 'type' => 'supplier', 'is_active' => true]);
+        $first = $this->approvedRequest($project, '100.00');
+        $first->update(['request_batch_code' => 'SRQ-GROUP-001', 'request_line_number' => 1, 'supplier_payee_id' => $hardware->id, 'item_description' => 'Cement']);
+        $second = $this->approvedRequest($project, '250.00');
+        $second->update(['request_batch_code' => 'SRQ-GROUP-001', 'request_line_number' => 2, 'supplier_payee_id' => $plant->id, 'item_description' => 'Excavator hire']);
+
+        $queue = $this->actingAs($accountant)->get(route('accountant.requests.index', ['filter' => 'all']));
+        $queue->assertOk()->assertSeeInOrder(['SRQ-GROUP-001', 'Cement', 'Excavator hire', '350.00']);
+        $this->assertSame(1, substr_count($queue->getContent(), '<strong>SRQ-GROUP-001</strong>'));
+
+        $this->actingAs($accountant)->get(route('accountant.requests.show', $first))
+            ->assertOk()->assertSee('2 supplier group(s)')->assertSee('Harbour Hardware')
+            ->assertSee('Coastal Plant Hire')->assertSee('Excavator hire')->assertSee('350.00');
     }
 
     public function test_accountant_records_partial_payments_as_events_and_derives_status_and_outstanding(): void

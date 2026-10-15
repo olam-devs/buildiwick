@@ -30,15 +30,16 @@ class AccountantController extends Controller
     {
         $this->authorizeWorkspace($request);
         $approved = $this->approvedQuery()->get();
-        $awaiting = $approved->filter(fn (ExpenseRequest $item) => Money::compare($item->approved_outstanding_amount, '0') > 0);
+        $approvedBatches = $this->requestBatches($approved);
+        $awaiting = $approvedBatches->filter(fn ($batch) => Money::compare($batch->outstanding, '0') > 0);
         $paid = Money::sum($approved->flatMap(fn (ExpenseRequest $item) => $item->payments->pluck('amount')));
-        $projects = Project::with(['client', 'activePhase', 'expenseRequests.payments', 'invoices.items', 'invoices.payments', 'expensePayments'])->orderBy('name')->get()->map(function (Project $project) {
-            $requests = $project->expenseRequests->where('status', '!=', 'cancelled');
+        $projects = Project::with(['client', 'activePhase', 'expenseRequests' => fn ($query) => $query->where('status', 'approved')->with('payments'), 'invoices.items', 'invoices.payments', 'expensePayments'])->orderBy('name')->get()->map(function (Project $project) {
+            $requests = $project->expenseRequests->where('status', 'approved');
             $invoices = $project->invoices->where('status', 'issued');
             $actual = Money::sum($project->expensePayments->pluck('amount'));
             $received = Money::sum($project->invoices->flatMap(fn ($invoice) => $invoice->payments->pluck('amount')));
 
-            return (object) ['project' => $project, 'request_count' => $requests->count(), 'expense_event_count' => $project->expensePayments->count(), 'actual' => $actual, 'invoiced' => Money::sum($invoices->map(fn ($invoice) => $invoice->total_amount)), 'received' => $received, 'payables' => Money::sum($requests->where('status', 'approved')->map(fn ($item) => $item->approved_outstanding_amount)), 'receivables' => Money::sum($invoices->map(fn ($invoice) => $invoice->outstanding_amount)), 'cash' => Money::difference($received, $actual)];
+            return (object) ['project' => $project, 'request_count' => $requests->groupBy(fn ($item) => $item->request_batch_code ?: $item->request_code)->count(), 'expense_event_count' => $project->expensePayments->count(), 'actual' => $actual, 'invoiced' => Money::sum($invoices->map(fn ($invoice) => $invoice->total_amount)), 'received' => $received, 'payables' => Money::sum($requests->map(fn ($item) => $item->approved_outstanding_amount)), 'receivables' => Money::sum($invoices->map(fn ($invoice) => $invoice->outstanding_amount)), 'cash' => Money::difference($received, $actual)];
         });
 
         $allProjects = $projects;
@@ -58,9 +59,9 @@ class AccountantController extends Controller
                 'payables' => $dashboardPayables,
                 'approved_awaiting' => $awaiting->count(),
                 'overdue_invoices' => $overdueInvoices,
-                'part_paid' => $awaiting->filter(fn (ExpenseRequest $item) => Money::compare($item->paid_to_date, '0') > 0)->count(),
-                'paid' => $approved->filter(fn (ExpenseRequest $item) => $item->payment_status === 'paid')->count(),
-                'awaiting_amount' => Money::sum($awaiting->map(fn (ExpenseRequest $item) => $item->approved_outstanding_amount)),
+                'part_paid' => $awaiting->filter(fn ($batch) => Money::compare($batch->paid, '0') > 0)->count(),
+                'paid' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'paid')->count(),
+                'awaiting_amount' => Money::sum($awaiting->pluck('outstanding')),
                 'payments_made' => $paid,
             ],
             'recentPayments' => ExpensePayment::with(['expenseRequest.project', 'recordedBy'])->latest()->limit(10)->get(), 'projects' => $projects,
@@ -74,16 +75,16 @@ class AccountantController extends Controller
         if ($request->filled('project_id')) {
             $query->where('project_id', $request->integer('project_id'));
         }
-        $requests = $query->get()->filter(function (ExpenseRequest $item) use ($request): bool {
+        $batches = $this->requestBatches($query->get())->filter(function ($batch) use ($request): bool {
             return match ($request->input('filter', 'awaiting')) {
-                'paid' => $item->payment_status === 'paid',
-                'part_paid' => $item->payment_status === 'part_paid',
+                'paid' => $batch->payment_status === 'paid',
+                'part_paid' => $batch->payment_status === 'part_paid',
                 'all' => true,
-                default => $item->payment_status !== 'paid',
+                default => $batch->payment_status !== 'paid',
             };
         });
 
-        return view('accountant.requests', ['requests' => $requests, 'projects' => Project::orderBy('name')->get(), 'filter' => $request->input('filter', 'awaiting')]);
+        return view('accountant.requests', ['batches' => $batches, 'projects' => Project::orderBy('name')->get(), 'filter' => $request->input('filter', 'awaiting')]);
     }
 
     public function show(Request $request, ExpenseRequest $expenseRequest)
@@ -91,10 +92,23 @@ class AccountantController extends Controller
         $this->authorizeWorkspace($request);
         $this->authorize('view', $expenseRequest);
         abort_unless($expenseRequest->status === 'approved', 404);
-        $expenseRequest->load(['project', 'phase', 'labourAgreement', 'internalBudgetEntry', 'requestedBy', 'supplierPayee', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy', 'payments.recordedBy']);
+        $expenseRequest->load(['project', 'phase', 'labourAgreement', 'internalBudgetEntry', 'requestedBy', 'supplierPayee', 'latestPmApproval.decidedBy', 'payments.recordedBy']);
+        $batchCode = $expenseRequest->request_batch_code;
+        $batchItems = $this->approvedQuery()
+            ->where('project_id', $expenseRequest->project_id)
+            ->where(function ($query) use ($batchCode, $expenseRequest) {
+                $batchCode
+                    ? $query->where('request_batch_code', $batchCode)
+                    : $query->whereKey($expenseRequest->id);
+            })
+            ->orderBy('request_line_number')->get();
+        $supplierGroups = $batchItems->groupBy(fn (ExpenseRequest $item) => $item->supplier_payee_id ?: ($item->latestPmApproval?->supplier_name_snapshot ?: 'unassigned'));
 
         return view('accountant.show', [
             'expenseRequest' => $expenseRequest,
+            'batchItems' => $batchItems,
+            'supplierGroups' => $supplierGroups,
+            'batchTotals' => $this->financialTotals($batchItems),
             'paymentMethods' => Lookup::ofType('payment_method')->get(),
             'paymentIdempotencyKey' => (string) Str::uuid(),
         ]);
@@ -131,8 +145,7 @@ class AccountantController extends Controller
     public function project(Request $request, Project $project)
     {
         $this->authorizeWorkspace($request);
-        $requests = $project->expenseRequests()->with(['payments', 'phase', 'latestApproval'])->get();
-        $approved = $requests->where('status', 'approved');
+        $approved = $project->expenseRequests()->where('status', 'approved')->with(['payments', 'phase', 'latestApproval'])->get();
         $invoices = $project->invoices()->with(['items', 'payments'])->orderByDesc('created_at')->get();
         $estimate = $project->estimates()->where('status', 'issued')->with('entries')->orderByDesc('version')->first();
         $byPhase = $approved->groupBy('project_phase_id')->map(fn ($group) => $this->financialTotals($group));
@@ -142,7 +155,8 @@ class AccountantController extends Controller
         $paid = Money::sum($project->expensePayments()->pluck('amount'));
         $approvedCommitments = Money::sum($approved->map(fn ($item) => $item->approved_payable_amount));
         $budget = app(ProjectManagerBudgetService::class)->projectBudget($project);
-        $requestMetrics = ['total' => $requests->where('status', '!=', 'cancelled')->count(), 'pending' => $requests->where('status', 'pending_approval')->count(), 'approved' => $approved->count(), 'rejected' => $requests->where('status', 'rejected')->count(), 'awaiting' => $approved->filter(fn ($item) => Money::compare($item->approved_outstanding_amount, '0') > 0)->count(), 'part_paid' => $approved->filter(fn ($item) => $item->payment_status === 'part_paid')->count(), 'paid' => $approved->filter(fn ($item) => $item->payment_status === 'paid')->count()];
+        $approvedBatches = $this->requestBatches($approved);
+        $requestMetrics = ['approved' => $approvedBatches->count(), 'awaiting' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'unpaid')->count(), 'part_paid' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'part_paid')->count(), 'paid' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'paid')->count()];
 
         return view('accountant.project', compact('project', 'byPhase', 'byCategory', 'invoices', 'estimate', 'invoiceTotal', 'received', 'paid', 'approvedCommitments', 'budget', 'requestMetrics'));
     }
@@ -192,7 +206,16 @@ class AccountantController extends Controller
 
         return $excel->download($clientInvoice->invoice_code, 'Client Invoice - '.$clientInvoice->invoice_code,
             ['Phase', 'Description', 'Quantity', 'Unit', 'Unit Price (TSh)', 'Line Total (TSh)'],
-            $rows, ['Project: '.$clientInvoice->project->name, 'Client: '.$clientInvoice->client->name, 'Invoice date: '.($clientInvoice->issued_at?->format('d M Y') ?? 'Draft'), 'Due: '.($clientInvoice->due_at?->format('d M Y') ?? 'Not set')], [4, 5]);
+            $rows, [
+                'Project: '.$clientInvoice->project->name,
+                'Client: '.$clientInvoice->client->name,
+                'Reference: '.($clientInvoice->reference ?: 'Not set'),
+                'Status: '.ucwords(str_replace('_', ' ', $clientInvoice->status)),
+                'Invoice date: '.($clientInvoice->issued_at?->format('d M Y') ?? 'Draft'),
+                'Due: '.($clientInvoice->due_at?->format('d M Y') ?? 'Not set'),
+                'Received: TSh '.Money::format($clientInvoice->paid_to_date),
+                'Outstanding: TSh '.Money::format($clientInvoice->outstanding_amount),
+            ], [4, 5]);
     }
 
     public function issueInvoice(Request $request, ClientInvoice $clientInvoice, ClientInvoiceService $invoices)
@@ -327,6 +350,28 @@ class AccountantController extends Controller
             'paid' => Money::sum($requests->map(fn (ExpenseRequest $item) => $item->paid_to_date)),
             'outstanding' => Money::sum($requests->map(fn (ExpenseRequest $item) => $item->approved_outstanding_amount)),
         ];
+    }
+
+    private function requestBatches($requests)
+    {
+        return collect($requests)->groupBy(fn (ExpenseRequest $item) => $item->request_batch_code ?: $item->request_code)
+            ->map(function ($items, string $code) {
+                $totals = $this->financialTotals($items);
+                $paid = $totals['paid'];
+                $outstanding = $totals['outstanding'];
+
+                return (object) [
+                    'code' => $code,
+                    'anchor' => $items->sortBy('request_line_number')->first(),
+                    'items' => $items->sortBy('request_line_number')->values(),
+                    'item_count' => $items->count(),
+                    'supplier_count' => $items->map(fn (ExpenseRequest $item) => $item->supplier_payee_id ?: $item->latestPmApproval?->supplier_name_snapshot ?: 'unassigned')->unique()->count(),
+                    'approved' => $totals['approved'],
+                    'paid' => $paid,
+                    'outstanding' => $outstanding,
+                    'payment_status' => Money::compare($outstanding, '0') === 0 ? 'paid' : (Money::compare($paid, '0') > 0 ? 'part_paid' : 'unpaid'),
+                ];
+            })->values();
     }
 
     private function authorizeWorkspace(Request $request): void

@@ -50,23 +50,18 @@ class ProjectManagerController extends Controller
         if ($request->user()->hasRole('project_manager')) {
             $query->whereIn('project_id', $request->user()->assignedProjects()->select('projects.id'));
         }
-        $counts = [
-            'all' => (clone $query)->count(),
-            'awaiting_pricing' => (clone $query)->where('status', 'pending_approval')->whereNull('commercial_total')->count(),
-            'ready' => (clone $query)->where('status', 'pending_approval')->whereNotNull('commercial_total')->count(),
-            'approved' => (clone $query)->where('status', 'approved')->count(),
-            'rejected' => (clone $query)->where('status', 'rejected')->count(),
-        ];
+        $allBatches = $this->requestBatches((clone $query)->get());
+        $counts = ['all' => $allBatches->count()];
+        foreach (['awaiting_pricing', 'ready', 'approved', 'rejected'] as $state) {
+            $counts[$state] = $allBatches->where('state', $state)->count();
+        }
         $query->when($request->integer('project_id'), fn ($builder, int $projectId) => $builder->where('project_id', $projectId))
             ->when($request->integer('phase_id'), fn ($builder, int $phaseId) => $builder->where('project_phase_id', $phaseId))
             ->when($filters['category'] ?? null, fn ($builder, string $category) => $builder->where('main_category', $category));
-        match ($filters['filter'] ?? 'all') {
-            'awaiting_pricing' => $query->where('status', 'pending_approval')->whereNull('commercial_total'),
-            'ready' => $query->where('status', 'pending_approval')->whereNotNull('commercial_total'),
-            'approved' => $query->where('status', 'approved'),
-            'rejected' => $query->where('status', 'rejected'),
-            default => null,
-        };
+        $batches = $this->requestBatches($query->get());
+        if (($filters['filter'] ?? 'all') !== 'all') {
+            $batches = $batches->where('state', $filters['filter'])->values();
+        }
 
         $projectQuery = Project::query()->orderBy('name');
         if ($request->user()->hasRole('project_manager')) {
@@ -76,7 +71,7 @@ class ProjectManagerController extends Controller
         $phases = ProjectPhase::query()->whereIn('project_id', $projects->pluck('id'))->orderBy('phase_order')->get();
 
         return view('pm.requests', [
-            'requests' => $query->get(),
+            'batches' => $batches,
             'labels' => ProjectManagerBudgetService::CATEGORIES,
             'filter' => $filters['filter'] ?? 'all',
             'filters' => $filters,
@@ -465,5 +460,26 @@ class ProjectManagerController extends Controller
             'units' => Lookup::ofType('unit')->get(),
             'unitRecommendations' => CostEntryOptions::unitRecommendations(),
         ];
+    }
+
+    private function requestBatches($requests)
+    {
+        return collect($requests)->groupBy(fn (ExpenseRequest $item) => $item->request_batch_code ?: $item->request_code)
+            ->map(function ($items, string $code) {
+                $items = $items->sortBy('request_line_number')->values();
+                $state = $items->every(fn ($item) => $item->status === 'approved') ? 'approved'
+                    : ($items->every(fn ($item) => $item->status === 'rejected') ? 'rejected'
+                        : ($items->contains(fn ($item) => $item->commercial_total === null) ? 'awaiting_pricing' : 'ready'));
+
+                return (object) [
+                    'code' => $code,
+                    'anchor' => $items->first(),
+                    'items' => $items,
+                    'item_count' => $items->count(),
+                    'supplier_count' => $items->pluck('supplier_payee_id')->filter()->unique()->count(),
+                    'total' => Money::sum($items->map(fn ($item) => $item->commercial_total ?? '0')),
+                    'state' => $state,
+                ];
+            })->values();
     }
 }
