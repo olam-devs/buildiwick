@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -57,6 +57,11 @@ class Project extends Model
     public function internalBudgets(): HasMany
     {
         return $this->hasMany(InternalBudget::class);
+    }
+
+    public function editLogs(): HasMany
+    {
+        return $this->hasMany(ProjectEditLog::class);
     }
 
     public function expenseRequests(): HasMany

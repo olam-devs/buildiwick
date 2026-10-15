@@ -39,6 +39,7 @@
     </tbody></table></div>
     <p class="field-err">Preview uses integer-cent arithmetic in the browser. Saved and reported amounts are recalculated authoritatively on the server using fixed-point decimal arithmetic.</p>
   </section>
+  @if($editing || $estimate->version > 1)<section class="panel form-section"><h3>Change Justification</h3><div class="field"><label for="edit_reason">Why is this estimate being changed? <span class="req">*</span></label><textarea id="edit_reason" name="edit_reason" maxlength="2000" required>{{ old('edit_reason') }}</textarea><div class="field-err">This reason will be kept in the project edit log and shown to the Director.</div></div></section>@endif
   <div style="display:flex;justify-content:flex-end;gap:8px;margin:16px 0 32px;"><a class="btn btn-ghost" href="{{ route('estimator.projects.show', $project) }}">Cancel</a><button class="btn btn-primary" type="submit">{{ $editing ? 'Save Estimate Entry' : 'Add Estimate Entry' }}</button></div>
 </form>
 

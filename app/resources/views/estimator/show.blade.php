@@ -13,7 +13,7 @@
       @endif
     </div>
   @elseif ($displayEstimate)
-    <div class="estimate-actions"><span class="dot-status {{ $displayEstimate->status === 'issued' ? 'active' : 'zero' }}">{{ ucfirst($displayEstimate->status) }} · v{{ $displayEstimate->version }}</span><a class="btn btn-ghost" href="{{ route('estimator.estimates.export', [$project, $displayEstimate]) }}">Download Excel</a><form method="POST" action="{{ route('estimator.estimates.start', $project) }}">@csrf<button class="btn btn-primary" type="submit">Start New Version</button></form></div>
+    <div class="estimate-actions"><span class="dot-status {{ $displayEstimate->status === 'issued' ? 'active' : 'zero' }}">{{ ucfirst($displayEstimate->status) }} · v{{ $displayEstimate->version }}</span><a class="btn btn-ghost" href="{{ route('estimator.estimates.export', [$project, $displayEstimate]) }}">Download Excel</a>@if($displayEstimate->status === 'issued')<form method="POST" action="{{ route('estimator.estimates.edit', [$project,$displayEstimate]) }}" class="edit-document-form">@csrf<div class="field"><label for="estimate_edit_reason">Why is this estimate being edited? <span class="req">*</span></label><input id="estimate_edit_reason" name="edit_reason" maxlength="2000" required></div><button class="btn btn-primary" type="submit">Edit Estimate</button></form>@endif</div>
   @endif
 </div>
 
@@ -93,7 +93,7 @@
                 <td class="amt">{{ \App\Support\Money::format($entry->client_unit_cost) }}</td>
                 <td class="amt">{{ \App\Support\Money::format($entry->markup_amount) }}</td>
                 <td class="amt">{{ \App\Support\Money::format($entry->line_total) }}</td>
-                @if($workingEstimate)<td class="entry-actions"><a href="{{ route('estimator.entries.edit', [$project, $phase, $entry]) }}">Edit</a><form method="POST" action="{{ route('estimator.entries.delete', [$project, $phase, $entry]) }}" onsubmit="return confirm('Delete this estimate entry?');">@csrf @method('DELETE')<button type="submit">Delete</button></form></td>@endif
+                @if($workingEstimate)<td class="entry-actions"><a href="{{ route('estimator.entries.edit', [$project, $phase, $entry]) }}">Edit</a><form method="POST" action="{{ route('estimator.entries.delete', [$project, $phase, $entry]) }}" onsubmit="const reason=prompt('Why is this estimate line being deleted?');if(!reason)return false;this.edit_reason.value=reason;return confirm('Delete this estimate entry?');">@csrf @method('DELETE')<input type="hidden" name="edit_reason"><button type="submit">Delete</button></form></td>@endif
               </tr>
             @endforeach
           </tbody>
@@ -108,4 +108,6 @@
   <section class="panel form-section"><h3>Estimate Versions</h3><div class="tablewrap"><table style="min-width:500px;"><thead><tr><th>Estimate</th><th>Version</th><th>Status</th><th>Prepared</th><th>Client Estimate</th></tr></thead><tbody>@foreach($history as $row)<tr><td>{{ $row->estimate->estimate_code }}</td><td>{{ $row->estimate->version }}</td><td>{{ ucfirst($row->estimate->status) }}</td><td>{{ $row->estimate->prepared_at?->format('d M Y') ?? '—' }}</td><td class="amt">{{ \App\Support\Money::format($row->summary['clientTotal']) }}</td></tr>@endforeach</tbody></table></div></section>
 @endif
 <style>.estimate-bars{display:grid;gap:11px;margin:4px 0 18px}.estimate-bar-row{display:grid;grid-template-columns:180px 1fr 140px;gap:12px;align-items:center}.estimate-bar-row small{display:block;color:var(--ink-dim);margin-top:2px}.estimate-track{height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden}.estimate-track span{display:block;height:100%;background:var(--primary);border-radius:999px}.category-total{background:var(--surface-2)}.subcategory-row td:first-child{padding-left:30px;color:var(--ink-soft)}@media(max-width:700px){.estimate-bar-row{grid-template-columns:1fr}.estimate-bar-row .amt{text-align:left}}</style>
+@include('partials.project-edit-log', ['editLogTitle' => 'Estimate Edit Log'])
+<style>.edit-document-form{display:flex;gap:8px;align-items:end}.edit-document-form .field{margin:0;min-width:260px}</style>
 @endsection

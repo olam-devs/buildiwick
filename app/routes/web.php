@@ -39,6 +39,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/estimator/projects/{project}', [EstimatorController::class, 'show'])->name('estimator.projects.show');
     Route::get('/estimator/projects/{project}/estimates/{estimate}.xlsx', [EstimatorController::class, 'export'])->name('estimator.estimates.export');
     Route::post('/estimator/projects/{project}/estimates', [EstimatorController::class, 'startEstimate'])->name('estimator.estimates.start');
+    Route::post('/estimator/projects/{project}/estimates/{estimate}/edit', [EstimatorController::class, 'startEstimateEdit'])->name('estimator.estimates.edit');
     Route::get('/estimator/projects/{project}/phases/{phase}/entries/create', [EstimatorController::class, 'createEntry'])->name('estimator.entries.create');
     Route::post('/estimator/projects/{project}/phases/{phase}/entries', [EstimatorController::class, 'storeEntry'])->name('estimator.entries.store');
     Route::get('/estimator/projects/{project}/phases/{phase}/entries/{entry}/edit', [EstimatorController::class, 'editEntry'])->name('estimator.entries.edit');
@@ -107,6 +108,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/accountant/projects/{project}/statement', [AccountantController::class, 'statement'])->name('accountant.projects.statement');
     Route::get('/pm/projects/{project}', [ProjectManagerController::class, 'show'])->name('pm.projects.show');
     Route::post('/pm/projects/{project}/budgets', [ProjectManagerController::class, 'startBudget'])->name('pm.budgets.start');
+    Route::post('/pm/projects/{project}/budgets/{budget}/edit', [ProjectManagerController::class, 'startBudgetEdit'])->name('pm.budgets.edit');
     Route::post('/pm/projects/{project}/budgets/{budget}/finalize', [ProjectManagerController::class, 'finalize'])->name('pm.budgets.finalize');
     Route::get('/pm/projects/{project}/budgets/{budget}.xlsx', [ProjectManagerController::class, 'exportBudget'])->name('pm.budgets.export');
     Route::get('/pm/projects/{project}/phases/{phase}/budget-entries/create', [ProjectManagerController::class, 'createEntry'])->name('pm.budget-entries.create');

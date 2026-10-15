@@ -4,7 +4,6 @@ namespace App\Policies;
 
 use App\Models\Project;
 use App\Models\ProjectEstimate;
-use App\Models\ProjectPhase;
 use App\Models\User;
 
 class ProjectEstimatePolicy
@@ -36,6 +35,13 @@ class ProjectEstimatePolicy
     {
         return $estimate->status === 'draft'
             && ! $estimate->invoices()->exists()
+            && ($user->hasRole('admin') || ($user->hasRole('estimator_qs')
+                && $user->assignedProjects()->whereKey($estimate->project_id)->exists()));
+    }
+
+    public function revise(User $user, ProjectEstimate $estimate): bool
+    {
+        return $estimate->status === 'issued'
             && ($user->hasRole('admin') || ($user->hasRole('estimator_qs')
                 && $user->assignedProjects()->whereKey($estimate->project_id)->exists()));
     }

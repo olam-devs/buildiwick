@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\Project;
+use App\Models\ProjectEditLog;
 use App\Services\AccountantReportingService;
 use App\Services\DirectorAnalyticsService;
 use App\Services\ExcelExportService;
@@ -89,8 +90,9 @@ class DirectorController extends Controller
         $snapshot = $asOf ? $analytics->projectSnapshot($project, $asOf) : null;
 
         $pendingBudgets = $project->internalBudgets()->where('status', 'finalized')->with(['entries', 'createdBy', 'finalizedBy'])->orderByDesc('version')->get();
+        $editLogs = ProjectEditLog::where('project_id', $project->id)->with('editor')->latest()->get();
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'editLogs'));
     }
 
     public function decideBudget(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)

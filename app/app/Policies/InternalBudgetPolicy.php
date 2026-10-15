@@ -44,6 +44,12 @@ class InternalBudgetPolicy
             && ($user->hasRole('admin') || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($budget->project_id)->exists()));
     }
 
+    public function revise(User $user, InternalBudget $budget): bool
+    {
+        return $budget->status === 'approved'
+            && ($user->hasRole('admin') || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($budget->project_id)->exists()));
+    }
+
     public function finalize(User $user, InternalBudget $budget): bool
     {
         return $budget->status === 'draft'
