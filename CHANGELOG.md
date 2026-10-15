@@ -2,6 +2,21 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-15 — Audited Budget/Estimate Editing and Labour Request Review
+
+**Replaced misleading new-version/new-request actions with the review and edit workflows requested by the team.**
+
+- Labour/subcontract agreement rows no longer open a fresh PM request. Their last column now lists each existing linked request and opens pending items for PM review or completed items as a reference.
+- Added a clearly labelled **Download All Labour Requests Excel** action. The workbook contains every non-cancelled labour/subcontract request in the selected project scope, not the agreements table and not unrelated material requests.
+- Replaced **Create Revised Budget Version** and **Start New Version** with **Edit Internal Budget** and **Edit Estimate**. Editing copies the approved/issued version into an editable draft so the prior version remains immutable, but users work through a normal edit action rather than constructing an empty replacement.
+- Made a justification mandatory when an approved budget or issued estimate is opened for editing and whenever a line is added to an edited version, changed, or deleted. Director-return reasons are logged too.
+- Added project edit logs with actor, date, document/version, item, changed field values, and justification. Budget logs appear in the PM project workspace, estimate logs in the Estimator workspace, and the combined log at the bottom of the Director project view.
+- Verified the generated labour-request workbook with PhpSpreadsheet and ran the full suite: **142 tests / 1,361 assertions**.
+
+### Workflow decision
+
+- Approved internal budgets and issued estimates stay immutable. The UI calls the operation **Edit**, while the implementation preserves the prior document and opens a copied draft version with a compulsory audit reason.
+
 ## 2026-10-15 — Excel Exports, Verified Internal Budgets, and Project Workspaces
 
 **Turned multi-project role screens into project workspaces and completed the requested document/export and internal-budget controls.**

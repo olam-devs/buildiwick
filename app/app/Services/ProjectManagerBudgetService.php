@@ -7,6 +7,7 @@ use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
 use App\Models\Lookup;
 use App\Models\Project;
+use App\Models\ProjectEditLog;
 use App\Models\ProjectPhase;
 use App\Models\User;
 use App\Support\Money;
@@ -44,6 +45,9 @@ class ProjectManagerBudgetService
             if ($lockedProject->internalBudgets()->where('status', 'finalized')->exists()) {
                 throw ValidationException::withMessages(['budget' => 'The current internal budget is awaiting Director verification. It must be approved or returned before another version can be created.']);
             }
+            if ($lockedProject->internalBudgets()->exists()) {
+                throw ValidationException::withMessages(['budget' => 'Use Edit Internal Budget and provide a justification to change the approved budget.']);
+            }
 
             $version = ((int) $lockedProject->internalBudgets()->max('version')) + 1;
 
@@ -56,6 +60,48 @@ class ProjectManagerBudgetService
         });
     }
 
+    public function startEditing(InternalBudget $source, string $reason, User $actor): InternalBudget
+    {
+        Gate::forUser($actor)->authorize('revise', $source);
+
+        return $this->database->transaction(function () use ($source, $reason, $actor): InternalBudget {
+            $project = Project::query()->whereKey($source->project_id)->lockForUpdate()->firstOrFail();
+            $locked = InternalBudget::query()->whereKey($source->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('revise', $locked);
+            $this->requireReason($reason);
+            if ($project->internalBudgets()->whereIn('status', ['draft', 'finalized'])->exists()) {
+                throw ValidationException::withMessages(['budget' => 'Finish the existing working or Director-review budget before editing the approved budget.']);
+            }
+
+            $version = ((int) $project->internalBudgets()->max('version')) + 1;
+            $draft = $project->internalBudgets()->create([
+                'budget_code' => $project->project_code.'-BUD-'.str_pad((string) $version, 3, '0', STR_PAD_LEFT),
+                'version' => $version,
+                'status' => 'draft',
+                'created_by' => $actor->id,
+            ]);
+            foreach ($locked->entries()->get() as $entry) {
+                $draft->entries()->create($entry->only([
+                    'project_phase_id', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
+                    'quantity', 'unit', 'unit_cost', 'notes',
+                ]) + ['entered_by' => $actor->id]);
+            }
+            ProjectEditLog::create([
+                'project_id' => $project->id,
+                'document_type' => 'internal_budget',
+                'document_id' => $draft->id,
+                'document_code' => $draft->budget_code,
+                'from_version' => $locked->version,
+                'to_version' => $draft->version,
+                'action' => 'edit_started',
+                'reason' => $reason,
+                'edited_by' => $actor->id,
+            ]);
+
+            return $draft->load('entries');
+        });
+    }
+
     public function createEntry(InternalBudget $budget, ProjectPhase $phase, array $data, User $actor): InternalBudgetEntry
     {
         return $this->database->transaction(function () use ($budget, $phase, $data, $actor): InternalBudgetEntry {
@@ -63,10 +109,18 @@ class ProjectManagerBudgetService
             Gate::forUser($actor)->authorize('create', [InternalBudgetEntry::class, $locked]);
             $this->assertPhaseAndCategory($locked, $phase, $data);
 
-            return $locked->entries()->create($this->entryData($data) + [
+            if ($locked->version > 1) {
+                $this->requireReason($data['edit_reason'] ?? null);
+            }
+            $entry = $locked->entries()->create($this->entryData($data) + [
                 'project_phase_id' => $phase->id,
                 'entered_by' => $actor->id,
             ]);
+            if ($locked->version > 1) {
+                $this->logEntryChange($locked, $entry, 'entry_added', $data['edit_reason'], $actor, null, $this->snapshot($entry));
+            }
+
+            return $entry;
         });
     }
 
@@ -76,19 +130,24 @@ class ProjectManagerBudgetService
             InternalBudget::query()->whereKey($entry->internal_budget_id)->lockForUpdate()->firstOrFail();
             $locked = InternalBudgetEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('update', $locked);
+            $this->requireReason($data['edit_reason'] ?? null);
             $this->assertPhaseAndCategory($locked->budget, $locked->phase, $data);
+            $before = $this->snapshot($locked);
             $locked->update($this->entryData($data));
+            $this->logEntryChange($locked->budget, $locked, 'entry_updated', $data['edit_reason'], $actor, $before, $this->snapshot($locked->fresh()));
 
             return $locked->refresh();
         });
     }
 
-    public function deleteEntry(InternalBudgetEntry $entry, User $actor): void
+    public function deleteEntry(InternalBudgetEntry $entry, string $reason, User $actor): void
     {
-        $this->database->transaction(function () use ($entry, $actor): void {
+        $this->database->transaction(function () use ($entry, $reason, $actor): void {
             InternalBudget::query()->whereKey($entry->internal_budget_id)->lockForUpdate()->firstOrFail();
             $locked = InternalBudgetEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('delete', $locked);
+            $this->requireReason($reason);
+            $this->logEntryChange($locked->budget, $locked, 'entry_deleted', $reason, $actor, $this->snapshot($locked), null);
             $locked->delete();
         });
     }
@@ -143,6 +202,17 @@ class ProjectManagerBudgetService
                 'approved_by' => null,
                 'approved_at' => null,
                 'notes' => $notes,
+            ]);
+            ProjectEditLog::create([
+                'project_id' => $locked->project_id,
+                'document_type' => 'internal_budget',
+                'document_id' => $locked->id,
+                'document_code' => $locked->budget_code,
+                'from_version' => $locked->version,
+                'to_version' => $locked->version,
+                'action' => 'returned_for_editing',
+                'reason' => $notes,
+                'edited_by' => $actor->id,
             ]);
 
             return $locked->fresh();
@@ -330,5 +400,38 @@ class ProjectManagerBudgetService
             ->where('parent_code', $data['main_category'])->where('is_active', true)->exists()) {
             throw ValidationException::withMessages(['subcategory' => 'Choose a subcategory belonging to the selected category.']);
         }
+    }
+
+    private function requireReason(?string $reason): void
+    {
+        if (trim((string) $reason) === '') {
+            throw ValidationException::withMessages(['edit_reason' => 'Explain why this change is needed.']);
+        }
+    }
+
+    private function logEntryChange(InternalBudget $budget, InternalBudgetEntry $entry, string $action, string $reason, User $actor, ?array $before, ?array $after): void
+    {
+        ProjectEditLog::create([
+            'project_id' => $budget->project_id,
+            'document_type' => 'internal_budget',
+            'document_id' => $budget->id,
+            'document_code' => $budget->budget_code,
+            'from_version' => $budget->version,
+            'to_version' => $budget->version,
+            'action' => $action,
+            'item_description' => $entry->item_description,
+            'reason' => $reason,
+            'before_snapshot' => $before,
+            'after_snapshot' => $after,
+            'edited_by' => $actor->id,
+        ]);
+    }
+
+    private function snapshot(InternalBudgetEntry $entry): array
+    {
+        return $entry->only([
+            'project_phase_id', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
+            'quantity', 'unit', 'unit_cost', 'notes',
+        ]);
     }
 }

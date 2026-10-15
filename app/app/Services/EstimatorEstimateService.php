@@ -3,14 +3,15 @@
 namespace App\Services;
 
 use App\Models\EstimateEntry;
+use App\Models\Lookup;
 use App\Models\Project;
+use App\Models\ProjectEditLog;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Models\User;
 use App\Support\Money;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class EstimatorEstimateService
@@ -44,6 +45,9 @@ class EstimatorEstimateService
             if ($drafts->isNotEmpty()) {
                 return $drafts->first();
             }
+            if ($lockedProject->estimates()->exists()) {
+                throw ValidationException::withMessages(['estimate' => 'Use Edit Estimate and provide a justification to change the issued estimate.']);
+            }
 
             $version = ((int) $lockedProject->estimates()->max('version')) + 1;
 
@@ -58,6 +62,52 @@ class EstimatorEstimateService
         });
     }
 
+    public function startEditing(ProjectEstimate $source, string $reason, User $actor): ProjectEstimate
+    {
+        Gate::forUser($actor)->authorize('revise', $source);
+
+        return $this->database->transaction(function () use ($source, $reason, $actor): ProjectEstimate {
+            $project = Project::query()->whereKey($source->project_id)->lockForUpdate()->firstOrFail();
+            $locked = ProjectEstimate::query()->whereKey($source->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('revise', $locked);
+            $this->requireReason($reason);
+            if ($project->estimates()->where('status', 'draft')->exists()) {
+                throw ValidationException::withMessages(['estimate' => 'Finish the existing working estimate before editing the issued estimate.']);
+            }
+
+            $version = ((int) $project->estimates()->max('version')) + 1;
+            $draft = $project->estimates()->create([
+                'estimate_code' => $this->estimateCode($project, $version),
+                'client_id' => $locked->client_id,
+                'version' => $version,
+                'status' => 'draft',
+                'prepared_at' => now()->toDateString(),
+                'prepared_by' => $actor->id,
+                'valid_until' => $locked->valid_until,
+                'notes' => $locked->notes,
+            ]);
+            foreach ($locked->entries()->get() as $entry) {
+                $draft->entries()->create($entry->only([
+                    'project_phase_id', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit',
+                    'base_unit_cost', 'markup_percent', 'notes',
+                ]) + ['entered_by' => $actor->id]);
+            }
+            ProjectEditLog::create([
+                'project_id' => $project->id,
+                'document_type' => 'estimate',
+                'document_id' => $draft->id,
+                'document_code' => $draft->estimate_code,
+                'from_version' => $locked->version,
+                'to_version' => $draft->version,
+                'action' => 'edit_started',
+                'reason' => $reason,
+                'edited_by' => $actor->id,
+            ]);
+
+            return $draft->load('entries');
+        });
+    }
+
     public function createEntry(ProjectEstimate $estimate, ProjectPhase $phase, array $data, User $actor): EstimateEntry
     {
         return $this->database->transaction(function () use ($estimate, $phase, $data, $actor): EstimateEntry {
@@ -66,10 +116,18 @@ class EstimatorEstimateService
             $this->assertPhaseBelongsToEstimate($lockedEstimate, $phase);
             $this->assertLookupPair($data);
 
-            return $lockedEstimate->entries()->create($this->entryAttributes($data) + [
+            if ($lockedEstimate->version > 1) {
+                $this->requireReason($data['edit_reason'] ?? null);
+            }
+            $entry = $lockedEstimate->entries()->create($this->entryAttributes($data) + [
                 'project_phase_id' => $phase->id,
                 'entered_by' => $actor->id,
             ]);
+            if ($lockedEstimate->version > 1) {
+                $this->logEntryChange($lockedEstimate, $entry, 'entry_added', $data['edit_reason'], $actor, null, $this->snapshot($entry));
+            }
+
+            return $entry;
         });
     }
 
@@ -79,19 +137,24 @@ class EstimatorEstimateService
             ProjectEstimate::query()->whereKey($entry->project_estimate_id)->lockForUpdate()->firstOrFail();
             $lockedEntry = EstimateEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('update', $lockedEntry);
+            $this->requireReason($data['edit_reason'] ?? null);
             $this->assertLookupPair($data);
+            $before = $this->snapshot($lockedEntry);
             $lockedEntry->update($this->entryAttributes($data));
+            $this->logEntryChange($lockedEntry->estimate, $lockedEntry, 'entry_updated', $data['edit_reason'], $actor, $before, $this->snapshot($lockedEntry->fresh()));
 
             return $lockedEntry->refresh();
         });
     }
 
-    public function deleteEntry(EstimateEntry $entry, User $actor): void
+    public function deleteEntry(EstimateEntry $entry, string $reason, User $actor): void
     {
-        $this->database->transaction(function () use ($entry, $actor): void {
+        $this->database->transaction(function () use ($entry, $reason, $actor): void {
             ProjectEstimate::query()->whereKey($entry->project_estimate_id)->lockForUpdate()->firstOrFail();
             $lockedEntry = EstimateEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('delete', $lockedEntry);
+            $this->requireReason($reason);
+            $this->logEntryChange($lockedEntry->estimate, $lockedEntry, 'entry_deleted', $reason, $actor, $this->snapshot($lockedEntry), null);
             $lockedEntry->delete();
         });
     }
@@ -126,7 +189,7 @@ class EstimatorEstimateService
     public function projectSummary(ProjectEstimate $estimate): array
     {
         $entries = $estimate->entries;
-        $subcategoryLabels = \App\Models\Lookup::where('type', 'subcategory')->pluck('label', 'code');
+        $subcategoryLabels = Lookup::where('type', 'subcategory')->pluck('label', 'code');
         $categories = [];
         $baseTotal = '0.00';
         $markupTotal = '0.00';
@@ -141,6 +204,7 @@ class EstimatorEstimateService
             $subcategories = $subcategoryKeys->map(function (string $key) use ($group, $subcategoryLabels) {
                 $matches = fn ($entry) => (($entry->subcategory ?: '__other') === $key);
                 $rows = $group->filter($matches);
+
                 return [
                     'key' => $key,
                     'label' => $key === '__other' ? 'Other / Unclassified' : ($subcategoryLabels[$key] ?? ucwords(str_replace('_', ' ', $key))),
@@ -213,7 +277,7 @@ class EstimatorEstimateService
     private function assertLookupPair(array $data): void
     {
         if (! empty($data['subcategory'])) {
-            $valid = \App\Models\Lookup::where('type', 'subcategory')
+            $valid = Lookup::where('type', 'subcategory')
                 ->where('code', $data['subcategory'])
                 ->where('parent_code', $data['main_category'])
                 ->where('is_active', true)
@@ -227,5 +291,38 @@ class EstimatorEstimateService
     private function estimateCode(Project $project, int $version): string
     {
         return $project->project_code.'-EST-'.str_pad((string) $version, 3, '0', STR_PAD_LEFT);
+    }
+
+    private function requireReason(?string $reason): void
+    {
+        if (trim((string) $reason) === '') {
+            throw ValidationException::withMessages(['edit_reason' => 'Explain why this change is needed.']);
+        }
+    }
+
+    private function logEntryChange(ProjectEstimate $estimate, EstimateEntry $entry, string $action, string $reason, User $actor, ?array $before, ?array $after): void
+    {
+        ProjectEditLog::create([
+            'project_id' => $estimate->project_id,
+            'document_type' => 'estimate',
+            'document_id' => $estimate->id,
+            'document_code' => $estimate->estimate_code,
+            'from_version' => $estimate->version,
+            'to_version' => $estimate->version,
+            'action' => $action,
+            'item_description' => $entry->item_description,
+            'reason' => $reason,
+            'before_snapshot' => $before,
+            'after_snapshot' => $after,
+            'edited_by' => $actor->id,
+        ]);
+    }
+
+    private function snapshot(EstimateEntry $entry): array
+    {
+        return $entry->only([
+            'project_phase_id', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit',
+            'base_unit_cost', 'markup_percent', 'notes',
+        ]);
     }
 }

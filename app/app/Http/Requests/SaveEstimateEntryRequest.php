@@ -41,6 +41,7 @@ class SaveEstimateEntryRequest extends FormRequest
             'base_unit_cost' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
             'markup_percent' => ['required', 'numeric', 'decimal:0,4', 'min:0', 'max:1000'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'edit_reason' => [$this->route('entry') instanceof EstimateEntry ? 'required' : 'nullable', 'string', 'max:2000'],
         ];
     }
 }

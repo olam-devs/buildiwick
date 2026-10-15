@@ -16,6 +16,7 @@ use App\Models\InternalBudgetEntry;
 use App\Models\LabourAgreement;
 use App\Models\Lookup;
 use App\Models\Project;
+use App\Models\ProjectEditLog;
 use App\Models\ProjectPhase;
 use App\Models\SupplierPayee;
 use App\Models\SupplierPaymentDestination;
@@ -342,6 +343,7 @@ class ProjectManagerController extends Controller
         $entryGroups = $current ? $current->entries->groupBy('project_phase_id') : collect();
         $history = $project->internalBudgets()->when($current, fn ($query) => $query->where('id', '!=', $current->id))->with('entries')->orderByDesc('version')->get()
             ->map(fn (InternalBudget $budget) => (object) ['budget' => $budget, 'total' => $budget->total_amount]);
+        $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'internal_budget')->with('editor')->latest()->get();
 
         return view('pm.show', [
             'project' => $project,
@@ -351,6 +353,7 @@ class ProjectManagerController extends Controller
             'siteRequests' => $siteRequests,
             'entryGroups' => $entryGroups,
             'history' => $history,
+            'editLogs' => $editLogs,
             'labels' => ProjectManagerBudgetService::CATEGORIES,
             'categoryLabels' => ProjectManagerBudgetService::CATEGORIES,
             'subcategoryLabels' => Lookup::where('type', 'subcategory')->pluck('label', 'code'),
@@ -364,6 +367,15 @@ class ProjectManagerController extends Controller
         $budget = $budgets->ensureWorkingBudget($project, $request->user());
 
         return redirect()->route('pm.projects.show', $project)->with('success', 'Working internal budget '.$budget->budget_code.' is ready.');
+    }
+
+    public function startBudgetEdit(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)
+    {
+        abort_unless((int) $budget->project_id === (int) $project->id, 404);
+        $validated = $request->validate(['edit_reason' => ['required', 'string', 'max:2000']]);
+        $draft = $budgets->startEditing($budget, $validated['edit_reason'], $request->user());
+
+        return redirect()->route('pm.projects.show', $project)->with('success', 'Internal budget is open for editing as '.$draft->budget_code.'. The approved version remains in the audit history.');
     }
 
     public function createEntry(Request $request, Project $project, ProjectPhase $phase, ProjectManagerBudgetService $budgets)
@@ -405,7 +417,9 @@ class ProjectManagerController extends Controller
     public function deleteEntry(Request $request, Project $project, ProjectPhase $phase, InternalBudgetEntry $entry, ProjectManagerBudgetService $budgets)
     {
         abort_unless((int) $phase->project_id === (int) $project->id && (int) $entry->project_phase_id === (int) $phase->id, 404);
-        $budgets->deleteEntry($entry, $request->user());
+        $this->authorize('delete', $entry);
+        $validated = $request->validate(['edit_reason' => ['required', 'string', 'max:2000']]);
+        $budgets->deleteEntry($entry, $validated['edit_reason'], $request->user());
 
         return redirect()->route('pm.projects.show', $project)->with('success', 'Draft budget entry deleted.');
     }

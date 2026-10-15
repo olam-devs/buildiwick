@@ -39,6 +39,7 @@ class SaveInternalBudgetEntryRequest extends FormRequest
             'unit' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'unit')->where('is_active', true)],
             'unit_cost' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'edit_reason' => [$this->route('entry') instanceof InternalBudgetEntry ? 'required' : 'nullable', 'string', 'max:2000'],
         ];
     }
 }

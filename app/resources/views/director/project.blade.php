@@ -83,4 +83,5 @@
   tabs.addEventListener('click',event=>{const button=event.target.closest('[data-project-view]');if(button)show(button.dataset.projectView)});show(location.hash.slice(1)||'overview');
 })();
 </script>
+@include('partials.project-edit-log', ['editLogTitle' => 'Project Estimate and Internal Budget Edit Log'])
 @endsection

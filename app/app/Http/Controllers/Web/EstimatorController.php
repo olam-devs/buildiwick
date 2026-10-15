@@ -7,6 +7,7 @@ use App\Http\Requests\SaveEstimateEntryRequest;
 use App\Models\EstimateEntry;
 use App\Models\Lookup;
 use App\Models\Project;
+use App\Models\ProjectEditLog;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Services\EstimatorEstimateService;
@@ -72,8 +73,9 @@ class EstimatorController extends Controller
         ]);
         $subcategoryLabels = Lookup::where('type', 'subcategory')->pluck('label', 'code');
         $unitLabels = Lookup::where('type', 'unit')->pluck('label', 'code');
+        $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'estimate')->with('editor')->latest()->get();
 
-        return view('estimator.show', compact('project', 'workingEstimate', 'displayEstimate', 'phaseSummaries', 'projectSummary', 'history', 'subcategoryLabels', 'unitLabels'));
+        return view('estimator.show', compact('project', 'workingEstimate', 'displayEstimate', 'phaseSummaries', 'projectSummary', 'history', 'subcategoryLabels', 'unitLabels', 'editLogs'));
     }
 
     public function startEstimate(Request $request, Project $project, EstimatorEstimateService $estimates)
@@ -82,6 +84,15 @@ class EstimatorController extends Controller
         $estimate = $estimates->ensureWorkingEstimate($project, $request->user());
 
         return redirect()->route('estimator.projects.show', $project)->with('success', 'Working estimate '.$estimate->estimate_code.' is ready.');
+    }
+
+    public function startEstimateEdit(Request $request, Project $project, ProjectEstimate $estimate, EstimatorEstimateService $estimates)
+    {
+        abort_unless((int) $estimate->project_id === (int) $project->id, 404);
+        $validated = $request->validate(['edit_reason' => ['required', 'string', 'max:2000']]);
+        $draft = $estimates->startEditing($estimate, $validated['edit_reason'], $request->user());
+
+        return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate is open for editing as '.$draft->estimate_code.'. The issued version remains in the audit history.');
     }
 
     public function createEntry(Request $request, Project $project, ProjectPhase $phase, EstimatorEstimateService $estimates)
@@ -135,7 +146,9 @@ class EstimatorController extends Controller
     public function deleteEntry(Request $request, Project $project, ProjectPhase $phase, EstimateEntry $entry, EstimatorEstimateService $estimates)
     {
         abort_unless((int) $phase->project_id === (int) $project->id && (int) $entry->project_phase_id === (int) $phase->id, 404);
-        $estimates->deleteEntry($entry, $request->user());
+        $this->authorize('delete', $entry);
+        $validated = $request->validate(['edit_reason' => ['required', 'string', 'max:2000']]);
+        $estimates->deleteEntry($entry, $validated['edit_reason'], $request->user());
 
         return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate entry deleted.');
     }

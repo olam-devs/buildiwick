@@ -26,6 +26,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 class ProjectManagerBudgetWorkflowTest extends TestCase
@@ -87,18 +88,30 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->assertSame('approved', $approved->status);
         $this->assertSame($director->id, $approved->approved_by);
 
-        $revised = $service->ensureWorkingBudget($project, $pm);
+        $this->actingAs($pm)->post(route('pm.budgets.edit', [$project, $approved]), [])
+            ->assertSessionHasErrors('edit_reason');
+        $this->assertSame(0, $project->internalBudgets()->where('status', 'draft')->count());
+
+        $revised = $service->startEditing($approved, 'Supplier rates changed after tender clarification.', $pm);
         $this->assertSame(2, $revised->version);
         $this->assertSame('approved', $finalized->fresh()->status);
         $this->assertSame(2, $project->internalBudgets()->count());
-        $phase = $project->phases()->firstOrFail();
-        $service->createEntry($revised, $phase, $this->entryPayload(['unit_cost' => '25.00']), $pm);
+        $copiedEntry = $revised->entries()->firstOrFail();
+        $service->updateEntry($copiedEntry, $this->entryPayload(['unit_cost' => '25.00', 'edit_reason' => 'Apply the confirmed supplier rate.']), $pm);
         $service->finalize($revised, $pm);
         $service->approve($revised->fresh(), $director);
         $this->assertSame('superseded', $finalized->fresh()->status);
         $this->assertSame('approved', $revised->fresh()->status);
         $this->assertSame('25.00', $service->projectComparison($project)['overall']['budget']);
         $this->assertSame(2, $project->internalBudgets()->count());
+        $this->assertDatabaseHas('project_edit_logs', [
+            'project_id' => $project->id, 'document_type' => 'internal_budget', 'action' => 'edit_started',
+            'reason' => 'Supplier rates changed after tender clarification.', 'edited_by' => $pm->id,
+        ]);
+        $this->actingAs($pm)->get(route('pm.projects.show', $project))->assertOk()
+            ->assertSee('Edit Internal Budget')->assertSee('Supplier rates changed after tender clarification.');
+        $this->actingAs($director)->get(route('director.projects.show', $project))->assertOk()
+            ->assertSee('Project Estimate and Internal Budget Edit Log')->assertSee('Supplier rates changed after tender clarification.');
     }
 
     public function test_director_can_return_then_verify_an_internal_budget(): void
@@ -121,7 +134,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->assertSame('draft', $budget->fresh()->status);
         $this->assertSame('Separate roofing labour from materials.', $budget->fresh()->notes);
 
-        $service->updateEntry($entry->fresh(), $this->entryPayload(['unit_cost' => '30.00']), $pm);
+        $service->updateEntry($entry->fresh(), $this->entryPayload(['unit_cost' => '30.00', 'edit_reason' => 'Separate roofing labour from materials as requested.']), $pm);
         $service->finalize($budget->fresh(), $pm);
         $this->actingAs($director)->post(route('director.budgets.decision', [$project, $budget]), [
             'decision' => 'approve', 'notes' => 'Verified.',
@@ -287,11 +300,11 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $phase = $project->phases()->firstOrFail();
         $entry = $service->createEntry($budget, $phase, $this->entryPayload(), $pm);
 
-        $changed = $this->entryPayload(['quantity' => '2.00', 'unit_cost' => '30.00']);
+        $changed = $this->entryPayload(['quantity' => '2.00', 'unit_cost' => '30.00', 'edit_reason' => 'Quantity and current rate were confirmed.']);
         $this->actingAs($pm)->put(route('pm.budget-entries.update', [$project, $phase, $entry]), $changed)->assertRedirect();
         $this->assertSame('60.00', $entry->fresh()->line_total);
         $this->actingAs($otherPm)->put(route('pm.budget-entries.update', [$project, $phase, $entry]), $changed)->assertForbidden();
-        $this->actingAs($pm)->delete(route('pm.budget-entries.delete', [$project, $phase, $entry]))->assertRedirect();
+        $this->actingAs($pm)->delete(route('pm.budget-entries.delete', [$project, $phase, $entry]), ['edit_reason' => 'This line was entered twice.'])->assertRedirect();
 
         $entry = $service->createEntry($budget, $phase, $this->entryPayload(), $pm);
         $service->finalize($budget, $pm);
@@ -513,6 +526,38 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->assertSame(['project_manager'], $request->approvals()->orderBy('id')->pluck('approval_stage')->all());
         $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertSee($request->request_code);
         $this->assertDatabaseCount('expense_payments', 0);
+    }
+
+    public function test_labour_agreement_table_reviews_linked_requests_and_exports_all_labour_requests_as_xlsx(): void
+    {
+        [$project, $pm] = $this->assignedProject();
+        $phase = $project->phases()->firstOrFail();
+        $agreement = LabourAgreement::create([
+            'agreement_code' => 'AGR-TEST-001', 'project_id' => $project->id,
+            'fundi_subcontractor' => 'Kijani Masonry Team', 'scope_of_work' => 'Masonry labour',
+            'labour_type' => 'subcontractor', 'agreement_date' => today(), 'agreed_value' => '900000.00',
+            'status' => 'active', 'created_by' => $pm->id,
+        ]);
+        $labourRequest = $this->request($project, $phase, ['main_category' => 'labour_subcontracts']);
+        $labourRequest->update([
+            'request_type' => 'salary_wage', 'labour_agreement_id' => $agreement->id,
+            'item_description' => 'Weekly mason wages', 'requested_by' => $pm->id,
+        ]);
+        $materialRequest = $this->request($project, $phase, ['main_category' => 'materials']);
+
+        $this->actingAs($pm)->get(route('pm.labour.index', ['project_id' => $project->id]))
+            ->assertOk()->assertSee('Request Review / Reference')->assertSee('Review '.$labourRequest->request_code)
+            ->assertSee('Download All Labour Requests Excel')->assertDontSee('New request');
+
+        $export = $this->actingAs($pm)->get(route('pm.requests.export', [
+            'project_id' => $project->id, 'category' => 'labour_subcontracts',
+        ]));
+        $export->assertOk()->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $sheet = IOFactory::load($export->baseResponse->getFile()->getPathname())->getActiveSheet();
+        $this->assertSame('Labour & Subcontract Requests', $sheet->getCell('A1')->getValue());
+        $values = json_encode($sheet->toArray());
+        $this->assertStringContainsString($labourRequest->request_code, $values);
+        $this->assertStringNotContainsString($materialRequest->request_code, $values);
     }
 
     public function test_rejection_requires_reason_and_unrelated_pm_cannot_decide(): void
