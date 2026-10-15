@@ -70,7 +70,8 @@ class AccountantPaymentWorkflowTest extends TestCase
 
         $this->actingAs($accountant)->get(route('accountant.requests.show', $first))
             ->assertOk()->assertSee('2 supplier group(s)')->assertSee('Harbour Hardware')
-            ->assertSee('Coastal Plant Hire')->assertSee('Excavator hire')->assertSee('350.00');
+            ->assertSee('Coastal Plant Hire')->assertSee('Excavator hire')->assertSee('350.00')
+            ->assertSee('project_id='.$project->id.'&amp;filter=all', false);
 
         app(ExpensePaymentRecorder::class)->record($first->fresh(), ['amount' => '50.00', 'payment_date' => now()->toDateString(), 'payment_method' => 'bank_transfer'], $accountant);
         $this->actingAs($accountant)->get(route('accountant.projects.show', $project))
