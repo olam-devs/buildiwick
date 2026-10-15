@@ -156,7 +156,7 @@ class AccountantController extends Controller
         $approvedCommitments = Money::sum($approved->map(fn ($item) => $item->approved_payable_amount));
         $budget = app(ProjectManagerBudgetService::class)->projectBudget($project);
         $approvedBatches = $this->requestBatches($approved);
-        $requestMetrics = ['approved' => $approvedBatches->count(), 'awaiting' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'unpaid')->count(), 'part_paid' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'part_paid')->count(), 'paid' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'paid')->count()];
+        $requestMetrics = ['approved' => $approvedBatches->count(), 'awaiting' => $approvedBatches->filter(fn ($batch) => Money::compare($batch->outstanding, '0') > 0)->count(), 'part_paid' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'part_paid')->count(), 'paid' => $approvedBatches->filter(fn ($batch) => $batch->payment_status === 'paid')->count()];
 
         return view('accountant.project', compact('project', 'byPhase', 'byCategory', 'invoices', 'estimate', 'invoiceTotal', 'received', 'paid', 'approvedCommitments', 'budget', 'requestMetrics'));
     }
