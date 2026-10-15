@@ -25,10 +25,9 @@
       <div class="field"><label>Type <span class="req">*</span></label><select data-name="request_type" required>@foreach(\App\Models\ExpenseRequest::TYPES as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select></div>
       <div class="field"><label>Item / Service / Work Description <span class="req">*</span></label><input data-name="item_description" maxlength="1000" placeholder="e.g. Simba cement 42.5R" required></div>
     </div>
-    <div class="row3">
+    <div class="row2">
       <div class="field"><label>Quantity</label><input data-name="quantity" type="number" min="0.01" step="0.01"></div>
       <div class="field"><label>Unit</label><select data-name="unit"><option value="">No unit / lump sum</option>@foreach($lookups['units'] as $item)<option value="{{ $item->code }}">{{ $item->label }}</option>@endforeach</select></div>
-      <div class="field"><label>Estimated Amount (TSh)</label><input data-name="requested_amount" type="number" min="0.01" step="0.01"><div class="field-err">Optional Site estimate; PM enters the final supplier price.</div></div>
     </div>
     <div class="field"><label>Notes / Brand / Specification</label><textarea data-name="notes" rows="2" maxlength="2000" placeholder="Brand, size, colour, delivery instruction or other detail for the PM"></textarea></div>
   </article>

@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\ExpenseRequest;
+use App\Models\InternalBudget;
 use App\Models\Project;
 use App\Services\AccountantReportingService;
 use App\Services\DirectorAnalyticsService;
+use App\Services\ExcelExportService;
+use App\Services\ProjectManagerBudgetService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DirectorController extends Controller
 {
@@ -86,7 +88,27 @@ class DirectorController extends Controller
         $asOf = isset($snapshotInput['as_of']) ? CarbonImmutable::parse($snapshotInput['as_of']) : null;
         $snapshot = $asOf ? $analytics->projectSnapshot($project, $asOf) : null;
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot'));
+        $pendingBudgets = $project->internalBudgets()->where('status', 'finalized')->with(['entries', 'createdBy', 'finalizedBy'])->orderByDesc('version')->get();
+
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets'));
+    }
+
+    public function decideBudget(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)
+    {
+        abort_unless((int) $budget->project_id === (int) $project->id, 404);
+        $validated = $request->validate([
+            'decision' => ['required', 'in:approve,return'],
+            'notes' => ['nullable', 'string', 'max:2000', 'required_if:decision,return'],
+        ]);
+        if ($validated['decision'] === 'approve') {
+            $budgets->approve($budget, $request->user(), $validated['notes'] ?? null);
+            $message = 'Internal budget verified and activated as the approved baseline.';
+        } else {
+            $budgets->returnForEditing($budget, $request->user(), $validated['notes']);
+            $message = 'Internal budget returned to the Project Manager for editing.';
+        }
+
+        return back()->with('success', $message);
     }
 
     public function receivables(Request $request, DirectorAnalyticsService $analytics)
@@ -120,7 +142,7 @@ class DirectorController extends Controller
         return view('director.transactions', compact('events', 'range'));
     }
 
-    public function exportPortfolio(Request $request, DirectorAnalyticsService $analytics): StreamedResponse
+    public function exportPortfolio(Request $request, DirectorAnalyticsService $analytics, ExcelExportService $excel)
     {
         $this->authorize('view-director-analytics');
         $range = $this->dateRange($request);
@@ -132,20 +154,20 @@ class DirectorController extends Controller
             $row['received_current'], $row['receivables_current'], $row['payables_current'], $row['cash_balance'],
         ])->all();
 
-        return $this->csv('director-project-portfolio.csv', [
+        return $excel->download('director-project-portfolio', 'Director Project Portfolio', [
             'Project Code', 'Project', 'Client', 'Project Status', 'Current Phase', 'Estimated Client Value',
             'Internal Budget', 'Approved Commitments', 'Actual Expenses Paid', 'Invoiced', 'Client Payments Received',
             'Outstanding Receivables', 'Outstanding Approved Payables', 'Recorded Cash Balance',
-        ], $rows);
+        ], $rows, [$range['from']->format('d M Y').' to '.$range['to']->format('d M Y')], [5, 6, 7, 8, 9, 10, 11, 12, 13]);
     }
 
-    public function exportSummary(Request $request, DirectorAnalyticsService $analytics): StreamedResponse
+    public function exportSummary(Request $request, DirectorAnalyticsService $analytics, ExcelExportService $excel)
     {
         $this->authorize('view-director-analytics');
         $range = $this->dateRange($request);
         $summary = $analytics->portfolio($range['from'], $range['to'])['summary'];
 
-        return $this->csv('director-financial-summary.csv', ['Metric', 'Amount / Count'], [
+        return $excel->download('director-financial-summary', 'Director Financial Summary', ['Metric', 'Amount / Count'], [
             ['Active Projects', $summary['active_projects']],
             ['Estimated Client Value (current)', $summary['estimated_client_value']],
             ['Invoiced During Period', $summary['invoiced_period']],
@@ -156,10 +178,10 @@ class DirectorController extends Controller
             ['Current Outstanding Approved Payables', $summary['payables']],
             ['Overdue Invoice Count', $summary['overdue_invoice_count']],
             ['Overdue Receivables', $summary['overdue_receivables']],
-        ]);
+        ], [$range['from']->format('d M Y').' to '.$range['to']->format('d M Y')], [1]);
     }
 
-    public function exportTransactions(Request $request, AccountantReportingService $reporting): StreamedResponse
+    public function exportTransactions(Request $request, AccountantReportingService $reporting, ExcelExportService $excel)
     {
         $this->authorize('view-director-analytics');
         $range = $this->dateRange($request);
@@ -170,10 +192,10 @@ class DirectorController extends Controller
             $event['in'], $event['out'], $event['balance'], $event['recorded_by'],
         ])->all();
 
-        return $this->csv('director-transaction-register.csv', [
+        return $excel->download('director-transaction-register', 'Director Transaction Register', [
             'Date', 'Reference', 'Project', 'Type', 'Description', 'Phase', 'Category',
             'Money In', 'Money Out', 'Running Balance', 'Recorded By',
-        ], $rows);
+        ], $rows, [$range['from']->format('d M Y').' to '.$range['to']->format('d M Y')], [7, 8, 9], [0]);
     }
 
     private function dateRange(Request $request): array
@@ -194,17 +216,5 @@ class DirectorController extends Controller
         };
 
         return ['name' => $preset, 'from' => $from, 'to' => $to];
-    }
-
-    private function csv(string $filename, array $headers, array $rows): StreamedResponse
-    {
-        return response()->streamDownload(function () use ($headers, $rows): void {
-            $handle = fopen('php://output', 'w');
-            fputcsv($handle, $headers);
-            foreach ($rows as $row) {
-                fputcsv($handle, $row);
-            }
-            fclose($handle);
-        }, $filename, ['Content-Type' => 'text/csv']);
     }
 }

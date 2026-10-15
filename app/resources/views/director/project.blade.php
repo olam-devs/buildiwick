@@ -2,11 +2,18 @@
 @section('title', $row['project']->name.' · Director Analytics')
 @section('content')
 @php($money = '\App\Support\Money')
+<div class="project-view-tabs" id="directorProjectTabs"><button class="btn btn-primary" type="button" data-project-view="overview">Project Overview</button><button class="btn btn-ghost" type="button" data-project-view="phases">Phases &amp; Cost Analytics</button><button class="btn btn-ghost" type="button" data-project-view="activity">Dates &amp; Activity</button></div>
 <a class="back-link" href="{{ route('director.index', ['range' => $range['name'], 'from' => $range['from']->toDateString(), 'to' => $range['to']->toDateString()]) }}">&larr; Back to Director Dashboard</a>
 <div class="topline">
   <div><h2>{{ $row['project']->name }}</h2><p>{{ $row['project']->project_code }} · {{ $row['project']->client?->name ?? 'No client linked' }} · {{ ucfirst(str_replace('_',' ',$row['project']->status)) }}</p></div>
   <div class="project-actions"><a class="btn btn-ghost" href="{{ route('director.transactions.index', ['range' => $range['name'], 'from' => $range['from']->toDateString(), 'to' => $range['to']->toDateString()]) }}">Transaction Register</a><a class="btn btn-ghost" href="{{ route('director.receivables.index', ['project_id' => $row['project']->id]) }}">Receivables</a><a class="btn btn-ghost" href="{{ route('director.payables.index', ['project_id' => $row['project']->id]) }}">Approved Payables</a></div>
 </div>
+
+@if($pendingBudgets->isNotEmpty())
+<section class="panel form-section"><h3>Internal Budgets Awaiting Your Verification</h3><p class="form-context">Review the PM's itemized budget. Approval makes it the active internal baseline; return reopens it for edits without losing the version.</p>
+@foreach($pendingBudgets as $budget)<div class="budget-review"><div><strong>{{ $budget->budget_code }} · Version {{ $budget->version }}</strong><small>{{ $budget->entries->count() }} entries · TSh {{ $money::format($budget->total_amount) }} · submitted {{ $budget->finalized_at?->format('d M Y H:i') }}</small></div><a class="btn btn-ghost" href="{{ route('pm.budgets.export', [$row['project'], $budget]) }}">Review Excel</a><form method="POST" action="{{ route('director.budgets.decision', [$row['project'], $budget]) }}">@csrf<div class="field"><label>Review notes</label><input name="notes" maxlength="2000" placeholder="Required when returning"></div><button class="btn btn-primary" name="decision" value="approve" type="submit">Verify &amp; Approve</button><button class="btn btn-ghost" name="decision" value="return" type="submit">Return for Editing</button></form></div>@endforeach
+</section>
+@endif
 
 <section class="panel form-section">
   <h3>Choose Reporting Dates</h3>
@@ -47,6 +54,8 @@
 <section class="panel form-section"><h3>Factual Attention Indicators</h3><div class="attention-list">@if($row['over_budget'])<div><span class="badge warn">OVER BUDGET</span> Approved commitments exceed the internal budget.</div>@endif @if($row['no_budget'])<div><span class="badge warn">NO BUDGET SET</span> Budget utilization cannot be calculated.</div>@endif @if($row['receivables_current'] !== '0.00')<div><span class="badge warn">AWAITING CLIENT PAYMENT</span> TSh {{ $money::format($row['receivables_current']) }} remains receivable.</div>@endif @if($row['payables_current'] !== '0.00')<div><span class="badge warn">APPROVED PAYMENTS OUTSTANDING</span> TSh {{ $money::format($row['payables_current']) }} remains payable.</div>@endif @if(!$row['over_budget'] && !$row['no_budget'] && $row['receivables_current'] === '0.00' && $row['payables_current'] === '0.00')<div>No current attention indicators from these financial records.</div>@endif</div></section>
 
 <style>
+.project-view-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.budget-review{display:grid;grid-template-columns:minmax(230px,1fr) auto minmax(420px,2fr);gap:12px;align-items:end;padding:12px 0;border-top:1px solid var(--line)}.budget-review:first-of-type{border-top:0}.budget-review small{display:block;color:var(--ink-dim);margin-top:4px}.budget-review form{display:flex;gap:8px;align-items:end}.budget-review .field{margin:0;flex:1}
 .project-actions,.section-heading,.date-filter,.snapshot-filter,.graph-legend{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.date-filter .field,.snapshot-filter .field{margin:0;min-width:170px}.filter-button{align-self:end}.director-position-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}.position-list{display:grid;grid-template-columns:1fr auto;gap:12px;margin:0;font-size:12px}.position-list dt{color:var(--ink-dim)}.position-list dd{margin:0;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}.cash-balance{font-size:23px;font-weight:700}.project-overview .value{font-size:16px}.utilization-tiles .value{font-size:18px}.negative{color:var(--danger)!important}.flash.warning{background:var(--warn-soft);border-color:#f1d59b;color:#8a5c0b}.attention-list{display:grid;gap:10px}.attention-list .badge{margin-right:8px}.category-total{background:var(--surface-2)}.subcategory-row td:first-child{padding-left:30px;color:var(--ink-soft)}.cost-comparison{min-width:1100px}.section-heading{justify-content:space-between}.section-heading h3{margin-bottom:4px}.snapshot-result{border-top:1px solid var(--line);margin-top:16px;padding-top:16px}.snapshot-result h4{margin:0 0 12px}.history-note{background:var(--primary-soft);color:var(--ink-soft);padding:10px 12px;border-radius:7px;margin:0}.graph-legend{justify-content:flex-end;margin-bottom:14px;font-size:11px;color:var(--ink-dim)}.graph-legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}.budget-key::before,.budget-bar{background:#a9c7e8}.approved-key::before,.approved-bar{background:#f5a623}.actual-key::before,.actual-bar{background:var(--primary)}.graph-row{display:grid;grid-template-columns:150px 1fr 120px;gap:12px;align-items:center;margin:12px 0}.graph-row small{text-align:right;color:var(--ink-dim)}.graph-bars{display:grid;gap:3px}.graph-bars span{display:block;height:7px;border-radius:99px;min-width:2px}@media(max-width:900px){.director-position-grid{grid-template-columns:1fr 1fr}.graph-row{grid-template-columns:120px 1fr}}@media(max-width:600px){.director-position-grid{grid-template-columns:1fr}.graph-row{grid-template-columns:1fr}.graph-row small{text-align:left}.project-actions{width:100%}}
 </style>
 <script>
@@ -60,6 +69,18 @@
     button.textContent = show ? 'Hide graphs' : 'Show graphs';
     button.setAttribute('aria-expanded', String(show));
   });
+})();
+(() => {
+  const tabs=document.getElementById('directorProjectTabs'); if(!tabs)return;
+  const groups={overview:[],phases:[],activity:[]};
+  document.querySelectorAll('.main>section').forEach(section=>{
+    const heading=section.querySelector('h3')?.textContent.trim()||'';
+    if(section.classList.contains('director-position-grid')||section.classList.contains('utilization-tiles')||heading.startsWith('Project Overview')||heading.startsWith('Factual Attention'))groups.overview.push(section);
+    else if(heading.startsWith('Phase History')||heading.startsWith('Cost Visualizations')||heading.startsWith('Phase Cost')||heading.startsWith('Category and Subcategory'))groups.phases.push(section);
+    else if(heading.startsWith('Choose Reporting')||heading.startsWith('Trace the Project')||heading.startsWith('Financial Activity'))groups.activity.push(section);
+  });
+  const show=name=>{Object.values(groups).flat().forEach(section=>section.hidden=true);(groups[name]||groups.overview).forEach(section=>section.hidden=false);tabs.querySelectorAll('button').forEach(button=>{button.classList.toggle('btn-primary',button.dataset.projectView===name);button.classList.toggle('btn-ghost',button.dataset.projectView!==name)});history.replaceState(null,'','#'+name)};
+  tabs.addEventListener('click',event=>{const button=event.target.closest('[data-project-view]');if(button)show(button.dataset.projectView)});show(location.hash.slice(1)||'overview');
 })();
 </script>
 @endsection

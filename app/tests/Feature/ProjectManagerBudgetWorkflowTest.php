@@ -82,17 +82,53 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->assertSame($pm->id, $finalized->finalized_by);
         $this->assertNotNull($finalized->finalized_at);
 
+        $director = $this->user('director');
+        $approved = $service->approve($finalized, $director, 'Verified against the project plan.');
+        $this->assertSame('approved', $approved->status);
+        $this->assertSame($director->id, $approved->approved_by);
+
         $revised = $service->ensureWorkingBudget($project, $pm);
         $this->assertSame(2, $revised->version);
-        $this->assertSame('finalized', $finalized->fresh()->status);
+        $this->assertSame('approved', $finalized->fresh()->status);
         $this->assertSame(2, $project->internalBudgets()->count());
         $phase = $project->phases()->firstOrFail();
         $service->createEntry($revised, $phase, $this->entryPayload(['unit_cost' => '25.00']), $pm);
         $service->finalize($revised, $pm);
+        $service->approve($revised->fresh(), $director);
         $this->assertSame('superseded', $finalized->fresh()->status);
-        $this->assertSame('finalized', $revised->fresh()->status);
+        $this->assertSame('approved', $revised->fresh()->status);
         $this->assertSame('25.00', $service->projectComparison($project)['overall']['budget']);
         $this->assertSame(2, $project->internalBudgets()->count());
+    }
+
+    public function test_director_can_return_then_verify_an_internal_budget(): void
+    {
+        [$project, $pm] = $this->assignedProject();
+        $director = $this->user('director');
+        $service = app(ProjectManagerBudgetService::class);
+        $budget = $service->ensureWorkingBudget($project, $pm);
+        $entry = $service->createEntry($budget, $project->phases()->firstOrFail(), $this->entryPayload(), $pm);
+        $service->finalize($budget, $pm);
+
+        $this->actingAs($pm)->get(route('pm.projects.show', $project))
+            ->assertOk()->assertSee('Awaiting Director Verification')->assertDontSee('Create Revised Budget Version');
+        $this->actingAs($director)->get(route('director.projects.show', $project))
+            ->assertOk()->assertSee('Internal Budgets Awaiting Your Verification')->assertSee($budget->budget_code);
+
+        $this->actingAs($director)->post(route('director.budgets.decision', [$project, $budget]), [
+            'decision' => 'return', 'notes' => 'Separate roofing labour from materials.',
+        ])->assertRedirect();
+        $this->assertSame('draft', $budget->fresh()->status);
+        $this->assertSame('Separate roofing labour from materials.', $budget->fresh()->notes);
+
+        $service->updateEntry($entry->fresh(), $this->entryPayload(['unit_cost' => '30.00']), $pm);
+        $service->finalize($budget->fresh(), $pm);
+        $this->actingAs($director)->post(route('director.budgets.decision', [$project, $budget]), [
+            'decision' => 'approve', 'notes' => 'Verified.',
+        ])->assertRedirect();
+        $this->assertSame('approved', $budget->fresh()->status);
+        $this->assertSame($director->id, $budget->fresh()->approved_by);
+        $this->assertNotNull($budget->fresh()->approved_at);
     }
 
     public function test_pm_can_budget_future_standard_phases_and_entry_records_actor_without_markup(): void
@@ -351,6 +387,8 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'main_category' => 'materials', 'subcategory' => 'reinforcement_steel',
             'item_description' => 'Foundation reinforcement steel',
         ]), $pm);
+        app(ProjectManagerBudgetService::class)->finalize($budget, $pm);
+        app(ProjectManagerBudgetService::class)->approve($budget->fresh(), $this->user('director'));
         $request = $this->request($project, $project->phases()->firstOrFail(), [
             'main_category' => 'preliminaries_overheads', 'subcategory' => null,
         ]);
@@ -439,13 +477,15 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $request = ExpenseRequest::latest('id')->firstOrFail();
         $this->assertSame($pm->id, $request->requested_by);
         $this->assertSame('salary_wage', $request->request_type);
-        $this->assertSame('300000.00', $request->requested_amount);
+        $this->assertNull($request->requested_amount);
         $this->assertSame($agreement->id, $request->labour_agreement_id);
         $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
         $entry = app(ProjectManagerBudgetService::class)->createEntry($budget, $request->phase, $this->entryPayload([
             'main_category' => 'labour_subcontracts', 'subcategory' => 'direct_labour',
             'item_description' => 'Weekly masonry labour budget', 'unit_cost' => '300000.00',
         ]), $pm);
+        app(ProjectManagerBudgetService::class)->finalize($budget, $pm);
+        app(ProjectManagerBudgetService::class)->approve($budget->fresh(), $director);
         $this->actingAs($pm)->put(route('pm.requests.classification.update', $request), [
             'project_phase_id' => $request->project_phase_id,
             'main_category' => 'labour_subcontracts',
@@ -522,7 +562,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         ]);
         $response = $this->actingAs($pm)->get(route('pm.projects.show', $project));
         $response->assertOk()->assertSee('Phase 5 — Roofing')->assertSee('Over internal budget by')
-            ->assertSee('Site Requests · Read Only')->assertSee('Finalize Budget Baseline')
+            ->assertSee('Site Requests · Read Only')->assertSee('Submit for Director Verification')
             ->assertDontSee('Estimator Base')->assertDontSee('987,654.00')
             ->assertDontSee('Approve Request')->assertDontSee('Reject Request')->assertDontSee('Record Payment');
     }
@@ -552,6 +592,8 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $entry = app(ProjectManagerBudgetService::class)->createEntry($budget, $items[0]->phase, $this->entryPayload([
             'item_description' => 'General concrete materials', 'unit_cost' => '500000.00',
         ]), $pm);
+        app(ProjectManagerBudgetService::class)->finalize($budget, $pm);
+        app(ProjectManagerBudgetService::class)->approve($budget->fresh(), $director);
         $supplier = SupplierPayee::create(['name' => 'Grouped Building Supplier', 'type' => 'supplier', 'is_active' => true]);
         $this->actingAs($pm)->get(route('pm.requests.commercial.edit', $items[0]))->assertOk()
             ->assertSee('Supplier Grouping and Commercial Preparation')

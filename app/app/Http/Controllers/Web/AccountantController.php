@@ -15,6 +15,7 @@ use App\Models\Project;
 use App\Services\AccountantReportingService;
 use App\Services\ClientInvoiceService;
 use App\Services\ClientPaymentRecorder;
+use App\Services\ExcelExportService;
 use App\Services\ExpensePaymentRecorder;
 use App\Services\ProjectManagerBudgetService;
 use App\Support\Money;
@@ -150,7 +151,9 @@ class AccountantController extends Controller
     {
         $this->authorizeWorkspace($request);
 
-        return view('accountant.invoices', ['invoices' => ClientInvoice::with(['project', 'client', 'items', 'payments'])->orderByDesc('created_at')->get()]);
+        return view('accountant.invoices', ['invoices' => ClientInvoice::with(['project', 'client', 'items', 'payments'])
+            ->when($request->integer('project_id'), fn ($query, int $projectId) => $query->where('project_id', $projectId))
+            ->orderByDesc('created_at')->get()]);
     }
 
     public function createInvoice(Request $request, Project $project)
@@ -175,6 +178,21 @@ class AccountantController extends Controller
         $clientInvoice->load(['project', 'client', 'items.phase', 'payments.recordedBy', 'issuedBy']);
 
         return view('accountant.invoice', ['clientInvoice' => $clientInvoice, 'paymentIdempotencyKey' => (string) Str::uuid()]);
+    }
+
+    public function exportInvoice(Request $request, ClientInvoice $clientInvoice, ExcelExportService $excel)
+    {
+        $this->authorizeWorkspace($request);
+        $clientInvoice->load(['project', 'client', 'items.phase', 'issuedBy']);
+        $rows = $clientInvoice->items->map(fn ($item) => [
+            $item->phase?->stage_label, $item->item_description, $item->quantity ?? 1,
+            $item->unit ?? 'LS', $item->unit_price, $item->line_total,
+        ]);
+        $rows->push(['', 'INVOICE TOTAL', '', '', '', $clientInvoice->total_amount]);
+
+        return $excel->download($clientInvoice->invoice_code, 'Client Invoice - '.$clientInvoice->invoice_code,
+            ['Phase', 'Description', 'Quantity', 'Unit', 'Unit Price (TSh)', 'Line Total (TSh)'],
+            $rows, ['Project: '.$clientInvoice->project->name, 'Client: '.$clientInvoice->client->name, 'Invoice date: '.($clientInvoice->issued_at?->format('d M Y') ?? 'Draft'), 'Due: '.($clientInvoice->due_at?->format('d M Y') ?? 'Not set')], [4, 5]);
     }
 
     public function issueInvoice(Request $request, ClientInvoice $clientInvoice, ClientInvoiceService $invoices)
@@ -259,43 +277,32 @@ class AccountantController extends Controller
         return view('accountant.statement', compact('project', 'statement'));
     }
 
-    public function exportTransactions(Request $request, AccountantReportingService $reporting)
+    public function exportTransactions(Request $request, AccountantReportingService $reporting, ExcelExportService $excel)
     {
         $this->authorizeWorkspace($request);
 
-        return $this->csv('transactions.csv', $this->transactionHeaders(), $this->transactionRows($reporting->transactions(null, $request->only(['from', 'to', 'direction', 'phase', 'category']))));
+        return $excel->download('transactions', 'All Project Transactions', $this->transactionHeaders(), $this->transactionRows($reporting->transactions(null, $request->only(['from', 'to', 'direction', 'phase', 'category']))), [], [7, 8, 9], [0]);
     }
 
-    public function exportProjectTransactions(Request $request, Project $project, AccountantReportingService $reporting)
+    public function exportProjectTransactions(Request $request, Project $project, AccountantReportingService $reporting, ExcelExportService $excel)
     {
         $this->authorizeWorkspace($request);
 
-        return $this->csv('project-transactions.csv', $this->transactionHeaders(), $this->transactionRows($reporting->transactions($project, $request->only(['from', 'to', 'direction', 'phase', 'category']))));
+        return $excel->download($project->project_code.'-transactions', $project->name.' - Transaction Register', $this->transactionHeaders(), $this->transactionRows($reporting->transactions($project, $request->only(['from', 'to', 'direction', 'phase', 'category']))), [$project->project_code], [7, 8, 9], [0]);
     }
 
-    public function exportReceivables(Request $request, AccountantReportingService $reporting)
+    public function exportReceivables(Request $request, AccountantReportingService $reporting, ExcelExportService $excel)
     {
         $this->authorizeWorkspace($request);
 
-        return $this->csv('receivables.csv', ['Invoice', 'Project', 'Client', 'Invoice Date', 'Due Date', 'Invoice Total', 'Received', 'Outstanding', 'Age', 'Status'], $reporting->receivables($request->only(['project_id']))->map(fn ($invoice) => [$invoice->invoice_code, $invoice->project->name, $invoice->client->name, $invoice->issued_at?->toDateString(), $invoice->due_at?->toDateString(), $invoice->total_amount, $invoice->paid_to_date, $invoice->outstanding_amount, $invoice->due_at?->diffInDays(today()), $invoice->overdue ? 'Overdue' : 'Current']));
+        return $excel->download('receivables', 'Receivables Register', ['Invoice', 'Project', 'Client', 'Invoice Date', 'Due Date', 'Invoice Total', 'Received', 'Outstanding', 'Age', 'Status'], $reporting->receivables($request->only(['project_id']))->map(fn ($invoice) => [$invoice->invoice_code, $invoice->project->name, $invoice->client->name, $invoice->issued_at, $invoice->due_at, $invoice->total_amount, $invoice->paid_to_date, $invoice->outstanding_amount, $invoice->due_at?->diffInDays(today()), $invoice->overdue ? 'Overdue' : 'Current']), [], [5, 6, 7], [3, 4]);
     }
 
-    public function exportPayables(Request $request, AccountantReportingService $reporting)
+    public function exportPayables(Request $request, AccountantReportingService $reporting, ExcelExportService $excel)
     {
         $this->authorizeWorkspace($request);
 
-        return $this->csv('approved-payables.csv', ['Request', 'Project', 'Supplier', 'Approved At', 'Approved Amount', 'Paid', 'Outstanding', 'Payment Status', 'Age Since Approval'], $reporting->payables($request->only(['project_id', 'category']))->map(fn ($item) => [$item->request_code, $item->project->name, $item->supplierPayee?->name ?? $item->latestApproval?->supplier_name_snapshot, $item->latestApproval?->decided_at?->toDateString(), $item->approved_payable_amount, $item->paid_to_date, $item->approved_outstanding_amount, $item->payment_status, $item->latestApproval?->decided_at?->diffInDays(today())]));
-    }
-
-    private function csv(string $filename, array $headers, $rows): StreamedResponse
-    {
-        return response()->streamDownload(function () use ($headers, $rows): void {
-            $handle = fopen('php://output', 'w');
-            fputcsv($handle, $headers);
-            foreach ($rows as $row) {
-                fputcsv($handle, $row);
-            } fclose($handle);
-        }, $filename, ['Content-Type' => 'text/csv']);
+        return $excel->download('approved-payables', 'Approved Payables Register', ['Request', 'Project', 'Supplier', 'Approved At', 'Approved Amount', 'Paid', 'Outstanding', 'Payment Status', 'Age Since Approval'], $reporting->payables($request->only(['project_id', 'category']))->map(fn ($item) => [$item->request_code, $item->project->name, $item->supplierPayee?->name ?? $item->latestApproval?->supplier_name_snapshot, $item->latestApproval?->decided_at, $item->approved_payable_amount, $item->paid_to_date, $item->approved_outstanding_amount, $item->payment_status, $item->latestApproval?->decided_at?->diffInDays(today())]), [], [4, 5, 6], [3]);
     }
 
     private function transactionHeaders(): array

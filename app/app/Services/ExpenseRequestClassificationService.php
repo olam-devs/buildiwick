@@ -39,12 +39,11 @@ class ExpenseRequestClassificationService
 
             if (! empty($data['internal_budget_entry_id'])) {
                 $currentBudget = InternalBudget::query()->where('project_id', $request->project_id)
-                    ->whereIn('status', ['draft', 'finalized', 'approved'])
-                    ->orderByRaw("CASE WHEN status = 'draft' THEN 0 ELSE 1 END")
+                    ->where('status', 'approved')
                     ->orderByDesc('version')->first();
                 $entry = $currentBudget?->entries()->whereKey($data['internal_budget_entry_id'])->first();
                 if (! $entry instanceof InternalBudgetEntry) {
-                    throw ValidationException::withMessages(['internal_budget_entry_id' => 'Select a line from the project’s current internal budget.']);
+                    throw ValidationException::withMessages(['internal_budget_entry_id' => 'Select a line from the project’s Director-approved internal budget.']);
                 }
                 $attributes = [
                     'project_phase_id' => $entry->project_phase_id,

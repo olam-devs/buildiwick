@@ -29,7 +29,7 @@ class DemoProjectSeederTest extends TestCase
         $this->assertSame('issued', $estimate->status);
         $this->assertTrue($estimate->entries->every(fn ($entry) => $entry->markup_percent === '15.0000'));
         $this->assertSame('302145250.00', $estimate->total_amount);
-        $this->assertSame('finalized', $project->internalBudgets()->firstOrFail()->status);
+        $this->assertSame('approved', $project->internalBudgets()->firstOrFail()->status);
         $this->assertSame(4, $project->expenseRequests()->count());
         $this->assertSame(3, $project->invoices()->count());
 

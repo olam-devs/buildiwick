@@ -327,26 +327,24 @@ class SiteExpenseRequestWorkflowTest extends TestCase
             ->assertSee('Site Operator Dashboard')->assertSee('No requests')
             ->assertDontSee('Estimator Dashboard')->assertDontSee('Estimator Estimates')->assertDontSee('New Entry');
         $this->actingAs($operator)->get(route('site.projects.show', $project))->assertOk()
-            ->assertSee('Total Requests')->assertSee('Awaiting PM Pricing/Review')->assertSee('No expense requests have been submitted');
+            ->assertSee('Total Requests')->assertSee('Awaiting PM Review')->assertSee('No expense requests have been submitted');
         $this->actingAs($operator)->get(route('site.requests.index'))->assertOk()->assertSee('No expense requests yet.');
     }
 
-    public function test_salary_and_cash_requests_require_an_amount_while_items_and_services_do_not(): void
+    public function test_site_operator_never_sets_pricing_for_any_request_type(): void
     {
         [$project, $operator] = $this->assignedProject();
         $this->actingAs($operator)->from(route('site.requests.create', $project))
-            ->post(route('site.requests.store', $project), $this->payload(['request_type' => 'salary_wage', 'requested_amount' => null]))
-            ->assertSessionHasErrors('items.0.requested_amount');
-        $this->actingAs($operator)->from(route('site.requests.create', $project))
             ->post(route('site.requests.store', $project), $this->payload(['request_type' => 'salary_wage', 'requested_amount' => '50000.00']))
             ->assertRedirect();
+        $this->assertNull(ExpenseRequest::latest('id')->value('requested_amount'));
 
         $this->actingAs($operator)->post(route('site.requests.store', $project), $this->payload([
             'request_type' => 'cash_amount', 'requested_amount' => '75000.00', 'item_description' => 'Petty cash float',
         ]))->assertRedirect();
         $cash = ExpenseRequest::latest('id')->firstOrFail();
         $this->assertSame('cash_amount', $cash->request_type);
-        $this->assertSame('75000.00', $cash->requested_amount);
+        $this->assertNull($cash->requested_amount);
 
         $this->actingAs($operator)->post(route('site.requests.store', $project), $this->payload([
             'request_type' => 'service', 'requested_amount' => null, 'item_description' => 'Crane hire service',

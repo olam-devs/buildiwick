@@ -119,6 +119,9 @@ class ExpenseRequestDecisionService
         if (str_starts_with((string) $request->request_batch_code, 'SRQ-') && ! $request->internal_budget_entry_id) {
             throw ValidationException::withMessages(['decision' => 'Every item must be linked to an exact internal-budget line before approval.']);
         }
+        if ($request->internal_budget_entry_id && $request->internalBudgetEntry?->budget?->status !== 'approved') {
+            throw ValidationException::withMessages(['decision' => 'The linked internal-budget version must be verified by the Director before this request can be approved.']);
+        }
         if (! $request->supplierPayee || ! $request->supplierPayee->is_active
             || $request->commercial_unit_rate === null || $request->commercial_total === null
             || ! $request->commercial_payment_method) {

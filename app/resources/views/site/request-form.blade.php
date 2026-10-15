@@ -30,11 +30,10 @@
     <div class="field"><label for="item_description">Item / Description <span class="req">*</span></label><input id="item_description" name="item_description" maxlength="1000" value="{{ old('item_description', $expenseRequest?->item_description) }}" required></div>
   </section>
 
-  <section class="panel form-section"><h3>Quantity and Cost</h3>
-    <div class="row3">
+  <section class="panel form-section"><h3>Quantity and Details</h3>
+    <div class="row2">
       <div class="field"><label for="quantity">Quantity</label><input id="quantity" name="quantity" type="number" min="0" step="0.01" value="{{ old('quantity', $expenseRequest?->quantity) }}"><div class="field-err">Leave blank when the need is a lump-sum item; the Project Manager prices it later.</div></div>
       <div class="field"><label for="unit">Unit</label><select id="unit" name="unit"><option value="">No unit</option>@foreach($lookups['units'] as $item)<option value="{{ $item->code }}" @selected(old('unit', $expenseRequest?->unit ?? 'ls') === $item->code)>{{ $item->label }}</option>@endforeach</select><div class="field-err">Suggested units move to the top by category; all valid units remain available.</div></div>
-      <div class="field" id="requestedAmountField"><label for="requested_amount">Requested Amount (TSh) <span class="req amount-required">*</span></label><input id="requested_amount" name="requested_amount" type="number" min="0.01" step="0.01" value="{{ old('requested_amount', $expenseRequest?->requested_amount) }}"><div class="field-err">Required for salary/wage and direct cash requests. The PM may still recommend a different final amount.</div></div>
     </div>
     <div class="field"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="3" maxlength="2000">{{ old('notes', $expenseRequest?->notes) }}</textarea></div>
     <div class="field"><label for="evidence">Supporting Evidence</label><input id="evidence" type="file" name="evidence" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"><div class="field-err">PDF, image, Word or Excel document · maximum 20 MB · stored privately.</div>@if($editing && $expenseRequest->evidence_link)<div class="field-err">Existing evidence is retained unless replaced.</div>@endif</div>
@@ -49,8 +48,6 @@
   const subcategory=document.getElementById('subcategory');
   const unit=document.getElementById('unit');
   const requestType=document.getElementById('request_type');
-  const requestedAmount=document.getElementById('requested_amount');
-  const amountField=document.getElementById('requestedAmountField');
   const unitRecommendations=@json($lookups['unitRecommendations']);
   const categoryGuidance=@json(\App\Models\ExpenseRequest::CATEGORY_GUIDANCE);
   const agreementField=document.getElementById('labourAgreementField');
@@ -60,7 +57,7 @@
   category.addEventListener('change',filterSubs);filterSubs();
   function guideUnits(){const preferred=unitRecommendations[category.value]||[];Array.from(unit.options).filter(option=>option.value).sort((left,right)=>(preferred.indexOf(left.value)<0?1000:preferred.indexOf(left.value))-(preferred.indexOf(right.value)<0?1000:preferred.indexOf(right.value))).forEach(option=>unit.appendChild(option));}
   category.addEventListener('change',guideUnits);guideUnits();
-  function guideAmount(){const required=['salary_wage','cash_amount'].includes(requestType.value);requestedAmount.required=required;amountField.classList.toggle('amount-optional',!required);document.querySelector('.amount-required').style.display=required?'inline':'none';if(requestType.value==='salary_wage'&&category.value!=='labour_subcontracts'){category.value='labour_subcontracts';filterSubs();guideUnits();}}
+  function guideAmount(){if(requestType.value==='salary_wage'&&category.value!=='labour_subcontracts'){category.value='labour_subcontracts';filterSubs();guideUnits();}}
   requestType.addEventListener('change',guideAmount);guideAmount();
 })();
 </script>
