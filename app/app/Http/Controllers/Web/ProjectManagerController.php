@@ -432,7 +432,7 @@ class ProjectManagerController extends Controller
 
         return $excel->download($budget->budget_code, 'Internal Budget - '.$project->name,
             ['Phase', 'Category', 'Subcategory', 'Description', 'Expected Supplier / Fundi', 'Quantity', 'Unit', 'Unit Cost (TSh)', 'Budget Total (TSh)', 'Notes'],
-            $rows, [$budget->budget_code, 'Version '.$budget->version, 'Status: '.ucwords(str_replace('_', ' ', $budget->status)), 'Director: '.($budget->approvedBy?->name ?? 'Awaiting verification')], [7, 8]);
+            $rows, [$budget->budget_code, 'Version '.$budget->version, 'Status: '.ucwords(str_replace('_', ' ', $budget->status)), 'Director review: '.($budget->approvedBy?->name ?? ($budget->status === 'approved' ? 'Grandfathered baseline' : 'Awaiting verification'))], [7, 8]);
     }
 
     private function currentBudget(Project $project): ?InternalBudget
