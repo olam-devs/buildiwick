@@ -92,7 +92,7 @@ class AccountantController extends Controller
         $this->authorizeWorkspace($request);
         $this->authorize('view', $expenseRequest);
         abort_unless($expenseRequest->status === 'approved', 404);
-        $expenseRequest->load(['project', 'phase', 'labourAgreement', 'internalBudgetEntry', 'requestedBy', 'supplierPayee', 'latestPmApproval.decidedBy', 'payments.recordedBy']);
+        $expenseRequest->load(['project', 'phase', 'internalBudgetEntry', 'supplierPayee.paymentDestinations', 'latestPmApproval.decidedBy', 'payments.recordedBy']);
         $batchCode = $expenseRequest->request_batch_code;
         $batchItems = $this->approvedQuery()
             ->where('project_id', $expenseRequest->project_id)
@@ -110,7 +110,6 @@ class AccountantController extends Controller
             'supplierGroups' => $supplierGroups,
             'batchTotals' => $this->financialTotals($batchItems),
             'paymentMethods' => Lookup::ofType('payment_method')->get(),
-            'paymentIdempotencyKey' => (string) Str::uuid(),
         ]);
     }
 
@@ -340,7 +339,7 @@ class AccountantController extends Controller
 
     private function approvedQuery()
     {
-        return ExpenseRequest::query()->where('status', 'approved')->with(['project', 'phase', 'labourAgreement', 'internalBudgetEntry', 'requestedBy', 'supplierPayee', 'latestPmApproval.decidedBy', 'latestDirectorApproval.decidedBy', 'payments']);
+        return ExpenseRequest::query()->where('status', 'approved')->with(['project', 'phase', 'internalBudgetEntry', 'supplierPayee.paymentDestinations', 'latestPmApproval.decidedBy', 'payments.recordedBy']);
     }
 
     private function financialTotals($requests): array
