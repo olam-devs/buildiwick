@@ -23,14 +23,19 @@ class DemoProjectSeederTest extends TestCase
         $project = Project::where('project_code', DemoProjectSeeder::PROJECT_CODE)->firstOrFail();
 
         $this->assertSame(7, $project->phases()->count());
+        $this->assertTrue($project->phases()->get()->every(fn ($phase) => filled($phase->phase_name)));
         $this->assertSame(3, $project->assignedUsers()->count());
         $this->assertNotNull($project->client_id);
         $estimate = $project->estimates()->with('entries')->firstOrFail();
         $this->assertSame('issued', $estimate->status);
         $this->assertTrue($estimate->entries->every(fn ($entry) => $entry->markup_percent === '15.0000'));
+        $this->assertTrue($estimate->entries->every(fn ($entry) => filled($entry->work_area) && filled($entry->work_section) && filled($entry->item_reference)));
         $this->assertSame('302145250.00', $estimate->total_amount);
         $this->assertSame('approved', $project->internalBudgets()->firstOrFail()->status);
         $this->assertSame(4, $project->expenseRequests()->count());
+        $demoBatch = $project->expenseRequests()->where('request_batch_code', 'SRQ-DEMO-001')->get();
+        $this->assertCount(3, $demoBatch);
+        $this->assertSame(2, $demoBatch->pluck('supplier_payee_id')->unique()->count());
         $this->assertSame(3, $project->invoices()->count());
 
         $this->assertSame('paid', ExpenseRequest::where('request_code', 'REQ-DEMO-001-01')->firstOrFail()->payment_status);

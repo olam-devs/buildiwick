@@ -32,8 +32,14 @@ class ExcelExportService
         array $dateColumns = [],
     ): BinaryFileResponse {
         $spreadsheet = new Spreadsheet;
+        $spreadsheet->getProperties()
+            ->setCreator('Buildiwick Group')
+            ->setCompany('Buildiwick Group')
+            ->setTitle($title)
+            ->setSubject('Buildiwick system export');
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle(Str::limit(preg_replace('/[\\\\\/\?\*\[\]:]/', '', $title), 31, ''));
+        $sheet->getParent()->getDefaultStyle()->getFont()->setName('Arial')->setSize(10);
 
         $columnCount = max(1, count($headers));
         $lastColumn = $sheet->getCell([$columnCount, 1])->getColumn();
@@ -42,7 +48,7 @@ class ExcelExportService
         $sheet->getStyle("A1:{$lastColumn}1")->applyFromArray([
             'font' => ['bold' => true, 'size' => 16, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F6FB2']],
-            'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
         $sheet->getRowDimension(1)->setRowHeight(28);
 
@@ -51,6 +57,8 @@ class ExcelExportService
         $sheet->mergeCells("A2:{$lastColumn}2");
         $sheet->setCellValue('A2', $metaText);
         $sheet->getStyle("A2:{$lastColumn}2")->getFont()->setItalic(true)->getColor()->setRGB('5D6A73');
+        $sheet->getStyle("A2:{$lastColumn}2")->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet->getRowDimension(2)->setRowHeight(30);
 
         foreach ($headers as $index => $header) {
             $sheet->setCellValue([$index + 1, 4], $header);
@@ -109,8 +117,12 @@ class ExcelExportService
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
         $sheet->freezePane('A5');
-        $sheet->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)->setFitToWidth(1)->setFitToHeight(0);
+        $sheet->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)->setFitToWidth(1)->setFitToHeight(0)->setRowsToRepeatAtTopByStartAndEnd(1, 4);
         $sheet->getPageMargins()->setTop(.4)->setBottom(.4)->setLeft(.35)->setRight(.35);
+        $sheet->getHeaderFooter()
+            ->setOddHeader('&LBuildiwick Group&C'.$title.'&R&D')
+            ->setOddFooter('&LConfidential internal record&CPage &P of &N&RBuildiwick Group');
+        $sheet->getPageSetup()->setPrintArea("A1:{$lastColumn}{$lastRow}");
 
         $safeFilename = Str::of($filename)->replaceMatches('/[^A-Za-z0-9._-]/', '-')->finish('.xlsx')->toString();
         $path = tempnam(sys_get_temp_dir(), 'buildiwick-xlsx-');
