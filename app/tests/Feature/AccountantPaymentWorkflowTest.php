@@ -67,6 +67,10 @@ class AccountantPaymentWorkflowTest extends TestCase
         $this->actingAs($accountant)->get(route('accountant.requests.show', $first))
             ->assertOk()->assertSee('2 supplier group(s)')->assertSee('Harbour Hardware')
             ->assertSee('Coastal Plant Hire')->assertSee('Excavator hire')->assertSee('350.00');
+
+        app(ExpensePaymentRecorder::class)->record($first->fresh(), ['amount' => '50.00', 'payment_date' => now()->toDateString(), 'payment_method' => 'bank_transfer'], $accountant);
+        $this->actingAs($accountant)->get(route('accountant.projects.show', $project))
+            ->assertOk()->assertSeeInOrder(['Approved Awaiting Payment', '1', 'Part Paid', '1']);
     }
 
     public function test_accountant_records_partial_payments_as_events_and_derives_status_and_outstanding(): void

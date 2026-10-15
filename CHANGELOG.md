@@ -13,7 +13,7 @@ Every session or PR adds an entry here — dated, plain language, written for a 
 - Updated the fictional demo request to contain three items in one request across two supplier groups, and populated its seven custom phase names plus BOQ work-area, work-section, and item-reference fields.
 - Reorganized printable internal invoices into a professional header, client/project metadata, phase-aware lines, totals, notes, and print-only layout. Improved all generated Excel workbooks with Buildiwick document properties, consistent typography, print headers/footers, repeatable headings, and print areas; invoice workbooks now include reference, status, received, and outstanding context.
 - Added regression coverage for approved-only Accounts views, clickable project filters, complete-request supplier grouping/totals, and the updated demo format.
-- Full suite passes: **145 tests / 1,388 assertions**.
+- Full suite passes: **145 tests / 1,390 assertions**.
 
 ### Workflow decision
 
