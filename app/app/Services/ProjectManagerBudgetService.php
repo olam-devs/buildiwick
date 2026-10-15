@@ -82,7 +82,7 @@ class ProjectManagerBudgetService
             ]);
             foreach ($locked->entries()->get() as $entry) {
                 $draft->entries()->create($entry->only([
-                    'project_phase_id', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
+                    'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
                     'quantity', 'unit', 'unit_cost', 'notes',
                 ]) + ['entered_by' => $actor->id]);
             }
@@ -130,24 +130,30 @@ class ProjectManagerBudgetService
             InternalBudget::query()->whereKey($entry->internal_budget_id)->lockForUpdate()->firstOrFail();
             $locked = InternalBudgetEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('update', $locked);
-            $this->requireReason($data['edit_reason'] ?? null);
+            if ($locked->budget->version > 1) {
+                $this->requireReason($data['edit_reason'] ?? null);
+            }
             $this->assertPhaseAndCategory($locked->budget, $locked->phase, $data);
             $before = $this->snapshot($locked);
             $locked->update($this->entryData($data));
-            $this->logEntryChange($locked->budget, $locked, 'entry_updated', $data['edit_reason'], $actor, $before, $this->snapshot($locked->fresh()));
+            if ($locked->budget->version > 1) {
+                $this->logEntryChange($locked->budget, $locked, 'entry_updated', $data['edit_reason'], $actor, $before, $this->snapshot($locked->fresh()));
+            }
 
             return $locked->refresh();
         });
     }
 
-    public function deleteEntry(InternalBudgetEntry $entry, string $reason, User $actor): void
+    public function deleteEntry(InternalBudgetEntry $entry, ?string $reason, User $actor): void
     {
         $this->database->transaction(function () use ($entry, $reason, $actor): void {
             InternalBudget::query()->whereKey($entry->internal_budget_id)->lockForUpdate()->firstOrFail();
             $locked = InternalBudgetEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('delete', $locked);
-            $this->requireReason($reason);
-            $this->logEntryChange($locked->budget, $locked, 'entry_deleted', $reason, $actor, $this->snapshot($locked), null);
+            if ($locked->budget->version > 1) {
+                $this->requireReason($reason);
+                $this->logEntryChange($locked->budget, $locked, 'entry_deleted', $reason, $actor, $this->snapshot($locked), null);
+            }
             $locked->delete();
         });
     }
@@ -285,7 +291,7 @@ class ProjectManagerBudgetService
         }
 
         $byPhase = [];
-        foreach ($project->phases->whereIn('stage_code', self::PHASES)->sortBy('phase_order') as $phase) {
+        foreach ($project->phases->sortBy('phase_order') as $phase) {
             $phaseBudgetEntries = $budgetEntries->where('project_phase_id', $phase->id);
             $phaseRequests = $requests->where('project_phase_id', $phase->id);
             $phasePayments = $payments->where('project_phase_id', $phase->id);
@@ -336,6 +342,9 @@ class ProjectManagerBudgetService
         })->values();
 
         return [
+            'work_area' => $data['work_area'] ?? null,
+            'work_section' => $data['work_section'] ?? null,
+            'item_reference' => $data['item_reference'] ?? null,
             'budget' => $budget,
             'approved' => $approved,
             'actual' => $actual,
@@ -393,8 +402,8 @@ class ProjectManagerBudgetService
 
     private function assertPhaseAndCategory(InternalBudget $budget, ProjectPhase $phase, array $data): void
     {
-        if ((int) $phase->project_id !== (int) $budget->project_id || ! in_array($phase->stage_code, self::PHASES, true)) {
-            throw ValidationException::withMessages(['project_phase_id' => 'Select one of this project’s seven standard phases.']);
+        if (! $phase->exists || (int) $phase->project_id !== (int) $budget->project_id) {
+            throw ValidationException::withMessages(['project_phase_id' => 'Select a phase belonging to this project.']);
         }
         if (! empty($data['subcategory']) && ! Lookup::where('type', 'subcategory')->where('code', $data['subcategory'])
             ->where('parent_code', $data['main_category'])->where('is_active', true)->exists()) {
@@ -430,7 +439,7 @@ class ProjectManagerBudgetService
     private function snapshot(InternalBudgetEntry $entry): array
     {
         return $entry->only([
-            'project_phase_id', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
+            'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
             'quantity', 'unit', 'unit_cost', 'notes',
         ]);
     }

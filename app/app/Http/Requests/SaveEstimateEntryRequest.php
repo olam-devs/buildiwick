@@ -30,6 +30,9 @@ class SaveEstimateEntryRequest extends FormRequest
         $mainCategory = $this->input('main_category');
 
         return [
+            'work_area' => ['nullable', 'string', 'max:150'],
+            'work_section' => ['nullable', 'string', 'max:255'],
+            'item_reference' => ['nullable', 'string', 'max:100'],
             'main_category' => ['required', Rule::exists('lookups', 'code')->where('type', 'main_category')->where('is_active', true)],
             'subcategory' => [
                 'nullable', 'string',
@@ -41,7 +44,7 @@ class SaveEstimateEntryRequest extends FormRequest
             'base_unit_cost' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
             'markup_percent' => ['required', 'numeric', 'decimal:0,4', 'min:0', 'max:1000'],
             'notes' => ['nullable', 'string', 'max:2000'],
-            'edit_reason' => [$this->route('entry') instanceof EstimateEntry ? 'required' : 'nullable', 'string', 'max:2000'],
+            'edit_reason' => [($this->route('entry') instanceof EstimateEntry && $this->route('entry')->estimate?->version > 1) ? 'required' : 'nullable', 'string', 'max:2000'],
         ];
     }
 }

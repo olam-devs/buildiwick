@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EstimateEntry extends Model
 {
-    protected $fillable = ['project_estimate_id', 'project_phase_id', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client', 'quantity', 'unit', 'base_unit_cost', 'markup_percent', 'entered_by', 'notes'];
+    protected $fillable = ['project_estimate_id', 'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client', 'quantity', 'unit', 'base_unit_cost', 'markup_percent', 'entered_by', 'notes'];
 
     protected function casts(): array
     {

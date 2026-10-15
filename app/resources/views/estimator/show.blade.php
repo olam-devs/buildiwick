@@ -29,10 +29,28 @@
   </div>
 </section>
 
+<section class="panel form-section">
+  <div class="phase-heading"><div><h3>Project Phases</h3><p>Set phases for this project before issuing the estimate. Draft phases and their draft lines can be changed, deleted, or reset freely.</p></div>
+  @if(!$phasesLocked)<form method="POST" action="{{ route('estimator.phases.reset', $project) }}" onsubmit="return confirm('Reset all draft phases? This also removes draft estimate and draft budget lines linked to them.');">@csrf<button class="btn btn-ghost" type="submit">Reset to Default</button></form>@endif</div>
+  @if($phasesLocked)
+    <div class="flash">Phase structure is locked because an estimate or internal budget has been approved. Later document corrections use the audited edit workflow.</div>
+  @else
+    <div class="phase-editor-list">
+      @foreach($project->phases as $phase)
+        <form method="POST" action="{{ route('estimator.phases.update', [$project,$phase]) }}" class="phase-editor-row">@csrf @method('PUT')
+          <strong>{{ $phase->phase_order }}</strong><input name="phase_name" value="{{ $phase->stage_label }}" maxlength="150" required><input type="date" name="planned_start_date" value="{{ $phase->planned_start_date?->format('Y-m-d') }}"><input type="date" name="planned_completion_date" value="{{ $phase->planned_completion_date?->format('Y-m-d') }}"><button class="btn btn-ghost" type="submit">Save</button>
+        </form>
+        <form method="POST" action="{{ route('estimator.phases.delete', [$project,$phase]) }}" class="phase-delete-form" onsubmit="return confirm('Delete this draft phase and all draft entries linked to it?');">@csrf @method('DELETE')<button type="submit">Delete</button></form>
+      @endforeach
+    </div>
+    <form method="POST" action="{{ route('estimator.phases.store', $project) }}" class="phase-add-row">@csrf<input name="phase_name" maxlength="150" placeholder="New phase name" required><input type="date" name="planned_start_date"><input type="date" name="planned_completion_date"><button class="btn btn-primary" type="submit">Add Phase</button></form>
+  @endif
+</section>
+
 @if (!$displayEstimate)
   <section class="panel empty-state">
     <h3>No estimate has been created for this project yet.</h3>
-    <p>Create one working estimate for the client and add priced entries to any of the seven planned construction phases.</p>
+    <p>Create one working estimate for the client and add priced entries to the project-specific construction phases above.</p>
     <form method="POST" action="{{ route('estimator.estimates.start', $project) }}">@csrf<button class="btn btn-primary" type="submit">Start Estimate</button></form>
   </section>
 @else
@@ -78,10 +96,12 @@
         <div class="phase-empty">No estimate entries have been added to this phase yet.@if($workingEstimate) <a href="{{ route('estimator.entries.create', [$project, $phase]) }}">Add the first entry</a>.@endif</div>
       @else
         <div class="tablewrap"><table class="estimate-entry-table">
-          <thead><tr><th>Item / Description</th><th>Category</th><th>Subcategory</th><th>Quantity</th><th>Unit</th><th>Base Unit Cost</th><th>Base Total</th><th>Markup %</th><th>Client Unit Price</th><th>Markup Amount</th><th>Client Total</th>@if($workingEstimate)<th>Action</th>@endif</tr></thead>
+          <thead><tr><th>Area / Section</th><th>Ref.</th><th>Item / Description</th><th>Category</th><th>Subcategory</th><th>Quantity</th><th>Unit</th><th>Base Unit Cost</th><th>Base Total</th><th>Markup %</th><th>Client Unit Price</th><th>Markup Amount</th><th>Client Total</th>@if($workingEstimate)<th>Action</th>@endif</tr></thead>
           <tbody>
             @foreach ($phaseEntries as $entry)
               <tr>
+                <td><strong>{{ $entry->work_area ?: 'General' }}</strong><br><small>{{ $entry->work_section ?: 'General work' }}</small></td>
+                <td>{{ $entry->item_reference ?: '—' }}</td>
                 <td>{{ $entry->item_description }}</td>
                 <td>{{ $summary['categories'][$entry->main_category]['label'] ?? $entry->main_category }}</td>
                 <td>{{ $entry->subcategory ? ($subcategoryLabels[$entry->subcategory] ?? $entry->subcategory) : '—' }}</td>
@@ -93,11 +113,11 @@
                 <td class="amt">{{ \App\Support\Money::format($entry->client_unit_cost) }}</td>
                 <td class="amt">{{ \App\Support\Money::format($entry->markup_amount) }}</td>
                 <td class="amt">{{ \App\Support\Money::format($entry->line_total) }}</td>
-                @if($workingEstimate)<td class="entry-actions"><a href="{{ route('estimator.entries.edit', [$project, $phase, $entry]) }}">Edit</a><form method="POST" action="{{ route('estimator.entries.delete', [$project, $phase, $entry]) }}" onsubmit="const reason=prompt('Why is this estimate line being deleted?');if(!reason)return false;this.edit_reason.value=reason;return confirm('Delete this estimate entry?');">@csrf @method('DELETE')<input type="hidden" name="edit_reason"><button type="submit">Delete</button></form></td>@endif
+                @if($workingEstimate)<td class="entry-actions"><a href="{{ route('estimator.entries.edit', [$project, $phase, $entry]) }}">Edit</a><form method="POST" action="{{ route('estimator.entries.delete', [$project, $phase, $entry]) }}" onsubmit="@if($workingEstimate->version > 1) const reason=prompt('Why is this approved estimate line being deleted?');if(!reason)return false;this.edit_reason.value=reason; @endif return confirm('Delete this draft estimate entry?');">@csrf @method('DELETE')<input type="hidden" name="edit_reason"><button type="submit">Delete</button></form></td>@endif
               </tr>
             @endforeach
           </tbody>
-          <tfoot><tr><th colspan="7">Phase totals / Project Base Cost</th><th class="amt">{{ \App\Support\Money::format($summary['baseTotal']) }}</th><th></th><th></th><th class="amt">{{ \App\Support\Money::format($summary['markupTotal']) }}</th><th class="amt">{{ \App\Support\Money::format($summary['clientTotal']) }}</th>@if($workingEstimate)<th></th>@endif</tr></tfoot>
+          <tfoot><tr><th colspan="8">Phase totals / Project Base Cost</th><th class="amt">{{ \App\Support\Money::format($summary['baseTotal']) }}</th><th></th><th></th><th class="amt">{{ \App\Support\Money::format($summary['markupTotal']) }}</th><th class="amt">{{ \App\Support\Money::format($summary['clientTotal']) }}</th>@if($workingEstimate)<th></th>@endif</tr></tfoot>
         </table></div>
       @endif
     </section>
@@ -110,4 +130,5 @@
 <style>.estimate-bars{display:grid;gap:11px;margin:4px 0 18px}.estimate-bar-row{display:grid;grid-template-columns:180px 1fr 140px;gap:12px;align-items:center}.estimate-bar-row small{display:block;color:var(--ink-dim);margin-top:2px}.estimate-track{height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden}.estimate-track span{display:block;height:100%;background:var(--primary);border-radius:999px}.category-total{background:var(--surface-2)}.subcategory-row td:first-child{padding-left:30px;color:var(--ink-soft)}@media(max-width:700px){.estimate-bar-row{grid-template-columns:1fr}.estimate-bar-row .amt{text-align:left}}</style>
 @include('partials.project-edit-log', ['editLogTitle' => 'Estimate Edit Log'])
 <style>.edit-document-form{display:flex;gap:8px;align-items:end}.edit-document-form .field{margin:0;min-width:260px}</style>
+<style>.phase-editor-list{display:grid;grid-template-columns:1fr auto;gap:8px;margin:14px 0}.phase-editor-row,.phase-add-row{display:grid;grid-template-columns:34px minmax(180px,1fr) 155px 155px auto;gap:8px;align-items:center}.phase-delete-form{display:flex;align-items:center}.phase-delete-form button{color:#b42318;background:none;border:0;cursor:pointer}.phase-add-row{grid-template-columns:minmax(180px,1fr) 155px 155px auto;margin-top:12px}@media(max-width:850px){.phase-editor-list{grid-template-columns:1fr}.phase-editor-row,.phase-add-row{grid-template-columns:1fr}.phase-delete-form{margin-bottom:10px}}</style>
 @endsection

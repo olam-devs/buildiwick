@@ -88,7 +88,7 @@ class EstimatorEstimateService
             ]);
             foreach ($locked->entries()->get() as $entry) {
                 $draft->entries()->create($entry->only([
-                    'project_phase_id', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit',
+                    'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit',
                     'base_unit_cost', 'markup_percent', 'notes',
                 ]) + ['entered_by' => $actor->id]);
             }
@@ -137,24 +137,30 @@ class EstimatorEstimateService
             ProjectEstimate::query()->whereKey($entry->project_estimate_id)->lockForUpdate()->firstOrFail();
             $lockedEntry = EstimateEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('update', $lockedEntry);
-            $this->requireReason($data['edit_reason'] ?? null);
+            if ($lockedEntry->estimate->version > 1) {
+                $this->requireReason($data['edit_reason'] ?? null);
+            }
             $this->assertLookupPair($data);
             $before = $this->snapshot($lockedEntry);
             $lockedEntry->update($this->entryAttributes($data));
-            $this->logEntryChange($lockedEntry->estimate, $lockedEntry, 'entry_updated', $data['edit_reason'], $actor, $before, $this->snapshot($lockedEntry->fresh()));
+            if ($lockedEntry->estimate->version > 1) {
+                $this->logEntryChange($lockedEntry->estimate, $lockedEntry, 'entry_updated', $data['edit_reason'], $actor, $before, $this->snapshot($lockedEntry->fresh()));
+            }
 
             return $lockedEntry->refresh();
         });
     }
 
-    public function deleteEntry(EstimateEntry $entry, string $reason, User $actor): void
+    public function deleteEntry(EstimateEntry $entry, ?string $reason, User $actor): void
     {
         $this->database->transaction(function () use ($entry, $reason, $actor): void {
             ProjectEstimate::query()->whereKey($entry->project_estimate_id)->lockForUpdate()->firstOrFail();
             $lockedEntry = EstimateEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('delete', $lockedEntry);
-            $this->requireReason($reason);
-            $this->logEntryChange($lockedEntry->estimate, $lockedEntry, 'entry_deleted', $reason, $actor, $this->snapshot($lockedEntry), null);
+            if ($lockedEntry->estimate->version > 1) {
+                $this->requireReason($reason);
+                $this->logEntryChange($lockedEntry->estimate, $lockedEntry, 'entry_deleted', $reason, $actor, $this->snapshot($lockedEntry), null);
+            }
             $lockedEntry->delete();
         });
     }
@@ -255,6 +261,9 @@ class EstimatorEstimateService
     public function entryAttributes(array $data): array
     {
         return [
+            'work_area' => $data['work_area'] ?? null,
+            'work_section' => $data['work_section'] ?? null,
+            'item_reference' => $data['item_reference'] ?? null,
             'main_category' => $data['main_category'],
             'subcategory' => $data['subcategory'] ?? null,
             'item_description' => $data['item_description'],
@@ -268,9 +277,8 @@ class EstimatorEstimateService
 
     private function assertPhaseBelongsToEstimate(ProjectEstimate $estimate, ProjectPhase $phase): void
     {
-        if ((int) $phase->project_id !== (int) $estimate->project_id
-            || ! in_array($phase->stage_code, self::PHASES, true)) {
-            throw ValidationException::withMessages(['project_phase_id' => 'Select one of this project’s seven standard construction phases.']);
+        if (! $phase->exists || (int) $phase->project_id !== (int) $estimate->project_id) {
+            throw ValidationException::withMessages(['project_phase_id' => 'Select a phase belonging to this project.']);
         }
     }
 
@@ -321,7 +329,7 @@ class EstimatorEstimateService
     private function snapshot(EstimateEntry $entry): array
     {
         return $entry->only([
-            'project_phase_id', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit',
+            'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit',
             'base_unit_cost', 'markup_percent', 'notes',
         ]);
     }

@@ -40,6 +40,10 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/estimator/projects/{project}/estimates/{estimate}.xlsx', [EstimatorController::class, 'export'])->name('estimator.estimates.export');
     Route::post('/estimator/projects/{project}/estimates', [EstimatorController::class, 'startEstimate'])->name('estimator.estimates.start');
     Route::post('/estimator/projects/{project}/estimates/{estimate}/edit', [EstimatorController::class, 'startEstimateEdit'])->name('estimator.estimates.edit');
+    Route::post('/estimator/projects/{project}/phases', [EstimatorController::class, 'storePhase'])->name('estimator.phases.store');
+    Route::put('/estimator/projects/{project}/phases/{phase}', [EstimatorController::class, 'updatePhase'])->name('estimator.phases.update');
+    Route::delete('/estimator/projects/{project}/phases/{phase}', [EstimatorController::class, 'deletePhase'])->name('estimator.phases.delete');
+    Route::post('/estimator/projects/{project}/phases-reset', [EstimatorController::class, 'resetPhases'])->name('estimator.phases.reset');
     Route::get('/estimator/projects/{project}/phases/{phase}/entries/create', [EstimatorController::class, 'createEntry'])->name('estimator.entries.create');
     Route::post('/estimator/projects/{project}/phases/{phase}/entries', [EstimatorController::class, 'storeEntry'])->name('estimator.entries.store');
     Route::get('/estimator/projects/{project}/phases/{phase}/entries/{entry}/edit', [EstimatorController::class, 'editEntry'])->name('estimator.entries.edit');

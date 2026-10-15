@@ -27,7 +27,7 @@ class SiteOperatorController extends Controller
         }
 
         $projects = $query->orderBy('name')->get()->map(function (Project $project) use ($requests) {
-            $activePhases = $project->phases->where('status', 'active')->whereIn('stage_code', SiteExpenseRequestService::PHASES)->sortBy('phase_order');
+            $activePhases = $project->phases->where('status', 'active')->sortBy('phase_order');
             $configuration = $activePhases->count();
 
             return (object) [
@@ -49,9 +49,9 @@ class SiteOperatorController extends Controller
         $summary = $requests->projectSummary($project);
         $expenseRequests = $project->expenseRequests()->with(['phase', 'requestedBy', 'approvals.decidedBy', 'payments'])
             ->orderByDesc('submitted_at')->orderByDesc('id')->get();
-        $activeCount = $project->phases()->where('status', 'active')->whereIn('stage_code', SiteExpenseRequestService::PHASES)->count();
+        $activeCount = $project->phases()->where('status', 'active')->count();
         $currentPhase = $activeCount === 1
-            ? $project->phases->first(fn ($phase) => $phase->status === 'active' && in_array($phase->stage_code, SiteExpenseRequestService::PHASES, true))
+            ? $project->phases->first(fn ($phase) => $phase->status === 'active')
             : null;
 
         return view('site.project', [
@@ -84,7 +84,7 @@ class SiteOperatorController extends Controller
     {
         $this->authorizeWorkspaceRole($request->user());
         $this->authorize('create', [ExpenseRequest::class, $project]);
-        $activePhases = $project->phases()->where('status', 'active')->whereIn('stage_code', SiteExpenseRequestService::PHASES)->orderBy('phase_order')->get();
+        $activePhases = $project->phases()->where('status', 'active')->orderBy('phase_order')->get();
 
         return view('site.request-form', [
             'project' => $project,

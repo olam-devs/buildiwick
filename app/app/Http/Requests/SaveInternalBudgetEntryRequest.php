@@ -31,6 +31,9 @@ class SaveInternalBudgetEntryRequest extends FormRequest
         $category = $this->input('main_category');
 
         return [
+            'work_area' => ['nullable', 'string', 'max:150'],
+            'work_section' => ['nullable', 'string', 'max:255'],
+            'item_reference' => ['nullable', 'string', 'max:100'],
             'main_category' => ['required', Rule::exists('lookups', 'code')->where('type', 'main_category')->where('is_active', true)],
             'subcategory' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'subcategory')->where('parent_code', $category)->where('is_active', true)],
             'item_description' => ['required', 'string', 'max:1000'],
@@ -39,7 +42,7 @@ class SaveInternalBudgetEntryRequest extends FormRequest
             'unit' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'unit')->where('is_active', true)],
             'unit_cost' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
             'notes' => ['nullable', 'string', 'max:2000'],
-            'edit_reason' => [$this->route('entry') instanceof InternalBudgetEntry ? 'required' : 'nullable', 'string', 'max:2000'],
+            'edit_reason' => [($this->route('entry') instanceof InternalBudgetEntry && $this->route('entry')->budget?->version > 1) ? 'required' : 'nullable', 'string', 'max:2000'],
         ];
     }
 }
