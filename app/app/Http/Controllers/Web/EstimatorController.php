@@ -75,8 +75,12 @@ class EstimatorController extends Controller
         $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'estimate')->with('editor')->latest()->get();
 
         $phasesLocked = $phases->isLocked($project);
+        $selectedPhaseId = $request->integer('phase') ?: null;
+        if ($selectedPhaseId && ! $project->phases->contains('id', $selectedPhaseId)) {
+            abort(404);
+        }
 
-        return view('estimator.show', compact('project', 'workingEstimate', 'displayEstimate', 'phaseSummaries', 'projectSummary', 'history', 'unitLabels', 'editLogs', 'phasesLocked'));
+        return view('estimator.show', compact('project', 'workingEstimate', 'displayEstimate', 'phaseSummaries', 'projectSummary', 'history', 'unitLabels', 'editLogs', 'phasesLocked', 'selectedPhaseId'));
     }
 
     public function storePhase(Request $request, Project $project, ProjectPhaseService $phases)
@@ -198,12 +202,31 @@ class EstimatorController extends Controller
         abort_unless((int) $estimate->project_id === (int) $project->id, 404);
         $this->authorize('view', $estimate);
         $estimate->load(['entries.phase', 'client', 'preparedBy', 'issuedBy']);
-        $rows = $estimate->entries->sortBy(fn ($entry) => [$entry->phase?->phase_order, $entry->id])->map(fn ($entry) => [
-            $entry->phase?->stage_label, $entry->work_section ?: 'General work', $entry->item_reference,
-            $entry->item_description, $entry->quantity ?? 1, $entry->unit ?? 'LS',
-            $entry->client_unit_cost, $entry->line_total, $entry->notes,
-        ]);
-        $rows->push(['', '', '', 'PROJECT TOTAL', '', '', '', $estimate->total_amount, '']);
+        $rows = collect();
+        $phaseGroups = $estimate->entries
+            ->sortBy(fn ($entry) => [$entry->phase?->phase_order ?? PHP_INT_MAX, $entry->id])
+            ->groupBy(fn ($entry) => $entry->project_phase_id ?: 'unassigned');
+
+        foreach ($phaseGroups as $phaseEntries) {
+            $phase = $phaseEntries->first()?->phase;
+            $phaseLabel = $phase?->stage_label ?? 'Unassigned phase';
+            $rows->push([$phaseLabel, '', '', '', '', '', '', '', '']);
+
+            foreach ($phaseEntries->groupBy(fn ($entry) => $entry->work_section ?: 'General work') as $section => $sectionEntries) {
+                $rows->push(['', $section, '', '', '', '', '', '', '']);
+                foreach ($sectionEntries as $entry) {
+                    $rows->push([
+                        '', '', $entry->item_reference, $entry->item_description,
+                        $entry->quantity ?? 1, $entry->unit ?? 'LS', $entry->client_unit_cost,
+                        $entry->line_total, $entry->notes,
+                    ]);
+                }
+                $rows->push(['', $section.' SUBTOTAL', '', '', '', '', '', $sectionEntries->sum('line_total'), '']);
+            }
+
+            $rows->push(['', '', '', $phaseLabel.' TOTAL', '', '', '', $phaseEntries->sum('line_total'), '']);
+        }
+        $rows->push(['', '', '', 'ESTIMATION TOTAL', '', '', '', $estimate->total_amount, '']);
 
         return $excel->download($estimate->estimate_code, 'Project Estimate - '.$project->name,
             ['Phase', 'Subphase / Section', 'Item Ref.', 'Description', 'Quantity', 'Unit', 'Rate', 'Amount', 'Notes'],

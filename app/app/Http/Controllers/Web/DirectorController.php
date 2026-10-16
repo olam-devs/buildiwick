@@ -113,8 +113,17 @@ class DirectorController extends Controller
             ->map(fn ($versions) => $versions->sortBy(fn ($budget) => ['approved' => 0, 'finalized' => 1, 'draft' => 2][$budget->status] ?? 3)->first())
             ->sortBy(fn ($budget) => [$budget->phase?->phase_order, array_search($budget->main_category, array_keys(ProjectManagerBudgetService::CATEGORIES), true)]);
         $editLogs = ProjectEditLog::where('project_id', $project->id)->with('editor')->latest()->get();
+        $selectedEstimatePhaseId = $request->integer('estimate_phase') ?: null;
+        if ($selectedEstimatePhaseId && ! $project->phases->contains('id', $selectedEstimatePhaseId)) {
+            abort(404);
+        }
+        $selectedBudget = null;
+        if ($request->filled('budget')) {
+            $selectedBudget = $projectBudgets->firstWhere('id', $request->integer('budget'));
+            abort_unless($selectedBudget, 404);
+        }
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'projectBudgets', 'editLogs'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId', 'selectedBudget'));
     }
 
     public function decideBudget(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)

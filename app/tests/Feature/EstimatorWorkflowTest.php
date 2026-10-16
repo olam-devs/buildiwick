@@ -129,7 +129,7 @@ class EstimatorWorkflowTest extends TestCase
         [$project, $estimator] = $this->projectAndEstimatorAssignment();
         $estimate = app(EstimatorEstimateService::class)->ensureWorkingEstimate($project, $estimator);
         $this->assertSame('not_started', $project->phases()->where('stage_code', 'roofing')->value('status'));
-        $this->actingAs($estimator)->get(route('estimator.projects.show', $project))->assertOk()->assertSee('Phase 5 — Roofing');
+        $this->actingAs($estimator)->get(route('estimator.projects.show', $project))->assertOk()->assertSee('Phase 5 · Roofing');
 
         $response = $this->actingAs($estimator)->post(route('estimator.entries.store', [$project, $project->phases()->where('stage_code', 'roofing')->first()]), $this->entryPayload($estimate, $project->phases()->where('stage_code', 'roofing')->first()));
         $response->assertRedirect();
@@ -235,7 +235,7 @@ class EstimatorWorkflowTest extends TestCase
         $this->assertTrue($codes->intersect(['tonne', 'm2', 'worker_day', 'service', 'person'])->count() === 5);
         $this->actingAs($estimator)->get(route('estimator.entries.create', [$project, $phases[0]]))
             ->assertOk()->assertSee('worker_day')->assertDontSee('Supplier / Fundi')->assertDontSee('supplier_fundi_client');
-        $this->actingAs($estimator)->get(route('estimator.projects.show', $project))
+        $this->actingAs($estimator)->get(route('estimator.projects.show', [$project, 'phase' => $phases[0]->id]))
             ->assertOk()->assertSee('Rate')->assertSee('Amount')->assertDontSee('Category / Subcategory')
             ->assertDontSee('Supplier / Fundi / Provider')->assertDontSee('supplier_fundi_client');
     }
@@ -364,8 +364,8 @@ class EstimatorWorkflowTest extends TestCase
         $this->actingAs($estimator)->get(route('estimator.projects.index'))
             ->assertOk()->assertSee('50.00')->assertSee('Draft');
         $this->actingAs($estimator)->get(route('estimator.projects.show', $project))
-            ->assertOk()->assertSee('Phase 1 — Preliminaries')->assertSee('Estimator Phase Total')
-            ->assertSee('Effective Markup')->assertSee('Issue Estimate')->assertSee('Quotation Lines')
+            ->assertOk()->assertSee('Phase 1 · Preliminaries')->assertSee('Estimation Total')
+            ->assertSee('Effective Markup')->assertSee('Issue Estimate')->assertSee('quotation line(s)')
             ->assertDontSee('Estimator Budget Analytics')->assertDontSee('Category / Subcategory');
     }
 
@@ -390,7 +390,7 @@ class EstimatorWorkflowTest extends TestCase
         $this->actingAs($this->user('site_operator'))->get(route('estimator.projects.show', $project))->assertForbidden();
         $this->actingAs($this->user('project_manager'))->get(route('estimator.projects.show', $project))->assertForbidden();
         $this->actingAs($this->user('accounts'))->get(route('estimator.projects.index'))->assertForbidden();
-        $this->actingAs($this->user('admin'))->get(route('estimator.projects.show', $project))->assertOk()->assertSee('Estimator Phase Total')->assertSee('150.00');
+        $this->actingAs($this->user('admin'))->get(route('estimator.projects.show', $project))->assertOk()->assertSee('Estimation Total')->assertSee('150.00');
     }
 
     public function test_estimator_can_manage_project_specific_phases_until_estimate_is_issued(): void

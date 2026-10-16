@@ -349,6 +349,11 @@ class ProjectManagerController extends Controller
         $history = $allBudgets->whereNotIn('id', $budgetDocuments->pluck('id'))
             ->map(fn (InternalBudget $budget) => (object) ['budget' => $budget, 'total' => $budget->total_amount]);
         $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'internal_budget')->with('editor')->latest()->get();
+        $selectedBudget = null;
+        if ($request->filled('budget')) {
+            $selectedBudget = $budgetDocuments->firstWhere('id', $request->integer('budget'));
+            abort_unless($selectedBudget, 404);
+        }
 
         return view('pm.show', [
             'project' => $project,
@@ -357,6 +362,7 @@ class ProjectManagerController extends Controller
             'comparison' => $comparison,
             'siteRequests' => $siteRequests,
             'budgetDocuments' => $budgetDocuments,
+            'selectedBudget' => $selectedBudget,
             'history' => $history,
             'editLogs' => $editLogs,
             'labels' => ProjectManagerBudgetService::CATEGORIES,

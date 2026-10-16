@@ -108,7 +108,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'project_id' => $project->id, 'document_type' => 'internal_budget', 'action' => 'edit_started',
             'reason' => 'Supplier rates changed after tender clarification.', 'edited_by' => $pm->id,
         ]);
-        $this->actingAs($pm)->get(route('pm.projects.show', $project))->assertOk()
+        $this->actingAs($pm)->get(route('pm.projects.show', $project).'?budget='.$revised->id.'#budgets')->assertOk()
             ->assertSee('Edit Internal Budget')->assertSee('Supplier rates changed after tender clarification.');
         $this->actingAs($director)->get(route('director.projects.show', $project))->assertOk()
             ->assertSee('Project Estimate and Internal Budget Edit Log')->assertSee('Supplier rates changed after tender clarification.');
@@ -203,7 +203,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             ]), $pm);
         }
 
-        $response = $this->actingAs($pm)->get(route('pm.projects.show', $project));
+        $response = $this->actingAs($pm)->get(route('pm.projects.show', $project).'?budget='.$materials->id.'#budgets');
         $response->assertOk()->assertSee('3.1 Subtotal')->assertSee('3.2 Subtotal');
         $this->assertSame(1, substr_count($response->getContent(), 'Foundation strip footing'));
         $this->assertSame(1, substr_count($response->getContent(), 'Foundation walling'));
@@ -618,7 +618,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             ->assertOk()->assertSee('Project Manager Dashboard')->assertSee($project->project_code)
             ->assertSee('No budget set')->assertDontSee('Estimator Estimates')->assertDontSee('New Entry');
         $this->get(route('pm.projects.show', $project))->assertOk()
-            ->assertSee('Phase 7 · External Works')->assertSee('Not created')->assertSee('Independent materials budget for this phase');
+            ->assertSee('Phase 7 · External Works')->assertSee('Not created')->assertSee('Internal Budget Summary by Phase');
     }
 
     public function test_pm_budget_workspace_shows_future_phases_over_budget_warnings_and_read_only_requests(): void
@@ -636,7 +636,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'project_id' => $project->id, 'project_phase_id' => $future->id,
             'amount' => '120.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
         ]);
-        $response = $this->actingAs($pm)->get(route('pm.projects.show', $project));
+        $response = $this->actingAs($pm)->get(route('pm.projects.show', $project).'?budget='.$budget->id.'#budgets');
         $response->assertOk()->assertSee('Phase 5 · Roofing')->assertSee('Over internal budget by')
             ->assertSee('Site Requests · Read Only')->assertSee('Submit for Director Verification')
             ->assertDontSee('Estimator Base')->assertDontSee('987,654.00')

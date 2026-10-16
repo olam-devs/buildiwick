@@ -57,49 +57,31 @@
   <section class="tiles estimate-summary-cards">
     <div class="tile"><div class="label">Total Base Cost</div><div class="value">{{ \App\Support\Money::format($projectSummary['baseTotal']) }}</div><div class="sub">TSh</div></div>
     <div class="tile"><div class="label">Total Markup Amount</div><div class="value">{{ \App\Support\Money::format($projectSummary['markupTotal']) }}</div><div class="sub">TSh</div></div>
-    <div class="tile"><div class="label">Client Estimate</div><div class="value">{{ \App\Support\Money::format($projectSummary['clientTotal']) }}</div><div class="sub">TSh</div></div>
+    <div class="tile"><div class="label">Estimation Total</div><div class="value">{{ \App\Support\Money::format($projectSummary['clientTotal']) }}</div><div class="sub">TSh · complete client quotation</div></div>
     <div class="tile"><div class="label">Effective Markup</div><div class="value">{{ \App\Support\Money::format($projectSummary['effectiveMarkup']) }}%</div><div class="sub">Markup ÷ base cost; not gross margin</div></div>
   </section>
 
-  @foreach ($project->phases as $phase)
-    @php($summary = $phaseSummaries[$phase->id])
-    @php($phaseEntries = $displayEstimate->entries->where('project_phase_id', $phase->id)->sortBy('id'))
-    <section class="panel form-section estimator-phase">
-      <div class="phase-heading"><div><h3>Phase {{ $phase->phase_order }} — {{ $phase->stage_label }}</h3><p>{{ ucfirst(str_replace('_', ' ', $phase->status)) }} · {{ $phase->planned_start_date?->format('d M Y') ?? 'No planned date' }} – {{ $phase->planned_completion_date?->format('d M Y') ?? 'No planned completion' }}</p></div>
-      @if ($workingEstimate)<a class="btn btn-primary" href="{{ route('estimator.entries.create', [$project, $phase]) }}">+ New Estimate Entry</a>@endif</div>
+  <section class="panel form-section"><div class="phase-heading"><div><h3>Estimation by Phase</h3><p>Open one phase to see its organized quotation sections and subtotals.</p></div></div><div class="phase-summary-list">
+  @foreach ($project->phases as $phase) @php($summary=$phaseSummaries[$phase->id]) @php($count=$displayEstimate->entries->where('project_phase_id',$phase->id)->count())
+    <div class="phase-summary-row"><div><strong>Phase {{ $phase->phase_order }} · {{ $phase->stage_label }}</strong><small>{{ $count }} quotation line(s) · {{ ucfirst(str_replace('_',' ',$phase->status)) }}</small></div><div class="phase-summary-total"><span>Phase Total</span><strong>TSh {{ \App\Support\Money::format($summary['clientTotal']) }}</strong></div><a class="btn btn-ghost" href="{{ route('estimator.projects.show',[$project,'phase'=>$phase->id]).'#phase-detail' }}">Open Phase Estimation</a></div>
+  @endforeach</div><footer class="document-grand-total"><span>Estimation Total</span><strong>TSh {{ \App\Support\Money::format($projectSummary['clientTotal']) }}</strong></footer></section>
 
-      <div class="tiles phase-metrics"><div class="tile"><div class="label">Estimator Phase Total</div><div class="value">TSh {{ \App\Support\Money::format($summary['clientTotal']) }}</div><div class="sub">Complete quoted value for this phase</div></div><div class="tile"><div class="label">Quotation Lines</div><div class="value">{{ $phaseEntries->count() }}</div><div class="sub">Subphase and BOQ items</div></div></div>
-
-      @if ($phaseEntries->isEmpty())
-        <div class="phase-empty">No estimate entries have been added to this phase yet.@if($workingEstimate) <a href="{{ route('estimator.entries.create', [$project, $phase]) }}">Add the first entry</a>.@endif</div>
-      @else
-        <div class="tablewrap"><table class="estimate-entry-table">
-          <thead><tr><th>Subphase / Section</th><th>Ref.</th><th>Description</th><th>Quantity</th><th>Unit</th><th>Rate</th><th>Amount</th>@if($workingEstimate)<th>Action</th>@endif</tr></thead>
-          <tbody>
-            @foreach ($phaseEntries as $entry)
-              <tr>
-                <td>{{ $entry->work_section ?: 'General work' }}</td>
-                <td>{{ $entry->item_reference ?: '—' }}</td>
-                <td>{{ $entry->item_description }}</td>
-                <td class="amt">{{ $entry->quantity ?? '1.00' }}</td>
-                <td>{{ $entry->unit ? ($unitLabels[$entry->unit] ?? $entry->unit) : 'LS' }}</td>
-                <td class="amt">{{ \App\Support\Money::format($entry->client_unit_cost) }}</td>
-                <td class="amt">{{ \App\Support\Money::format($entry->line_total) }}</td>
-                @if($workingEstimate)<td class="entry-actions"><a href="{{ route('estimator.entries.edit', [$project, $phase, $entry]) }}">Edit</a><form method="POST" action="{{ route('estimator.entries.delete', [$project, $phase, $entry]) }}" onsubmit="@if($workingEstimate->version > 1) const reason=prompt('Why is this approved estimate line being deleted?');if(!reason)return false;this.edit_reason.value=reason; @endif return confirm('Delete this draft estimate entry?');">@csrf @method('DELETE')<input type="hidden" name="edit_reason"><button type="submit">Delete</button></form></td>@endif
-              </tr>
-            @endforeach
-          </tbody>
-          <tfoot><tr><th colspan="6">Phase Total</th><th class="amt">{{ \App\Support\Money::format($summary['clientTotal']) }}</th>@if($workingEstimate)<th></th>@endif</tr></tfoot>
-        </table></div>
-      @endif
-    </section>
-  @endforeach
+  @if($selectedPhaseId)
+    @php($phase=$project->phases->firstWhere('id',$selectedPhaseId)) @php($summary=$phaseSummaries[$phase->id]) @php($phaseEntries=$displayEstimate->entries->where('project_phase_id',$phase->id)->sortBy('id'))
+    <section class="panel form-section estimator-phase" id="phase-detail"><div class="phase-heading"><div><a class="back-link" href="{{ route('estimator.projects.show',$project) }}">&larr; All phase estimations</a><h3>Phase {{ $phase->phase_order }} · {{ $phase->stage_label }}</h3><p>Each subphase is named once. Its lettered quotation lines and subtotal are shown below.</p></div>@if($workingEstimate)<a class="btn btn-primary" href="{{ route('estimator.entries.create',[$project,$phase]) }}">+ New Estimate Entry</a>@endif</div>
+    @forelse($phaseEntries->groupBy(fn($entry)=>$entry->work_section ?: 'General Work') as $sectionName=>$sectionEntries)
+      <article class="estimate-section"><h4>{{ $sectionName }}</h4><div class="tablewrap"><table><thead><tr><th>Item</th><th>Description</th><th>Quantity</th><th>Unit</th><th>Rate</th><th>Amount</th>@if($workingEstimate)<th>Action</th>@endif</tr></thead><tbody>
+      @foreach($sectionEntries as $entry)<tr><td>{{ $entry->item_reference ?: '—' }}</td><td>{{ $entry->item_description }}</td><td class="amt">{{ $entry->quantity ?? '1.00' }}</td><td>{{ $unitLabels[$entry->unit] ?? strtoupper($entry->unit ?? 'LS') }}</td><td class="amt">{{ \App\Support\Money::format($entry->client_unit_cost) }}</td><td class="amt">{{ \App\Support\Money::format($entry->line_total) }}</td>@if($workingEstimate)<td class="entry-actions"><a href="{{ route('estimator.entries.edit',[$project,$phase,$entry]) }}">Edit</a><form method="POST" action="{{ route('estimator.entries.delete',[$project,$phase,$entry]) }}" onsubmit="@if($workingEstimate->version > 1) const reason=prompt('Why is this approved estimate line being deleted?');if(!reason)return false;this.edit_reason.value=reason; @endif return confirm('Delete this draft estimate entry?');">@csrf @method('DELETE')<input type="hidden" name="edit_reason"><button type="submit">Delete</button></form></td>@endif</tr>@endforeach
+      </tbody><tfoot><tr><th colspan="5">{{ $sectionName }} Subtotal</th><th class="amt">{{ \App\Support\Money::format(\App\Support\Money::sum($sectionEntries->map(fn($entry)=>$entry->line_total))) }}</th>@if($workingEstimate)<th></th>@endif</tr></tfoot></table></div></article>
+    @empty<div class="phase-empty">No estimate entries have been added to this phase.</div>@endforelse
+    <footer class="document-grand-total"><span>{{ $phase->stage_label }} Estimation Total</span><strong>TSh {{ \App\Support\Money::format($summary['clientTotal']) }}</strong></footer></section>
+  @endif
 @endif
 
 @if ($history->isNotEmpty())
   <section class="panel form-section"><h3>Estimate Versions</h3><div class="tablewrap"><table style="min-width:500px;"><thead><tr><th>Estimate</th><th>Version</th><th>Status</th><th>Prepared</th><th>Client Estimate</th></tr></thead><tbody>@foreach($history as $row)<tr><td>{{ $row->estimate->estimate_code }}</td><td>{{ $row->estimate->version }}</td><td>{{ ucfirst($row->estimate->status) }}</td><td>{{ $row->estimate->prepared_at?->format('d M Y') ?? '—' }}</td><td class="amt">{{ \App\Support\Money::format($row->summary['clientTotal']) }}</td></tr>@endforeach</tbody></table></div></section>
 @endif
 @include('partials.project-edit-log', ['editLogTitle' => 'Estimate Edit Log'])
-<style>.edit-document-form{display:flex;gap:8px;align-items:end}.edit-document-form .field{margin:0;min-width:260px}</style>
+<style>.edit-document-form{display:flex;gap:8px;align-items:end}.edit-document-form .field{margin:0;min-width:260px}.phase-summary-list{display:grid;gap:8px}.phase-summary-row{display:grid;grid-template-columns:minmax(220px,1fr) 180px auto;align-items:center;gap:14px;padding:12px;border:1px solid var(--line);border-radius:8px}.phase-summary-row small,.phase-summary-total span{display:block;color:var(--ink-dim);font-size:11px;margin-top:3px}.phase-summary-total{text-align:right}.estimate-section{margin:14px 0}.estimate-section h4{padding:10px 12px;margin:0;background:var(--primary-soft);border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0}.estimate-section .tablewrap{border-radius:0 0 8px 8px}.document-grand-total{display:flex;justify-content:space-between;gap:12px;padding:14px;margin-top:14px;background:var(--surface-2);border-top:2px solid var(--line-strong);font-size:15px}@media(max-width:750px){.phase-summary-row{grid-template-columns:1fr}.phase-summary-total{text-align:left}}</style>
 <style>.phase-editor-list{display:grid;grid-template-columns:1fr auto;gap:8px;margin:14px 0}.phase-editor-row,.phase-add-row{display:grid;grid-template-columns:34px minmax(180px,1fr) 155px 155px auto;gap:8px;align-items:center}.phase-delete-form{display:flex;align-items:center}.phase-delete-form button{color:#b42318;background:none;border:0;cursor:pointer}.phase-add-row{grid-template-columns:minmax(180px,1fr) 155px 155px auto;margin-top:12px}@media(max-width:850px){.phase-editor-list{grid-template-columns:1fr}.phase-editor-row,.phase-add-row{grid-template-columns:1fr}.phase-delete-form{margin-bottom:10px}}</style>
 @endsection

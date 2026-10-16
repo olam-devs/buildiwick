@@ -41,7 +41,7 @@ class OysterbayBoundaryWallDemoSeederTest extends TestCase
         $entries = $budgets->flatMap->entries;
         $this->assertTrue($budgets->every(fn ($budget) => $budget->status === 'approved'));
         $this->assertTrue($budgets->every(fn ($budget) => filled($budget->project_phase_id) && filled($budget->main_category)));
-        $this->assertSame(31, $entries->count());
+        $this->assertSame(35, $entries->count());
         $this->assertSame(5, $entries->pluck('project_phase_id')->unique()->count());
         $this->assertTrue($entries->every(fn ($entry) => filled($entry->work_area)
             && filled($entry->construction_category) && filled($entry->work_package_name)));
@@ -51,10 +51,28 @@ class OysterbayBoundaryWallDemoSeederTest extends TestCase
         $this->assertSame(9, $project->expensePayments()->count());
         $this->assertTrue($project->expenseRequests()->get()->every(fn ($request) => $request->internal_budget_entry_id !== null));
 
+        $substructure = $project->phases()->where('stage_code', 'substructure')->firstOrFail();
+        $estimator = User::where('email', 'twalib@buildiwick.test')->firstOrFail();
+        $estimation = $this->actingAs($estimator)->get(route('estimator.projects.show', [$project, 'phase' => $substructure->id]));
+        $estimation->assertOk()->assertSee('3.1 Excavation and Earthwork Subtotal')->assertSee('Estimation Total');
+        $this->assertSame(2, substr_count($estimation->getContent(), '3.1 Excavation and Earthwork'));
+
+        $plastering = $project->phases()->where('stage_code', 'plastering')->firstOrFail();
+        $materialBudget = $project->internalBudgets()->where('project_phase_id', $plastering->id)
+            ->where('main_category', 'materials')->firstOrFail();
+        $this->assertCount(6, $materialBudget->entries);
+        $this->assertSame('8043500.00', $materialBudget->total_amount);
+        $pm = User::where('email', 'neema@buildiwick.test')->firstOrFail();
+        $this->actingAs($pm)->get(route('pm.projects.show', [$project, 'budget' => $materialBudget->id]))
+            ->assertOk()->assertSee('Internal Budget Summary by Phase')->assertSee('Ground Floor')
+            ->assertSee('A Subtotal')->assertSee('B Subtotal')->assertSee('C Subtotal')->assertSee('8,043,500.00');
+
         $director = User::where('email', 'director@buildiwick.test')->firstOrFail();
         $this->actingAs($director)
             ->get(route('director.projects.show', $project).'#phases')
             ->assertOk()
+            ->assertSee('data-project-view="estimate"', false)
+            ->assertSee('data-project-view="budget"', false)
             ->assertSee('Expense Trace')
             ->assertSee('Budget Origin to Supplier Payment')
             ->assertSee('Jengo Building Materials')
