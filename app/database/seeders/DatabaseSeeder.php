@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             ProjectPhaseSeeder::class,
             UserSeeder::class,
             DemoProjectSeeder::class,
+            OysterbayBoundaryWallDemoSeeder::class,
         ]);
     }
 }

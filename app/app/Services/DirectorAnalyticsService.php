@@ -15,8 +15,6 @@ use Illuminate\Validation\ValidationException;
 /** Read-only organization and project projections over the existing workflow records. */
 class DirectorAnalyticsService
 {
-    private ?Collection $phaseLabels = null;
-
     private const PHASES = [
         'preliminaries', 'substructure', 'superstructure', 'walling',
         'roofing', 'finishing', 'external_works',
@@ -43,7 +41,6 @@ class DirectorAnalyticsService
         abort_unless($loaded, 404);
 
         $cutoff = $asOf->endOfDay();
-        $labels = $this->phaseLabels ??= Lookup::ofType('construction_stage')->pluck('label', 'code');
         $estimate = $loaded->estimates
             ->where('status', 'issued')
             ->filter(fn ($item) => CarbonImmutable::parse($item->issued_at ?? $item->created_at)->lte($cutoff))
@@ -192,7 +189,6 @@ class DirectorAnalyticsService
 
     private function projectRow(Project $project, CarbonImmutable $from, CarbonImmutable $to): array
     {
-        $labels = $this->phaseLabels ??= Lookup::ofType('construction_stage')->pluck('label', 'code');
         $estimate = $project->estimates->where('status', 'issued')->sortByDesc('version')->first();
         $estimateEntries = $estimate?->entries ?? collect();
         $estimateValue = $estimate?->total_amount ?? '0.00';
@@ -311,6 +307,63 @@ class DirectorAnalyticsService
             ];
         }
 
+        $expenseTrace = $approvedRequests
+            ->groupBy('project_phase_id')
+            ->map(function (Collection $phaseRequests) {
+                $phase = $phaseRequests->first()->phase;
+                $packages = $phaseRequests
+                    ->groupBy(fn (ExpenseRequest $request): string => implode('|', [
+                        $request->work_area ?: 'Unclassified work area',
+                        $request->construction_category ?: 'Unclassified construction category',
+                        $request->work_package_code ?: '—',
+                        $request->work_package_name ?: 'Unclassified work package',
+                    ]))
+                    ->map(function (Collection $requests) {
+                        $first = $requests->first();
+                        $budgetEntries = $requests->pluck('internalBudgetEntry')->filter()->unique('id');
+                        $supplierGroups = $requests
+                            ->groupBy(fn (ExpenseRequest $request): string => $request->supplier_request_group_id
+                                ? 'group-'.$request->supplier_request_group_id
+                                : 'supplier-'.($request->supplier_payee_id ?: 'unassigned'))
+                            ->map(function (Collection $items) {
+                                $firstItem = $items->first();
+                                $supplierGroup = $firstItem->supplierRequestGroup;
+
+                                return [
+                                    'group' => $supplierGroup,
+                                    'code' => $supplierGroup?->group_code ?? $firstItem->request_batch_code,
+                                    'supplier' => $supplierGroup?->supplier?->name ?? $firstItem->supplierPayee?->name ?? 'Supplier not assigned',
+                                    'items' => $items->sortBy('request_line_number')->values(),
+                                    'approved' => Money::sum($items->map(fn (ExpenseRequest $request) => $request->approved_payable_amount)),
+                                    'paid' => Money::sum($items->map(fn (ExpenseRequest $request) => $request->paid_to_date)),
+                                    'outstanding' => Money::sum($items->map(fn (ExpenseRequest $request) => $request->approved_outstanding_amount)),
+                                ];
+                            })->values();
+
+                        return [
+                            'work_area' => $first->work_area ?: 'Unclassified work area',
+                            'construction_category' => $first->construction_category ?: 'Unclassified construction category',
+                            'work_package_code' => $first->work_package_code ?: '—',
+                            'work_package_name' => $first->work_package_name ?: 'Unclassified work package',
+                            'budget' => Money::sum($budgetEntries->map(fn ($entry) => $entry->line_total)),
+                            'approved' => Money::sum($requests->map(fn (ExpenseRequest $request) => $request->approved_payable_amount)),
+                            'paid' => Money::sum($requests->map(fn (ExpenseRequest $request) => $request->paid_to_date)),
+                            'outstanding' => Money::sum($requests->map(fn (ExpenseRequest $request) => $request->approved_outstanding_amount)),
+                            'supplier_groups' => $supplierGroups,
+                        ];
+                    })->values();
+
+                return [
+                    'phase_order' => $phase?->phase_order ?? 999,
+                    'phase' => $phase?->stage_label ?? 'Unclassified phase',
+                    'budget' => Money::sum($packages->pluck('budget')),
+                    'approved' => Money::sum($packages->pluck('approved')),
+                    'paid' => Money::sum($packages->pluck('paid')),
+                    'outstanding' => Money::sum($packages->pluck('outstanding')),
+                    'packages' => $packages,
+                ];
+            })->sortBy('phase_order')->values();
+
         $standardPhases = $project->phases;
         $completedPhases = $standardPhases->where('status', 'completed')->count();
         $activePhase = $project->activePhase;
@@ -333,7 +386,7 @@ class DirectorAnalyticsService
 
         return [
             'project' => $project,
-            'current_phase' => $activePhase ? ($labels[$activePhase->stage_code] ?? $activePhase->stage_code) : null,
+            'current_phase' => $activePhase?->stage_label,
             'completed_phases' => $completedPhases,
             'phase_count' => $standardPhases->count(),
             'estimated_client_value' => $estimateValue,
@@ -356,6 +409,7 @@ class DirectorAnalyticsService
             'expenses_period' => Money::sum($expensePeriod->pluck('amount')),
             'category_analytics' => $categoryAnalytics,
             'phase_analytics' => $phaseAnalytics,
+            'expense_trace' => $expenseTrace,
             'phase_history' => $phaseHistory,
             'receivable_rows' => $receivableRows,
             'payable_rows' => $payableRows,
@@ -366,7 +420,9 @@ class DirectorAnalyticsService
     {
         return Project::query()->with([
             'client', 'activePhase', 'phases', 'estimates.entries', 'internalBudgets.entries',
-            'expenseRequests.phase', 'expenseRequests.payments', 'expenseRequests.latestPmApproval', 'expensePayments.expenseRequest', 'clientPayments',
+            'expenseRequests.phase', 'expenseRequests.payments', 'expenseRequests.latestPmApproval',
+            'expenseRequests.internalBudgetEntry', 'expenseRequests.supplierPayee', 'expenseRequests.supplierRequestGroup.supplier',
+            'expensePayments.expenseRequest', 'clientPayments',
             'invoices.client', 'invoices.items', 'invoices.payments',
         ])->when($projectId, fn ($query) => $query->whereKey($projectId))->orderBy('name')->get();
     }
