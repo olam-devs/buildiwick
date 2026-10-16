@@ -14,6 +14,7 @@ class DemoWorkspaceSeeder extends Seeder
         $this->call([
             DemoProjectSeeder::class,
             OysterbayBoundaryWallDemoSeeder::class,
+            PendingMaterialRequestDemoSeeder::class,
         ]);
 
         DB::transaction(function (): void {

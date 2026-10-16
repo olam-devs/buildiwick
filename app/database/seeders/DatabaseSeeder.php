@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             DemoProjectSeeder::class,
             OysterbayBoundaryWallDemoSeeder::class,
+            PendingMaterialRequestDemoSeeder::class,
         ]);
     }
 }

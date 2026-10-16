@@ -9,6 +9,7 @@ use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoProjectSeeder;
 use Database\Seeders\DemoWorkspaceSeeder;
 use Database\Seeders\OysterbayBoundaryWallDemoSeeder;
+use Database\Seeders\PendingMaterialRequestDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -47,8 +48,19 @@ class OysterbayBoundaryWallDemoSeederTest extends TestCase
         $this->assertTrue($entries->every(fn ($entry) => filled($entry->work_area)
             && filled($entry->construction_category) && filled($entry->work_package_name)));
 
-        $this->assertSame(11, $project->expenseRequests()->count());
-        $this->assertSame(7, $project->expenseRequests()->pluck('supplier_request_group_id')->unique()->count());
+        $this->assertSame(30, $project->expenseRequests()->count());
+        $this->assertSame(7, $project->expenseRequests()->whereNotNull('supplier_request_group_id')->pluck('supplier_request_group_id')->unique()->count());
+        foreach ([PendingMaterialRequestDemoSeeder::TEST_BATCH, PendingMaterialRequestDemoSeeder::PRESENTATION_BATCH] as $batchCode) {
+            $batch = $project->expenseRequests()->where('request_batch_code', $batchCode)->orderBy('request_line_number')->get();
+            $this->assertCount(6, $batch);
+            $this->assertTrue($batch->every(fn ($request) => $request->status === 'pending_approval'
+                && $request->procurement_stage === 'site_review'
+                && $request->requestedBy?->email === 'amani@buildiwick.test'));
+        }
+        $mixedBatch = $project->expenseRequests()->where('request_batch_code', PendingMaterialRequestDemoSeeder::MIXED_BATCH)->get();
+        $this->assertCount(7, $mixedBatch);
+        $this->assertSame(['labour_subcontracts', 'logistics_equipment', 'materials'], $mixedBatch->pluck('main_category')->unique()->sort()->values()->all());
+        $this->assertSame(['item', 'salary_wage', 'service'], $mixedBatch->pluck('request_type')->unique()->sort()->values()->all());
         $this->assertSame(9, $project->expensePayments()->count());
         $this->assertTrue($project->expenseRequests()->get()->every(fn ($request) => $request->internal_budget_entry_id !== null));
         $invoice = $project->invoices()->with(['items', 'payments'])->firstOrFail();
