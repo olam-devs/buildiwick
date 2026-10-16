@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ExpenseRequest;
+use App\Models\InternalBudgetEntry;
 use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectPhase;
@@ -113,32 +114,41 @@ class SiteExpenseRequestService
             return $this->database->transaction(function () use ($project, $data, $actor, $evidence, &$storedPath): Collection {
                 $lockedProject = Project::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
                 Gate::forUser($actor)->authorize('create', [ExpenseRequest::class, $lockedProject]);
-                $phase = $this->activePhase($lockedProject, lock: true);
                 $storedPath = $evidence?->store('expense-requests/'.$lockedProject->id, 'local');
                 $temporaryBatch = 'SRQ-TMP-'.Str::ulid();
                 $created = collect();
 
                 foreach (array_values($data['items']) as $index => $item) {
                     $requestType = $item['request_type'] ?? 'item';
-                    $provisionalCategory = in_array($requestType, ['salary_wage'], true)
-                        ? 'labour_subcontracts'
-                        : 'unclassified';
+                    $phase = ! empty($item['project_phase_id'])
+                        ? $lockedProject->phases()->whereKey($item['project_phase_id'])->lockForUpdate()->firstOrFail()
+                        : $this->activePhase($lockedProject, lock: true);
+                    $budgetEntry = $this->approvedBudgetEntry($lockedProject, $item['internal_budget_entry_id'] ?? null);
+                    $phase = $budgetEntry?->phase ?? $phase;
+                    $provisionalCategory = $budgetEntry?->main_category ?? ($requestType === 'salary_wage' ? 'labour_subcontracts' : 'unclassified');
                     $request = $lockedProject->expenseRequests()->create([
                         'request_code' => 'REQ-TMP-'.Str::ulid(),
                         'request_batch_code' => $temporaryBatch,
                         'request_line_number' => $index + 1,
                         'project_phase_id' => $phase->id,
+                        'internal_budget_entry_id' => $budgetEntry?->id,
+                        'work_area' => $budgetEntry?->work_area ?? $item['work_area'] ?? 'General Works',
+                        'construction_category' => $budgetEntry?->construction_category ?? $item['construction_category'] ?? $phase->stage_label,
+                        'work_package_code' => $budgetEntry?->work_package_code ?? $item['work_package_code'] ?? null,
+                        'work_package_name' => $budgetEntry?->work_package_name ?? $item['work_package_name'] ?? 'General Requirements',
                         'labour_agreement_id' => $item['labour_agreement_id'] ?? null,
                         'request_type' => $requestType,
                         'main_category' => $provisionalCategory,
                         'subcategory' => null,
                         'item_description' => $item['item_description'],
+                        'is_new_item' => $budgetEntry === null,
                         'quantity' => $this->normalizeQuantity($item['quantity'] ?? null),
                         'unit' => $item['unit'] ?? null,
                         'requested_amount' => null,
                         'requested_at' => $data['requested_at'],
                         'submitted_at' => now(),
                         'status' => 'pending_approval',
+                        'procurement_stage' => 'site_review',
                         'requested_by' => $actor->id,
                         'evidence_link' => $storedPath,
                         'evidence_original_name' => $evidence?->getClientOriginalName(),
@@ -273,6 +283,26 @@ class SiteExpenseRequestService
     private function normalizeQuantity(mixed $quantity): ?string
     {
         return $quantity === null || $quantity === '' ? null : (string) $quantity;
+    }
+
+    private function approvedBudgetEntry(Project $project, mixed $entryId): ?InternalBudgetEntry
+    {
+        if (! $entryId) {
+            return null;
+        }
+
+        $entry = InternalBudgetEntry::query()
+            ->whereKey($entryId)
+            ->whereHas('budget', fn ($query) => $query->where('project_id', $project->id)->where('status', 'approved'))
+            ->first();
+
+        if (! $entry) {
+            throw ValidationException::withMessages([
+                'items' => 'The selected material must belong to this project’s approved internal budget.',
+            ]);
+        }
+
+        return $entry;
     }
 
     private function legacyRequestedAmount(array $data): string

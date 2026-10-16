@@ -23,4 +23,9 @@ class SupplierPayee extends Model
     {
         return $this->hasMany(SupplierPaymentDestination::class);
     }
+
+    public function requestGroups(): HasMany
+    {
+        return $this->hasMany(SupplierRequestGroup::class);
+    }
 }

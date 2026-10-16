@@ -26,11 +26,13 @@ class ExpenseRequest extends Model
     ];
 
     protected $fillable = [
-        'request_code', 'request_batch_code', 'request_line_number', 'project_id', 'project_phase_id', 'labour_agreement_id', 'internal_budget_entry_id', 'request_type', 'main_category', 'subcategory',
-        'item_description', 'supplier_fundi_client', 'supplier_payee_id', 'invoice_receipt_no', 'quantity', 'unit',
+        'request_code', 'request_batch_code', 'request_line_number', 'supplier_request_group_id', 'procurement_stage',
+        'project_id', 'project_phase_id', 'work_area', 'construction_category', 'work_package_code', 'work_package_name',
+        'labour_agreement_id', 'internal_budget_entry_id', 'request_type', 'main_category', 'subcategory',
+        'item_description', 'is_new_item', 'supplier_fundi_client', 'supplier_payee_id', 'invoice_receipt_no', 'quantity', 'unit',
         'unit_cost', 'total_amount', 'requested_amount', 'commercial_unit_rate', 'commercial_total', 'commercial_payment_method',
         'commercial_payment_destination', 'commercial_payment_destination_id', 'commercial_notes', 'commercial_evidence_link', 'commercial_prepared_by',
-        'commercial_prepared_at', 'approved_amount', 'requested_at', 'submitted_at',
+        'commercial_prepared_at', 'approved_amount', 'requested_at', 'submitted_at', 'verified_by', 'verified_at',
         'status', 'cancelled_at', 'cancelled_by', 'requested_by', 'evidence_link', 'evidence_original_name', 'notes',
     ];
 
@@ -40,7 +42,7 @@ class ExpenseRequest extends Model
             'quantity' => 'decimal:2', 'unit_cost' => 'decimal:2', 'total_amount' => 'decimal:2', 'requested_amount' => 'decimal:2',
             'commercial_unit_rate' => 'decimal:2', 'commercial_total' => 'decimal:2', 'approved_amount' => 'decimal:2',
             'requested_at' => 'date', 'submitted_at' => 'datetime', 'commercial_prepared_at' => 'datetime',
-            'cancelled_at' => 'datetime',
+            'cancelled_at' => 'datetime', 'verified_at' => 'datetime', 'is_new_item' => 'boolean',
             'request_line_number' => 'integer',
         ];
     }
@@ -73,6 +75,16 @@ class ExpenseRequest extends Model
     public function supplierPayee(): BelongsTo
     {
         return $this->belongsTo(SupplierPayee::class);
+    }
+
+    public function supplierRequestGroup(): BelongsTo
+    {
+        return $this->belongsTo(SupplierRequestGroup::class);
+    }
+
+    public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
     }
 
     public function commercialPaymentDestination(): BelongsTo

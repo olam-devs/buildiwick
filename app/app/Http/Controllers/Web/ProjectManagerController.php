@@ -113,13 +113,20 @@ class ProjectManagerController extends Controller
     {
         abort_unless($request->user()->hasRole('project_manager'), 403);
         $this->authorize('create', [ExpenseRequest::class, $project]);
-        $activePhases = $project->phases()->where('status', 'active')
-            ->orderBy('phase_order')->get();
+        $phases = $project->phases()->orderBy('phase_order')->get();
+        $activePhases = $phases->where('status', 'active');
+        $budgetEntries = InternalBudgetEntry::query()
+            ->with('phase')
+            ->whereHas('budget', fn ($query) => $query->where('project_id', $project->id)->where('status', 'approved'))
+            ->where('main_category', 'materials')
+            ->orderBy('item_description')->get();
 
         return view('site.request-form', [
             'project' => $project,
             'phase' => $activePhases->count() === 1 ? $activePhases->first() : null,
+            'phases' => $phases,
             'phaseConfiguration' => $activePhases->count(),
+            'budgetEntries' => $budgetEntries,
             'expenseRequest' => null,
             'lookups' => $this->lookups(),
             'formAudience' => 'project_manager',
@@ -133,8 +140,8 @@ class ProjectManagerController extends Controller
         $created = $service->createBatch($project, $request->validated(), $request->user(), $request->file('evidence'));
         $first = $created->firstOrFail();
 
-        return redirect()->route('pm.requests.commercial.edit', $first)
-            ->with('success', 'Request '.$first->request_batch_code.' created. Complete each item, then approve it for Accounts.');
+        return redirect()->route('pm.procurement.show', $first)
+            ->with('success', 'Request '.$first->request_batch_code.' created. Verify its items in Step 1.');
     }
 
     public function labourAgreements(Request $request)

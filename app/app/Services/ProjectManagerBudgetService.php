@@ -82,7 +82,7 @@ class ProjectManagerBudgetService
             ]);
             foreach ($locked->entries()->get() as $entry) {
                 $draft->entries()->create($entry->only([
-                    'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
+                    'project_phase_id', 'work_area', 'work_section', 'construction_category', 'work_package_code', 'work_package_name', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
                     'quantity', 'unit', 'unit_cost', 'notes',
                 ]) + ['entered_by' => $actor->id]);
             }
@@ -342,9 +342,6 @@ class ProjectManagerBudgetService
         })->values();
 
         return [
-            'work_area' => $data['work_area'] ?? null,
-            'work_section' => $data['work_section'] ?? null,
-            'item_reference' => $data['item_reference'] ?? null,
             'budget' => $budget,
             'approved' => $approved,
             'actual' => $actual,
@@ -389,6 +386,12 @@ class ProjectManagerBudgetService
     public function entryData(array $data): array
     {
         return [
+            'work_area' => $data['work_area'] ?? null,
+            'work_section' => $data['work_section'] ?? null,
+            'construction_category' => $data['construction_category'] ?? null,
+            'work_package_code' => $data['work_package_code'] ?? null,
+            'work_package_name' => $data['work_package_name'] ?? null,
+            'item_reference' => $data['item_reference'] ?? null,
             'main_category' => $data['main_category'],
             'subcategory' => $data['subcategory'] ?? null,
             'item_description' => $data['item_description'],
@@ -439,7 +442,7 @@ class ProjectManagerBudgetService
     private function snapshot(InternalBudgetEntry $entry): array
     {
         return $entry->only([
-            'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
+            'project_phase_id', 'work_area', 'work_section', 'construction_category', 'work_package_code', 'work_package_name', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client',
             'quantity', 'unit', 'unit_cost', 'notes',
         ]);
     }

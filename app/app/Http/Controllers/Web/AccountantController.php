@@ -7,6 +7,7 @@ use App\Http\Requests\StoreClientInvoiceRequest;
 use App\Http\Requests\StoreClientPaymentRequest;
 use App\Http\Requests\StoreExpensePaymentRequest;
 use App\Models\ClientInvoice;
+use App\Models\ClientInvoiceItem;
 use App\Models\ClientPayment;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
@@ -96,13 +97,13 @@ class AccountantController extends Controller
         $batchCode = $expenseRequest->request_batch_code;
         $batchItems = $this->approvedQuery()
             ->where('project_id', $expenseRequest->project_id)
-            ->where(function ($query) use ($batchCode, $expenseRequest) {
-                $batchCode
-                    ? $query->where('request_batch_code', $batchCode)
-                    : $query->whereKey($expenseRequest->id);
-            })
+            ->when($expenseRequest->supplier_request_group_id,
+                fn ($query) => $query->where('supplier_request_group_id', $expenseRequest->supplier_request_group_id),
+                fn ($query) => $query->where(function ($nested) use ($batchCode, $expenseRequest) {
+                    $batchCode ? $nested->where('request_batch_code', $batchCode) : $nested->whereKey($expenseRequest->id);
+                }))
             ->orderBy('request_line_number')->get();
-        $supplierGroups = $batchItems->groupBy(fn (ExpenseRequest $item) => $item->supplier_payee_id ?: ($item->latestPmApproval?->supplier_name_snapshot ?: 'unassigned'));
+        $supplierGroups = $batchItems->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id ?: ($item->supplier_payee_id ?: ($item->latestPmApproval?->supplier_name_snapshot ?: 'unassigned')));
 
         return view('accountant.show', [
             'expenseRequest' => $expenseRequest,
@@ -172,7 +173,17 @@ class AccountantController extends Controller
     public function createInvoice(Request $request, Project $project)
     {
         $this->authorizeWorkspace($request);
-        $estimate = $request->boolean('from_estimate') ? $project->estimates()->where('status', 'issued')->with('entries')->orderByDesc('version')->first() : null;
+        $estimate = $request->boolean('from_estimate') ? $project->estimates()->where('status', 'issued')->with(['entries.phase'])->orderByDesc('version')->first() : null;
+        if ($estimate) {
+            $claimed = ClientInvoiceItem::query()->whereIn('estimate_entry_id', $estimate->entries->pluck('id'))
+                ->whereHas('invoice', fn ($query) => $query->where('status', '!=', 'void'))
+                ->selectRaw('estimate_entry_id, SUM(claim_amount) as claimed')->groupBy('estimate_entry_id')->pluck('claimed', 'estimate_entry_id');
+            $estimate->entries->each(function ($entry) use ($claimed): void {
+                $entry->setAttribute('claimed_amount', $claimed[$entry->id] ?? '0.00');
+                $remaining = Money::difference($entry->line_total, $entry->claimed_amount);
+                $entry->setAttribute('remaining_amount', Money::compare($remaining, '0') < 0 ? '0.00' : $remaining);
+            });
+        }
 
         return view('accountant.invoice-form', ['project' => $project->load(['client', 'phases']), 'estimate' => $estimate]);
     }
@@ -339,7 +350,7 @@ class AccountantController extends Controller
 
     private function approvedQuery()
     {
-        return ExpenseRequest::query()->where('status', 'approved')->with(['project', 'phase', 'internalBudgetEntry', 'supplierPayee.paymentDestinations', 'latestPmApproval.decidedBy', 'payments.recordedBy']);
+        return ExpenseRequest::query()->where('status', 'approved')->with(['project', 'phase', 'internalBudgetEntry', 'supplierRequestGroup', 'supplierPayee.paymentDestinations', 'latestPmApproval.decidedBy', 'payments.recordedBy']);
     }
 
     private function financialTotals($requests): array
@@ -353,14 +364,14 @@ class AccountantController extends Controller
 
     private function requestBatches($requests)
     {
-        return collect($requests)->groupBy(fn (ExpenseRequest $item) => $item->request_batch_code ?: $item->request_code)
+        return collect($requests)->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id ? 'supplier-group-'.$item->supplier_request_group_id : ($item->request_batch_code ?: $item->request_code))
             ->map(function ($items, string $code) {
                 $totals = $this->financialTotals($items);
                 $paid = $totals['paid'];
                 $outstanding = $totals['outstanding'];
 
                 return (object) [
-                    'code' => $code,
+                    'code' => $items->first()->supplierRequestGroup?->group_code ?? $code,
                     'anchor' => $items->sortBy('request_line_number')->first(),
                     'items' => $items->sortBy('request_line_number')->values(),
                     'item_count' => $items->count(),

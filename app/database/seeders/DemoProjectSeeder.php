@@ -13,6 +13,7 @@ use App\Models\Project;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Models\SupplierPayee;
+use App\Models\SupplierRequestGroup;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -178,6 +179,9 @@ class DemoProjectSeeder extends Seeder
                     [
                         'work_area' => 'Main Building',
                         'work_section' => $sectionNames[$category],
+                        'construction_category' => $phases[$phase]->stage_label,
+                        'work_package_code' => chr(64 + (($budgetLine - 1) % 26) + 1),
+                        'work_package_name' => $sectionNames[$category],
                         'item_reference' => 'B-'.str_pad((string) $budgetLine, 3, '0', STR_PAD_LEFT),
                         'main_category' => $category,
                         'subcategory' => $subcategory,
@@ -235,6 +239,28 @@ class DemoProjectSeeder extends Seeder
                 ]
             );
 
+            $materialsGroup = SupplierRequestGroup::updateOrCreate(
+                ['group_code' => 'SG-DEMO-MATERIALS-001'],
+                [
+                    'project_id' => $project->id, 'request_batch_code' => 'SRQ-DEMO-001',
+                    'supplier_payee_id' => $materialsSupplier->id, 'payment_destination_id' => $materialsDestination->id,
+                    'status' => 'approved', 'payment_method' => 'bank_transfer',
+                    'notes' => 'Foundation cement and reinforcement grouped for one supplier.',
+                    'created_by' => $pm->id, 'approved_by' => $pm->id, 'approved_at' => now()->subDays(18),
+                    'decision_notes' => 'Prices and approved-budget allocations verified.',
+                ]
+            );
+            $plantGroup = SupplierRequestGroup::updateOrCreate(
+                ['group_code' => 'SG-DEMO-PLANT-001'],
+                [
+                    'project_id' => $project->id, 'request_batch_code' => 'SRQ-DEMO-001',
+                    'supplier_payee_id' => $plantSupplier->id, 'payment_destination_id' => $plantDestination->id,
+                    'status' => 'approved', 'payment_method' => 'bank_transfer', 'notes' => 'Excavator hire supplier group.',
+                    'created_by' => $pm->id, 'approved_by' => $pm->id, 'approved_at' => now()->subDays(7),
+                    'decision_notes' => 'Plant rate and payment destination verified.',
+                ]
+            );
+
             $agreement = LabourAgreement::updateOrCreate(
                 ['agreement_code' => 'AGR-DEMO-FOUND-001'],
                 [
@@ -255,6 +281,9 @@ class DemoProjectSeeder extends Seeder
             $cement = $this->request([
                 'request_code' => 'REQ-DEMO-001-01', 'request_batch_code' => 'SRQ-DEMO-001', 'request_line_number' => 1,
                 'project_id' => $project->id, 'project_phase_id' => $phases['substructure']->id,
+                'supplier_request_group_id' => $materialsGroup->id, 'procurement_stage' => 'approved',
+                'work_area' => 'Main Building', 'construction_category' => 'Substructure',
+                'work_package_code' => $budgetEntries['cement']->work_package_code, 'work_package_name' => $budgetEntries['cement']->work_package_name,
                 'internal_budget_entry_id' => $budgetEntries['cement']->id, 'request_type' => 'item',
                 'main_category' => 'materials', 'subcategory' => 'concrete_cement',
                 'item_description' => 'Cement 42.5R — first foundation delivery', 'quantity' => 100, 'unit' => 'bag',
@@ -272,6 +301,9 @@ class DemoProjectSeeder extends Seeder
             $steel = $this->request([
                 'request_code' => 'REQ-DEMO-001-02', 'request_batch_code' => 'SRQ-DEMO-001', 'request_line_number' => 2,
                 'project_id' => $project->id, 'project_phase_id' => $phases['substructure']->id,
+                'supplier_request_group_id' => $materialsGroup->id, 'procurement_stage' => 'approved',
+                'work_area' => 'Main Building', 'construction_category' => 'Substructure',
+                'work_package_code' => $budgetEntries['steel']->work_package_code, 'work_package_name' => $budgetEntries['steel']->work_package_name,
                 'internal_budget_entry_id' => $budgetEntries['steel']->id, 'request_type' => 'item',
                 'main_category' => 'materials', 'subcategory' => 'reinforcement_steel',
                 'item_description' => 'Y12 and Y16 reinforcement steel', 'quantity' => 1, 'unit' => 'tonne',
@@ -289,6 +321,9 @@ class DemoProjectSeeder extends Seeder
             $excavator = $this->request([
                 'request_code' => 'REQ-DEMO-002-01', 'request_batch_code' => 'SRQ-DEMO-001', 'request_line_number' => 3,
                 'project_id' => $project->id, 'project_phase_id' => $phases['substructure']->id,
+                'supplier_request_group_id' => $plantGroup->id, 'procurement_stage' => 'approved',
+                'work_area' => 'Main Building', 'construction_category' => 'Substructure',
+                'work_package_code' => $budgetEntries['excavator']->work_package_code, 'work_package_name' => $budgetEntries['excavator']->work_package_name,
                 'internal_budget_entry_id' => $budgetEntries['excavator']->id, 'request_type' => 'service',
                 'main_category' => 'logistics_equipment', 'subcategory' => 'plant_machinery_hire',
                 'item_description' => 'Excavator hire for foundation trenches', 'quantity' => 3, 'unit' => 'day',
@@ -306,6 +341,8 @@ class DemoProjectSeeder extends Seeder
             $labour = $this->request([
                 'request_code' => 'REQ-DEMO-003-01', 'request_batch_code' => 'SRQ-DEMO-003', 'request_line_number' => 1,
                 'project_id' => $project->id, 'project_phase_id' => $phases['substructure']->id,
+                'procurement_stage' => 'site_review', 'work_area' => 'Main Building',
+                'construction_category' => 'Substructure', 'work_package_code' => 'D', 'work_package_name' => 'Foundation Labour',
                 'labour_agreement_id' => $agreement->id, 'request_type' => 'salary_wage',
                 'main_category' => 'labour_subcontracts', 'subcategory' => 'fundi_labour',
                 'item_description' => 'Foundation crew first progress instalment', 'quantity' => 1, 'unit' => 'ls',

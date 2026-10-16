@@ -33,6 +33,9 @@ class SaveInternalBudgetEntryRequest extends FormRequest
         return [
             'work_area' => ['nullable', 'string', 'max:150'],
             'work_section' => ['nullable', 'string', 'max:255'],
+            'construction_category' => ['nullable', 'string', 'max:255'],
+            'work_package_code' => ['nullable', 'string', 'max:50'],
+            'work_package_name' => ['nullable', 'string', 'max:255'],
             'item_reference' => ['nullable', 'string', 'max:100'],
             'main_category' => ['required', Rule::exists('lookups', 'code')->where('type', 'main_category')->where('is_active', true)],
             'subcategory' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'subcategory')->where('parent_code', $category)->where('is_active', true)],

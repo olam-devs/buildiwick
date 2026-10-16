@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InternalBudgetEntry extends Model
 {
-    protected $fillable = ['internal_budget_id', 'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client', 'quantity', 'unit', 'unit_cost', 'entered_by', 'notes'];
+    protected $fillable = ['internal_budget_id', 'project_phase_id', 'work_area', 'work_section', 'construction_category', 'work_package_code', 'work_package_name', 'item_reference', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client', 'quantity', 'unit', 'unit_cost', 'entered_by', 'notes'];
 
     protected function casts(): array
     {

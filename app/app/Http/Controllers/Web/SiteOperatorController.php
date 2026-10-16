@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreSiteExpenseRequestBatch;
 use App\Http\Requests\UpdateSiteExpenseRequest;
 use App\Models\ExpenseRequest;
+use App\Models\InternalBudgetEntry;
 use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\User;
@@ -84,12 +85,21 @@ class SiteOperatorController extends Controller
     {
         $this->authorizeWorkspaceRole($request->user());
         $this->authorize('create', [ExpenseRequest::class, $project]);
-        $activePhases = $project->phases()->where('status', 'active')->orderBy('phase_order')->get();
+        $phases = $project->phases()->orderBy('phase_order')->get();
+        $activePhases = $phases->where('status', 'active');
+        $budgetEntries = InternalBudgetEntry::query()
+            ->with('phase')
+            ->whereHas('budget', fn ($query) => $query->where('project_id', $project->id)->where('status', 'approved'))
+            ->where('main_category', 'materials')
+            ->orderBy('item_description')
+            ->get();
 
         return view('site.request-form', [
             'project' => $project,
             'phase' => $activePhases->count() === 1 ? $activePhases->first() : null,
+            'phases' => $phases,
             'phaseConfiguration' => $activePhases->count(),
+            'budgetEntries' => $budgetEntries,
             'expenseRequest' => null,
             'lookups' => $this->lookups(),
             'labourAgreements' => $project->labourAgreements()->whereIn('status', ['draft', 'active'])->orderBy('fundi_subcontractor')->get(),
