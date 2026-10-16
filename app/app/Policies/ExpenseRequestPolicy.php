@@ -64,4 +64,10 @@ class ExpenseRequestPolicy
         return ($user->hasRole('admin') || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($request->project_id)->exists()))
             && $request->status === 'pending_approval';
     }
+
+    public function viewProcurementWorkflow(User $user, ExpenseRequest $request): bool
+    {
+        return $user->hasRole('admin')
+            || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($request->project_id)->exists());
+    }
 }

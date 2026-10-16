@@ -19,7 +19,7 @@ class ProcurementWorkflowController extends Controller
 {
     public function show(Request $request, ExpenseRequest $expenseRequest)
     {
-        $this->authorize('prepareCommercial', $expenseRequest);
+        $this->authorize('viewProcurementWorkflow', $expenseRequest);
         $batchCode = $expenseRequest->request_batch_code ?: $expenseRequest->request_code;
         $items = ExpenseRequest::query()->with(['phase', 'internalBudgetEntry', 'supplierRequestGroup.supplier'])
             ->where('project_id', $expenseRequest->project_id)

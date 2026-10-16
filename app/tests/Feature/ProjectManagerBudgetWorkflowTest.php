@@ -655,6 +655,10 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->actingAs($pm)->get(route('pm.budgets.show', [$project, $budget]))
             ->assertOk()->assertSee('Roofing · Materials Budget')->assertSee('Submit for Director Verification')
             ->assertDontSee('Project Command Centre')->assertDontSee('What Needs Your Attention');
+        $this->assertFalse($pm->can('prepareCommercial', $request));
+        $this->assertTrue($pm->can('viewProcurementWorkflow', $request));
+        $this->actingAs($pm)->get(route('pm.procurement.show', [$request, 'step' => 3]))
+            ->assertOk()->assertSee('Site-to-supplier workflow');
     }
 
     public function test_site_item_list_is_grouped_by_supplier_allocated_to_budget_and_pm_approved_directly_for_accounts(): void
