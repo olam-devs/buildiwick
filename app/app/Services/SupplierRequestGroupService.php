@@ -53,6 +53,24 @@ class SupplierRequestGroupService
                         'work_package_name' => $budgetEntry->work_package_name,
                         'is_new_item' => false,
                     ];
+
+                    $labels = [
+                        'item_description' => 'description', 'quantity' => 'quantity', 'unit' => 'unit',
+                        'internal_budget_entry_id' => 'budget allocation', 'project_phase_id' => 'phase',
+                        'main_category' => 'budget category', 'subcategory' => 'budget subcategory',
+                        'work_area' => 'work area', 'construction_category' => 'construction category',
+                        'work_package_code' => 'work package code', 'work_package_name' => 'work package',
+                    ];
+                    $changed = collect($labels)->filter(function (string $label, string $field) use ($item, $edits): bool {
+                        $before = $item->getAttribute($field);
+                        $after = array_key_exists($field, $edits) ? $edits[$field] : $before;
+
+                        return (string) ($before ?? '') !== (string) ($after ?? '');
+                    })->values();
+                    $edits['pm_edited'] = $changed->isNotEmpty();
+                    $edits['pm_edit_summary'] = $changed->isNotEmpty()
+                        ? 'Changed: '.$changed->join(', ')
+                        : null;
                 }
                 $item->update([
                     ...$edits,

@@ -35,12 +35,12 @@
 @if($requestBatches->isEmpty())<div class="phase-empty">No expense requests have been submitted for this project yet.@if($activeCount === 1) <a href="{{ route('site.requests.create', $project) }}">Create the first request</a>.@endif</div>
 @else
 <p class="form-context">Each row is one complete request. Open it to see all requested items and their approval progress.</p>
-<div class="tablewrap"><table class="site-request-table"><thead><tr><th>Request</th><th>Date</th><th>Phase</th><th>Items</th><th>Supplier Groups</th><th>Approval Status</th><th>Action</th></tr></thead><tbody>
+<div class="tablewrap"><table class="site-request-table"><thead><tr><th>Request</th><th>Date</th><th>Phase</th><th>Items</th><th>PM Result</th><th>Action</th></tr></thead><tbody>
 @foreach($requestBatches as $batch)
 @php($item=$batch->anchor)
 <tr>
   <td><a href="{{ route('site.requests.show', [$project, $item]) }}">{{ $batch->code }}</a></td><td>{{ $item->requested_at?->format('d M Y') }}</td><td>{{ $item->phase?->stage_label ?? 'Multiple / not set' }}</td>
-  <td>{{ $batch->item_count }}</td><td>{{ $batch->supplier_count ?: 'Awaiting PM grouping' }}</td>
+  <td>{{ $batch->item_count }}</td>
   <td>@foreach($batch->statuses as $status)<span class="status-pill approval-{{ $status }}">{{ ucwords(str_replace('_', ' ', $status)) }}</span> @endforeach</td><td><a href="{{ route('site.requests.show', [$project, $item]) }}">Open Request</a></td>
 </tr>
 @endforeach

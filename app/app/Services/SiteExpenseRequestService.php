@@ -117,14 +117,18 @@ class SiteExpenseRequestService
                 $storedPath = $evidence?->store('expense-requests/'.$lockedProject->id, 'local');
                 $temporaryBatch = 'SRQ-TMP-'.Str::ulid();
                 $created = collect();
+                $phase = $this->activePhase($lockedProject, lock: true);
 
                 foreach (array_values($data['items']) as $index => $item) {
                     $requestType = $item['request_type'] ?? 'item';
-                    $phase = ! empty($item['project_phase_id'])
-                        ? $lockedProject->phases()->whereKey($item['project_phase_id'])->lockForUpdate()->firstOrFail()
-                        : $this->activePhase($lockedProject, lock: true);
-                    $budgetEntry = $this->approvedBudgetEntry($lockedProject, $item['internal_budget_entry_id'] ?? null);
-                    $phase = $budgetEntry?->phase ?? $phase;
+                    $budgetEntry = $this->approvedBudgetEntry($lockedProject, $phase, $item['internal_budget_entry_id'] ?? null);
+                    if ($budgetEntry && (($requestType === 'item' && $budgetEntry->main_category !== 'materials')
+                        || ($requestType === 'salary_wage' && $budgetEntry->main_category !== 'labour_subcontracts')
+                        || ($requestType === 'service' && $budgetEntry->main_category === 'materials'))) {
+                        throw ValidationException::withMessages([
+                            'items.'.$index.'.internal_budget_entry_id' => 'Select an internal-budget item that matches this request type.',
+                        ]);
+                    }
                     $provisionalCategory = $budgetEntry?->main_category ?? ($requestType === 'salary_wage' ? 'labour_subcontracts' : 'unclassified');
                     $request = $lockedProject->expenseRequests()->create([
                         'request_code' => 'REQ-TMP-'.Str::ulid(),
@@ -256,7 +260,6 @@ class SiteExpenseRequestService
                 'rejected' => $group->where('status', 'rejected')->count(),
                 'requested' => Money::sum($group->filter(fn (ExpenseRequest $request) => $request->commercial_total !== null || $request->total_amount !== null)->map(fn (ExpenseRequest $request) => $request->commercial_total ?? $request->total_amount)),
                 'approved_amount' => Money::sum($group->where('status', 'approved')->map(fn (ExpenseRequest $request) => $request->approved_payable_amount)),
-                'approved' => Money::sum($group->where('status', 'approved')->map(fn (ExpenseRequest $request) => $request->approved_payable_amount)),
                 'paid' => Money::sum($group->flatMap(fn (ExpenseRequest $request) => $request->payments->pluck('amount'))),
             ];
         }
@@ -285,7 +288,7 @@ class SiteExpenseRequestService
         return $quantity === null || $quantity === '' ? null : (string) $quantity;
     }
 
-    private function approvedBudgetEntry(Project $project, mixed $entryId): ?InternalBudgetEntry
+    private function approvedBudgetEntry(Project $project, ProjectPhase $phase, mixed $entryId): ?InternalBudgetEntry
     {
         if (! $entryId) {
             return null;
@@ -293,12 +296,13 @@ class SiteExpenseRequestService
 
         $entry = InternalBudgetEntry::query()
             ->whereKey($entryId)
+            ->where('project_phase_id', $phase->id)
             ->whereHas('budget', fn ($query) => $query->where('project_id', $project->id)->where('status', 'approved'))
             ->first();
 
         if (! $entry) {
             throw ValidationException::withMessages([
-                'items' => 'The selected material must belong to this project’s approved internal budget.',
+                'items' => 'The selected item must belong to this project phase’s approved internal budget.',
             ]);
         }
 

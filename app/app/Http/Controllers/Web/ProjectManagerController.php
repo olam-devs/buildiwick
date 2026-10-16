@@ -115,15 +115,16 @@ class ProjectManagerController extends Controller
         $this->authorize('create', [ExpenseRequest::class, $project]);
         $phases = $project->phases()->orderBy('phase_order')->get();
         $activePhases = $phases->where('status', 'active');
+        $activePhase = $activePhases->count() === 1 ? $activePhases->first() : null;
         $budgetEntries = InternalBudgetEntry::query()
-            ->with('phase')
+            ->with(['phase', 'budget'])
             ->whereHas('budget', fn ($query) => $query->where('project_id', $project->id)->where('status', 'approved'))
-            ->where('main_category', 'materials')
+            ->when($activePhase, fn ($query) => $query->where('project_phase_id', $activePhase->id))
             ->orderBy('item_description')->get();
 
         return view('site.request-form', [
             'project' => $project,
-            'phase' => $activePhases->count() === 1 ? $activePhases->first() : null,
+            'phase' => $activePhase,
             'phases' => $phases,
             'phaseConfiguration' => $activePhases->count(),
             'budgetEntries' => $budgetEntries,

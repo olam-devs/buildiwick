@@ -89,16 +89,17 @@ class SiteOperatorController extends Controller
         $this->authorize('create', [ExpenseRequest::class, $project]);
         $phases = $project->phases()->orderBy('phase_order')->get();
         $activePhases = $phases->where('status', 'active');
+        $activePhase = $activePhases->count() === 1 ? $activePhases->first() : null;
         $budgetEntries = InternalBudgetEntry::query()
-            ->with('phase')
+            ->with(['phase', 'budget'])
             ->whereHas('budget', fn ($query) => $query->where('project_id', $project->id)->where('status', 'approved'))
-            ->where('main_category', 'materials')
+            ->when($activePhase, fn ($query) => $query->where('project_phase_id', $activePhase->id))
             ->orderBy('item_description')
             ->get();
 
         return view('site.request-form', [
             'project' => $project,
-            'phase' => $activePhases->count() === 1 ? $activePhases->first() : null,
+            'phase' => $activePhase,
             'phases' => $phases,
             'phaseConfiguration' => $activePhases->count(),
             'budgetEntries' => $budgetEntries,
@@ -122,13 +123,20 @@ class SiteOperatorController extends Controller
         $this->authorizeWorkspaceRole($request->user());
         abort_unless((int) $expenseRequest->project_id === (int) $project->id, 404);
         $this->authorize('view', $expenseRequest);
+        $showFinancialDetails = ! $request->user()->hasRole('site_operator');
         $expenseRequest->load(['project', 'phase', 'labourAgreement', 'requestedBy', 'cancelledBy', 'approvals.decidedBy', 'payments.recordedBy']);
+        $relations = ['phase', 'internalBudgetEntry', 'approvals.decidedBy'];
+        if ($showFinancialDetails) {
+            array_push($relations, 'supplierRequestGroup', 'supplierPayee', 'latestPmApproval.decidedBy', 'payments.recordedBy');
+        }
         $batchItems = ExpenseRequest::query()
             ->where('request_batch_code', $expenseRequest->request_batch_code ?: $expenseRequest->request_code)
-            ->with(['phase', 'internalBudgetEntry', 'supplierRequestGroup', 'supplierPayee', 'latestPmApproval.decidedBy', 'approvals.decidedBy', 'payments.recordedBy'])
+            ->with($relations)
             ->orderBy('request_line_number')->get();
-        $supplierGroups = $batchItems->filter(fn (ExpenseRequest $item) => $item->supplier_request_group_id || $item->supplier_payee_id)
-            ->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id ?: 'supplier-'.$item->supplier_payee_id);
+        $supplierGroups = $showFinancialDetails
+            ? $batchItems->filter(fn (ExpenseRequest $item) => $item->supplier_request_group_id || $item->supplier_payee_id)
+                ->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id ?: 'supplier-'.$item->supplier_payee_id)
+            : collect();
         $canEdit = $request->user()->can('update', $expenseRequest);
 
         return view('site.request-show', [
@@ -137,7 +145,7 @@ class SiteOperatorController extends Controller
             'batchItems' => $batchItems,
             'supplierGroups' => $supplierGroups,
             'canEdit' => $canEdit,
-            'showFinancialDetails' => ! $request->user()->hasRole('site_operator'),
+            'showFinancialDetails' => $showFinancialDetails,
             'categoryLabels' => SiteExpenseRequestService::CATEGORIES,
             'subcategoryLabels' => Lookup::where('type', 'subcategory')->pluck('label', 'code'),
             'unitLabels' => Lookup::where('type', 'unit')->pluck('label', 'code'),

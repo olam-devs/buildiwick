@@ -33,6 +33,7 @@ class ExpenseRequest extends Model
         'unit_cost', 'total_amount', 'requested_amount', 'commercial_unit_rate', 'commercial_total', 'commercial_payment_method',
         'commercial_payment_destination', 'commercial_payment_destination_id', 'commercial_notes', 'commercial_evidence_link', 'commercial_prepared_by',
         'commercial_prepared_at', 'approved_amount', 'requested_at', 'submitted_at', 'verified_by', 'verified_at',
+        'pm_edited', 'pm_edit_summary',
         'status', 'cancelled_at', 'cancelled_by', 'requested_by', 'evidence_link', 'evidence_original_name', 'notes',
     ];
 
@@ -42,7 +43,7 @@ class ExpenseRequest extends Model
             'quantity' => 'decimal:2', 'unit_cost' => 'decimal:2', 'total_amount' => 'decimal:2', 'requested_amount' => 'decimal:2',
             'commercial_unit_rate' => 'decimal:2', 'commercial_total' => 'decimal:2', 'approved_amount' => 'decimal:2',
             'requested_at' => 'date', 'submitted_at' => 'datetime', 'commercial_prepared_at' => 'datetime',
-            'cancelled_at' => 'datetime', 'verified_at' => 'datetime', 'is_new_item' => 'boolean',
+            'cancelled_at' => 'datetime', 'verified_at' => 'datetime', 'is_new_item' => 'boolean', 'pm_edited' => 'boolean',
             'request_line_number' => 'integer',
         ];
     }

@@ -51,7 +51,15 @@ class ProcurementWorkflowTest extends TestCase
         $supplier = SupplierPayee::create(['name' => 'Dar Builders Supply', 'type' => 'supplier', 'is_active' => true]);
         $service = app(SupplierRequestGroupService::class);
 
-        $service->move($item, ['item_ids' => [$item->id], 'direction' => 'to_supplier_assignment'], $pm);
+        $service->move($item, [
+            'item_ids' => [$item->id], 'direction' => 'to_supplier_assignment',
+            'items' => [$item->id => [
+                'item_description' => 'Cement 42.5R', 'quantity' => '12', 'unit' => 'bag',
+                'project_phase_id' => $phase->id, 'internal_budget_entry_id' => $entry->id,
+                'work_area' => 'Main House', 'construction_category' => 'Substructure',
+                'work_package_code' => 'A', 'work_package_name' => 'Concrete',
+            ]],
+        ], $pm);
         $group = $service->assign($item, ['item_ids' => [$item->id], 'supplier_payee_id' => $supplier->id], $pm);
         $service->price($group, [
             'items' => [$item->id => ['commercial_unit_rate' => '14500']],
@@ -62,8 +70,9 @@ class ProcurementWorkflowTest extends TestCase
         $this->assertDatabaseHas('supplier_request_groups', ['id' => $group->id, 'status' => 'approved']);
         $this->assertDatabaseHas('expense_requests', [
             'id' => $item->id, 'status' => 'approved', 'procurement_stage' => 'approved',
-            'commercial_total' => '145000.00',
+            'commercial_total' => '174000.00', 'pm_edited' => true,
         ]);
+        $this->assertStringContainsString('quantity', $item->fresh()->pm_edit_summary);
         $this->assertDatabaseHas('expense_request_approvals', [
             'expense_request_id' => $item->id, 'approval_stage' => 'project_manager', 'decision' => 'approved',
         ]);

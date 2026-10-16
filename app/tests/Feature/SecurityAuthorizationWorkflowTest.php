@@ -4,17 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\ClientInvoice;
-use App\Models\ClientPayment;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\Project;
 use App\Models\ProjectEstimate;
-use App\Models\ProjectPhase;
 use App\Models\Role;
 use App\Models\SupplierPayee;
-use App\Models\SupplierPaymentDestination;
 use App\Models\User;
+use Database\Seeders\LookupSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
@@ -28,7 +26,7 @@ class SecurityAuthorizationWorkflowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\LookupSeeder::class);
+        $this->seed(LookupSeeder::class);
         foreach (['admin', 'director', 'accounts', 'accountant', 'project_manager', 'estimator_qs', 'site_operator', 'unassigned_role'] as $name) {
             Role::firstOrCreate(['name' => $name], ['description' => $name]);
         }
@@ -201,10 +199,14 @@ class SecurityAuthorizationWorkflowTest extends TestCase
             'total_amount' => '123456.78', 'approved_amount' => '123456.78', 'requested_at' => today()->toDateString(),
             'submitted_at' => now(), 'status' => 'approved', 'requested_by' => $site->id,
         ]);
+        $supplier = SupplierPayee::create(['name' => 'Hidden Commercial Supplier', 'type' => 'supplier']);
+        $request->update(['supplier_payee_id' => $supplier->id, 'commercial_unit_rate' => '987654.32', 'commercial_total' => '987654.32']);
         ExpensePayment::create(['payment_code' => 'PAY-SEC-SITE-REDACT', 'expense_request_id' => $request->id, 'project_id' => $project->id, 'project_phase_id' => $phase->id, 'amount' => '123.45', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash']);
 
         $this->actingAs($site)->get(route('site.requests.show', [$project, $request]))
-            ->assertOk()->assertSee('Payment Status')->assertSee('Paid')
+            ->assertOk()->assertSee('PM Review Result')->assertSee('Approved')
+            ->assertDontSee('Payment Status')->assertDontSee('Payment Summary')
+            ->assertDontSee('Hidden Commercial Supplier')->assertDontSee('987,654.32')
             ->assertDontSee('123,456.78')->assertDontSee('123.45')->assertDontSee('Approved Amount')->assertDontSee('Payment Method');
         $this->actingAs($site)->get(route('site.projects.show', $project))
             ->assertOk()->assertDontSee('123,456.78')->assertDontSee('Total Requested (Historical Priced)');

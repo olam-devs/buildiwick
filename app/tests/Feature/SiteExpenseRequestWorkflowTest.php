@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
+use App\Models\InternalBudget;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\User;
@@ -148,6 +149,45 @@ class SiteExpenseRequestWorkflowTest extends TestCase
             ->assertOk()->assertSee('Items Needed')->assertSee('WORKER-DAY');
     }
 
+    public function test_request_form_suggests_only_approved_budget_entries_from_the_active_phase_for_each_request_type(): void
+    {
+        [$project, $operator, $phases] = $this->assignedProject();
+        $activeBudget = InternalBudget::create([
+            'budget_code' => 'BUD-SITE-ACTIVE', 'project_id' => $project->id,
+            'project_phase_id' => $phases[0]->id, 'main_category' => 'materials',
+            'version' => 1, 'status' => 'approved',
+        ]);
+        $activeBudget->entries()->create([
+            'project_phase_id' => $phases[0]->id, 'main_category' => 'materials',
+            'work_area' => 'Main House', 'construction_category' => 'Preliminaries',
+            'work_package_code' => 'A', 'work_package_name' => 'Site setup',
+            'item_description' => 'Active phase cement', 'quantity' => '10', 'unit' => 'bag', 'unit_cost' => '100',
+        ]);
+        $activeBudget->entries()->create([
+            'project_phase_id' => $phases[0]->id, 'main_category' => 'logistics_equipment',
+            'work_area' => 'Main House', 'construction_category' => 'Preliminaries',
+            'work_package_code' => 'L', 'work_package_name' => 'Plant hire',
+            'item_description' => 'Active phase compactor hire', 'quantity' => '1', 'unit' => 'day', 'unit_cost' => '500',
+        ]);
+        $futureBudget = InternalBudget::create([
+            'budget_code' => 'BUD-SITE-FUTURE', 'project_id' => $project->id,
+            'project_phase_id' => $phases[1]->id, 'main_category' => 'materials',
+            'version' => 1, 'status' => 'approved',
+        ]);
+        $futureBudget->entries()->create([
+            'project_phase_id' => $phases[1]->id, 'main_category' => 'materials',
+            'work_area' => 'Main House', 'construction_category' => 'Substructure',
+            'work_package_code' => 'B', 'work_package_name' => 'Concrete',
+            'item_description' => 'Future phase aggregate', 'quantity' => '10', 'unit' => 'tonne', 'unit_cost' => '100',
+        ]);
+
+        $this->actingAs($operator)->get(route('site.requests.create', $project))
+            ->assertOk()
+            ->assertSee('Active phase cement')
+            ->assertSee('Active phase compactor hire')
+            ->assertDontSee('Future phase aggregate');
+    }
+
     public function test_request_submission_does_not_change_approval_to_paid_and_only_expense_payment_rows_are_paid(): void
     {
         [$project, $operator] = $this->assignedProject();
@@ -267,10 +307,11 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         $this->actingAs($operator)->get(route('site.requests.show', [$project, $request]))
             ->assertOk()
             ->assertSee($request->request_code)
-            ->assertSee('Approval History')
-            ->assertSee('Payment Summary')
+            ->assertSee('PM Review Result')
+            ->assertDontSee('Approval History')
             ->assertSee('Pending Approval')
-            ->assertSee('Unpaid')
+            ->assertDontSee('Payment Summary')
+            ->assertDontSee('Unpaid')
             ->assertSee('Edit Pending Request')
             ->assertSee('Cancel Request');
     }
@@ -314,7 +355,8 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         $this->assertSame('25.00', $summary['paid']);
         $this->assertSame('55.00', $summary['approved_outstanding']);
         $this->assertSame('20.00', $summary['categories']['materials']['requested']);
-        $this->assertSame('80.00', $summary['categories']['labour_subcontracts']['approved']);
+        $this->assertSame(1, $summary['categories']['labour_subcontracts']['approved']);
+        $this->assertSame('80.00', $summary['categories']['labour_subcontracts']['approved_amount']);
         $this->assertSame('25.00', $summary['categories']['labour_subcontracts']['paid']);
     }
 
