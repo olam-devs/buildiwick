@@ -108,8 +108,10 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'project_id' => $project->id, 'document_type' => 'internal_budget', 'action' => 'edit_started',
             'reason' => 'Supplier rates changed after tender clarification.', 'edited_by' => $pm->id,
         ]);
-        $this->actingAs($pm)->get(route('pm.projects.show', $project).'?budget='.$revised->id.'#budgets')->assertOk()
-            ->assertSee('Edit Internal Budget')->assertSee('Supplier rates changed after tender clarification.');
+        $this->actingAs($pm)->get(route('pm.budgets.show', [$project, $revised]))->assertOk()
+            ->assertSee('Edit Internal Budget')->assertSee('Preliminaries · Materials Budget');
+        $this->actingAs($pm)->get(route('pm.projects.show', $project))->assertOk()
+            ->assertSee('Supplier rates changed after tender clarification.');
         $this->actingAs($director)->get(route('director.projects.show', $project))->assertOk()
             ->assertSee('Project Estimate and Internal Budget Edit Log')->assertSee('Supplier rates changed after tender clarification.');
     }
@@ -203,7 +205,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             ]), $pm);
         }
 
-        $response = $this->actingAs($pm)->get(route('pm.projects.show', $project).'?budget='.$materials->id.'#budgets');
+        $response = $this->actingAs($pm)->get(route('pm.budgets.show', [$project, $materials]));
         $response->assertOk()->assertSee('3.1 Subtotal')->assertSee('3.2 Subtotal');
         $this->assertSame(1, substr_count($response->getContent(), 'Foundation strip footing'));
         $this->assertSame(1, substr_count($response->getContent(), 'Foundation walling'));
@@ -639,17 +641,20 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'project_id' => $project->id, 'project_phase_id' => $future->id,
             'amount' => '120.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
         ]);
-        $response = $this->actingAs($pm)->get(route('pm.projects.show', $project).'?budget='.$budget->id.'#budgets');
-        $response->assertOk()->assertSee('Project Command Centre')->assertSee('Cost Analytics')
+        $workspace = $this->actingAs($pm)->get(route('pm.projects.show', $project));
+        $workspace->assertOk()->assertSee('Project Command Centre')->assertSee('Cost Analytics')
             ->assertSee('Internal Budget vs Commitments vs Actual')->assertSee('What Needs Your Attention')
             ->assertSee('Outstanding Payables')
             ->assertSee('Phase 5 · Roofing')->assertSee('Over internal budget by')
-            ->assertSee('Project Requests')->assertSee($request->request_code)->assertSee('Submit for Director Verification')
+            ->assertSee('Project Requests')->assertSee($request->request_code)
             ->assertDontSee('Estimator Base')->assertDontSee('Estimator Client Value')->assertDontSee('Effective Markup')
             ->assertDontSee('Client Invoiced')->assertDontSee('Client Received')
             ->assertDontSee('Outstanding Receivables')->assertDontSee('Recorded Cash Position')
             ->assertDontSee('987,654.00')
             ->assertDontSee('Approve Request')->assertDontSee('Reject Request')->assertDontSee('Record Payment');
+        $this->actingAs($pm)->get(route('pm.budgets.show', [$project, $budget]))
+            ->assertOk()->assertSee('Roofing · Materials Budget')->assertSee('Submit for Director Verification')
+            ->assertDontSee('Project Command Centre')->assertDontSee('What Needs Your Attention');
     }
 
     public function test_site_item_list_is_grouped_by_supplier_allocated_to_budget_and_pm_approved_directly_for_accounts(): void

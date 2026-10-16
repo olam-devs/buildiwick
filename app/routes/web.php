@@ -119,6 +119,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/accountant/projects/{project}/statement', [AccountantController::class, 'statement'])->name('accountant.projects.statement');
     Route::get('/pm/projects/{project}', [ProjectManagerController::class, 'show'])->name('pm.projects.show');
     Route::post('/pm/projects/{project}/budgets', [ProjectManagerController::class, 'startBudget'])->name('pm.budgets.start');
+    Route::get('/pm/projects/{project}/budgets/{budget}', [ProjectManagerController::class, 'showBudget'])->whereNumber('budget')->name('pm.budgets.show');
     Route::post('/pm/projects/{project}/budgets/{budget}/edit', [ProjectManagerController::class, 'startBudgetEdit'])->name('pm.budgets.edit');
     Route::post('/pm/projects/{project}/budgets/{budget}/finalize', [ProjectManagerController::class, 'finalize'])->name('pm.budgets.finalize');
     Route::get('/pm/projects/{project}/budgets/{budget}.xlsx', [ProjectManagerController::class, 'exportBudget'])->name('pm.budgets.export');

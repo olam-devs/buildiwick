@@ -81,8 +81,8 @@ class OysterbayBoundaryWallDemoSeederTest extends TestCase
         $this->assertCount(6, $materialBudget->entries);
         $this->assertSame('8043500.00', $materialBudget->total_amount);
         $pm = User::where('email', 'neema@buildiwick.test')->firstOrFail();
-        $this->actingAs($pm)->get(route('pm.projects.show', [$project, 'budget' => $materialBudget->id]))
-            ->assertOk()->assertSee('Internal Budget Summary by Phase')->assertSee('Ground Floor')
+        $this->actingAs($pm)->get(route('pm.budgets.show', [$project, $materialBudget]))
+            ->assertOk()->assertSee('Plastering · Materials Budget')->assertSee('Ground Floor')
             ->assertSee('A Subtotal')->assertSee('B Subtotal')->assertSee('C Subtotal')->assertSee('8,043,500.00');
 
         $director = User::where('email', 'director@buildiwick.test')->firstOrFail();

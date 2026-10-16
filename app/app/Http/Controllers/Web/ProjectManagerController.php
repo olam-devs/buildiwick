@@ -360,11 +360,6 @@ class ProjectManagerController extends Controller
         $history = $allBudgets->whereNotIn('id', $budgetDocuments->pluck('id'))
             ->map(fn (InternalBudget $budget) => (object) ['budget' => $budget, 'total' => $budget->total_amount]);
         $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'internal_budget')->with('editor')->latest()->get();
-        $selectedBudget = null;
-        if ($request->filled('budget')) {
-            $selectedBudget = $budgetDocuments->firstWhere('id', $request->integer('budget'));
-            abort_unless($selectedBudget, 404);
-        }
 
         return view('pm.show', [
             'project' => $project,
@@ -376,12 +371,25 @@ class ProjectManagerController extends Controller
             'outstandingPayables' => $outstandingPayables,
             'requestInsights' => $requestInsights,
             'budgetDocuments' => $budgetDocuments,
-            'selectedBudget' => $selectedBudget,
             'history' => $history,
             'editLogs' => $editLogs,
             'labels' => ProjectManagerBudgetService::CATEGORIES,
             'categoryLabels' => ProjectManagerBudgetService::CATEGORIES,
             'subcategoryLabels' => Lookup::where('type', 'subcategory')->pluck('label', 'code'),
+            'unitLabels' => Lookup::where('type', 'unit')->pluck('label', 'code'),
+        ]);
+    }
+
+    public function showBudget(Project $project, InternalBudget $budget)
+    {
+        abort_unless((int) $budget->project_id === (int) $project->id, 404);
+        $this->authorize('view', $budget);
+        $budget->load(['phase', 'entries.enteredBy']);
+
+        return view('pm.budget', [
+            'project' => $project,
+            'budget' => $budget,
+            'categoryLabel' => ProjectManagerBudgetService::CATEGORIES[$budget->main_category] ?? $budget->main_category,
             'unitLabels' => Lookup::where('type', 'unit')->pluck('label', 'code'),
         ]);
     }
@@ -395,7 +403,7 @@ class ProjectManagerController extends Controller
             : ($project->phases()->where('status', 'active')->orderBy('phase_order')->first() ?? $project->phases()->orderBy('phase_order')->firstOrFail());
         $budget = $budgets->ensureWorkingBudget($project, $request->user(), $phase, $validated['main_category'] ?? 'materials');
 
-        return redirect()->route('pm.projects.show', $project)->with('success', 'Working internal budget '.$budget->budget_code.' is ready.');
+        return redirect()->route('pm.budgets.show', [$project, $budget])->with('success', 'Working internal budget '.$budget->budget_code.' is ready.');
     }
 
     public function startBudgetEdit(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)
@@ -404,7 +412,7 @@ class ProjectManagerController extends Controller
         $validated = $request->validate(['edit_reason' => ['required', 'string', 'max:2000']]);
         $draft = $budgets->startEditing($budget, $validated['edit_reason'], $request->user());
 
-        return redirect()->route('pm.projects.show', $project)->with('success', 'Internal budget is open for editing as '.$draft->budget_code.'. The approved version remains in the audit history.');
+        return redirect()->route('pm.budgets.show', [$project, $draft])->with('success', 'Internal budget is open for editing as '.$draft->budget_code.'. The approved version remains in the audit history.');
     }
 
     public function createEntry(Request $request, Project $project, ProjectPhase $phase, ProjectManagerBudgetService $budgets)
@@ -426,7 +434,7 @@ class ProjectManagerController extends Controller
         $budget = $budgets->ensureWorkingBudget($project, $request->user(), $phase, $category);
         $budgets->createEntry($budget, $phase, $request->validated(), $request->user());
 
-        return redirect()->route('pm.projects.show', $project)->with('success', 'Internal budget entry added.');
+        return redirect()->route('pm.budgets.show', [$project, $budget])->with('success', 'Internal budget entry added.');
     }
 
     public function editEntry(Request $request, Project $project, ProjectPhase $phase, InternalBudgetEntry $entry)
@@ -442,7 +450,7 @@ class ProjectManagerController extends Controller
         abort_unless((int) $phase->project_id === (int) $project->id && (int) $entry->project_phase_id === (int) $phase->id, 404);
         $budgets->updateEntry($entry, $request->validated(), $request->user());
 
-        return redirect()->route('pm.projects.show', $project)->with('success', 'Internal budget entry updated.');
+        return redirect()->route('pm.budgets.show', [$project, $entry->budget])->with('success', 'Internal budget entry updated.');
     }
 
     public function deleteEntry(Request $request, Project $project, ProjectPhase $phase, InternalBudgetEntry $entry, ProjectManagerBudgetService $budgets)
@@ -450,9 +458,10 @@ class ProjectManagerController extends Controller
         abort_unless((int) $phase->project_id === (int) $project->id && (int) $entry->project_phase_id === (int) $phase->id, 404);
         $this->authorize('delete', $entry);
         $validated = $request->validate(['edit_reason' => [$entry->budget->version > 1 ? 'required' : 'nullable', 'string', 'max:2000']]);
+        $budget = $entry->budget;
         $budgets->deleteEntry($entry, $validated['edit_reason'] ?? null, $request->user());
 
-        return redirect()->route('pm.projects.show', $project)->with('success', 'Draft budget entry deleted.');
+        return redirect()->route('pm.budgets.show', [$project, $budget])->with('success', 'Draft budget entry deleted.');
     }
 
     public function finalize(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)
@@ -460,7 +469,7 @@ class ProjectManagerController extends Controller
         abort_unless((int) $budget->project_id === (int) $project->id, 404);
         $budgets->finalize($budget, $request->user());
 
-        return redirect()->route('pm.projects.show', $project)->with('success', 'Internal budget submitted for Director verification. It is locked until approved or returned.');
+        return redirect()->route('pm.budgets.show', [$project, $budget])->with('success', 'Internal budget submitted for Director verification. It is locked until approved or returned.');
     }
 
     public function exportBudget(Request $request, Project $project, InternalBudget $budget, ExcelExportService $excel)
