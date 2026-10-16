@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\ExpenseRequest;
-use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
 use App\Models\ProjectPhase;
 use App\Models\User;
@@ -38,10 +37,10 @@ class ExpenseRequestClassificationService
             ];
 
             if (! empty($data['internal_budget_entry_id'])) {
-                $currentBudget = InternalBudget::query()->where('project_id', $request->project_id)
-                    ->where('status', 'approved')
-                    ->orderByDesc('version')->first();
-                $entry = $currentBudget?->entries()->whereKey($data['internal_budget_entry_id'])->first();
+                $entry = InternalBudgetEntry::query()->whereKey($data['internal_budget_entry_id'])
+                    ->whereHas('budget', fn ($query) => $query->where('project_id', $request->project_id)
+                        ->where('status', 'approved'))
+                    ->first();
                 if (! $entry instanceof InternalBudgetEntry) {
                     throw ValidationException::withMessages(['internal_budget_entry_id' => 'Select a line from the project’s Director-approved internal budget.']);
                 }

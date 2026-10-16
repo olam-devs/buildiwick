@@ -10,7 +10,6 @@ use App\Models\Project;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\ValidationException;
 
 /** Read-only organization and project projections over the existing workflow records. */
 class DirectorAnalyticsService
@@ -45,10 +44,11 @@ class DirectorAnalyticsService
             ->where('status', 'issued')
             ->filter(fn ($item) => CarbonImmutable::parse($item->issued_at ?? $item->created_at)->lte($cutoff))
             ->sortByDesc('version')->first();
-        $budgetRecord = $loaded->internalBudgets
+        $budgetRecords = $loaded->internalBudgets
             ->whereIn('status', ['finalized', 'approved'])
             ->filter(fn ($item) => CarbonImmutable::parse($item->finalized_at ?? $item->approved_at ?? $item->created_at)->lte($cutoff))
-            ->sortByDesc('version')->first();
+            ->groupBy(fn ($item) => $item->project_phase_id.'|'.$item->main_category)
+            ->map(fn ($versions) => $versions->sortByDesc('version')->first());
         $approvedRequests = $loaded->expenseRequests->where('status', 'approved')->filter(function (ExpenseRequest $request) use ($cutoff) {
             $approvedAt = $request->latestPmApproval?->decided_at ?? $request->submitted_at ?? $request->requested_at ?? $request->created_at;
 
@@ -63,7 +63,7 @@ class DirectorAnalyticsService
         $received = Money::sum($clientPayments->pluck('amount'));
         $expenses = Money::sum($expensePayments->pluck('amount'));
         $commitments = Money::sum($approvedRequests->map(fn (ExpenseRequest $request) => $request->approved_payable_amount));
-        $budget = $budgetRecord?->total_amount ?? '0.00';
+        $budget = Money::sum($budgetRecords->map(fn ($record) => $record->total_amount));
         $phaseStates = $loaded->phases->sortBy('phase_order')->map(function ($phase) use ($cutoff) {
             $started = $phase->actual_start_date ?? $phase->started_at;
             $completed = $phase->actual_completion_date ?? $phase->completed_at;
@@ -193,14 +193,15 @@ class DirectorAnalyticsService
         $estimateEntries = $estimate?->entries ?? collect();
         $estimateValue = $estimate?->total_amount ?? '0.00';
 
-        $draftBudgets = $project->internalBudgets->where('status', 'draft')->sortByDesc('version');
-        if ($draftBudgets->count() > 1) {
-            throw ValidationException::withMessages(['budget' => 'This project has multiple working budgets; administrator review is required.']);
-        }
-        $budgetRecord = $draftBudgets->first() ?? $project->internalBudgets
-            ->whereIn('status', ['finalized', 'approved'])->sortByDesc('version')->first();
-        $budgetEntries = $budgetRecord?->entries ?? collect();
-        $budget = $budgetRecord?->total_amount ?? '0.00';
+        $budgetRecords = $project->internalBudgets
+            ->whereIn('status', ['draft', 'finalized', 'approved'])
+            ->groupBy(fn ($item) => $item->project_phase_id.'|'.$item->main_category)
+            ->map(fn ($versions) => $versions->sortBy(fn ($item) => [
+                ['draft' => 0, 'finalized' => 1, 'approved' => 2][$item->status] ?? 3,
+                -$item->version,
+            ])->first());
+        $budgetEntries = $budgetRecords->flatMap->entries;
+        $budget = Money::sum($budgetEntries->map(fn ($entry) => $entry->line_total));
 
         $approvedRequests = $project->expenseRequests->where('status', 'approved');
         $approvedCommitments = Money::sum($approvedRequests->map(fn (ExpenseRequest $request) => $request->approved_payable_amount));

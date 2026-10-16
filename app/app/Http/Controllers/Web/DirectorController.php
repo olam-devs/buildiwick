@@ -107,11 +107,14 @@ class DirectorController extends Controller
         $pendingBudgets = $project->internalBudgets()->where('status', 'finalized')->with(['entries', 'createdBy', 'finalizedBy'])->orderByDesc('version')->get();
         $projectEstimate = $project->estimates()->whereIn('status', ['issued', 'superseded'])->with(['entries.phase', 'preparedBy', 'issuedBy'])->orderByDesc('version')->first()
             ?? $project->estimates()->with(['entries.phase', 'preparedBy', 'issuedBy'])->orderByDesc('version')->first();
-        $projectBudget = $project->internalBudgets()->where('status', 'approved')->with(['entries.phase', 'createdBy', 'approvedBy'])->orderByDesc('version')->first()
-            ?? $project->internalBudgets()->with(['entries.phase', 'createdBy', 'approvedBy'])->orderByDesc('version')->first();
+        $projectBudgets = $project->internalBudgets()->whereIn('status', ['approved', 'finalized', 'draft'])
+            ->with(['phase', 'entries.phase', 'createdBy', 'approvedBy'])->orderByDesc('version')->get()
+            ->groupBy(fn (InternalBudget $budget) => $budget->project_phase_id.'|'.$budget->main_category)
+            ->map(fn ($versions) => $versions->sortBy(fn ($budget) => ['approved' => 0, 'finalized' => 1, 'draft' => 2][$budget->status] ?? 3)->first())
+            ->sortBy(fn ($budget) => [$budget->phase?->phase_order, array_search($budget->main_category, array_keys(ProjectManagerBudgetService::CATEGORIES), true)]);
         $editLogs = ProjectEditLog::where('project_id', $project->id)->with('editor')->latest()->get();
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'projectBudget', 'editLogs'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'projectBudgets', 'editLogs'));
     }
 
     public function decideBudget(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)

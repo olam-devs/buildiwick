@@ -161,18 +161,6 @@ class OysterbayBoundaryWallDemoSeeder extends Seeder
                 ]);
             }
 
-            $budget = InternalBudget::create([
-                'budget_code' => 'IB-OYS-BW-2026-DEMO-V1',
-                'project_id' => $project->id,
-                'version' => 1,
-                'status' => 'approved',
-                'created_by' => $pm->id,
-                'finalized_by' => $pm->id,
-                'finalized_at' => now()->subWeeks(5),
-                'approved_by' => $director->id,
-                'approved_at' => now()->subWeeks(5)->addDay(),
-                'notes' => 'Training internal budget structured like the supplied schedule of materials. Rates use the supplied material schedule where applicable; quantities are adapted for this boundary-wall demo.',
-            ]);
             $budgetLines = [
                 ['timber', 'preliminaries', 'Boundary Wall', 'Site Preparation, Setting Out & Excavation Support', 'Site establishment', 'A', 'Setting out tools', 'materials', 'timber_formwork', 'Mbao 2x4 for profiles and setting out', 40, 'pc', 6000],
                 ['tools', 'preliminaries', 'Boundary Wall', 'Site Preparation, Setting Out & Excavation Support', 'Site establishment', 'A', 'Setting out tools', 'logistics_equipment', 'tools_small_equipment', 'Hand tools, line level, rope, buckets and markers', 1, 'ls', 310000],
@@ -207,7 +195,23 @@ class OysterbayBoundaryWallDemoSeeder extends Seeder
                 ['scaffold_plaster', 'plastering', 'Boundary Wall', 'Plastering', 'Both Faces & Wall Cap', 'C', 'Access equipment', 'logistics_equipment', 'equipment_hire', 'Mobile scaffolding and protection', 1, 'ls', 450000],
             ];
             $budgetEntries = collect();
+            $budgetDocuments = collect();
             foreach ($budgetLines as [$key, $phaseCode, $area, $section, $construction, $packageCode, $packageName, $category, $subcategory, $description, $quantity, $unit, $cost]) {
+                $documentKey = $phaseCode.'|'.$category;
+                $budget = $budgetDocuments->get($documentKey);
+                if (! $budget) {
+                    $categoryCode = match ($category) {
+                        'labour_subcontracts' => 'LAB', 'logistics_equipment' => 'LOG', 'preliminaries_overheads' => 'PRE', default => 'MAT'
+                    };
+                    $budget = InternalBudget::create([
+                        'budget_code' => 'OYS-BW-'.strtoupper($phaseCode).'-'.$categoryCode.'-BUD-001', 'project_id' => $project->id,
+                        'project_phase_id' => $phases[$phaseCode]->id, 'main_category' => $category, 'version' => 1, 'status' => 'approved',
+                        'created_by' => $pm->id, 'finalized_by' => $pm->id, 'finalized_at' => now()->subWeeks(5),
+                        'approved_by' => $director->id, 'approved_at' => now()->subWeeks(5)->addDay(),
+                        'notes' => 'Independent phase and cost-type budget informed by the supplied schedule of materials.',
+                    ]);
+                    $budgetDocuments->put($documentKey, $budget);
+                }
                 $budgetEntries[$key] = $budget->entries()->create([
                     'project_phase_id' => $phases[$phaseCode]->id,
                     'work_area' => $area,

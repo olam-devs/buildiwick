@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\ExpenseRequest;
-use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
 use App\Models\SupplierPayee;
 use App\Models\SupplierPaymentDestination;
@@ -35,10 +34,6 @@ class ExpenseRequestBatchCommercialService
                     throw ValidationException::withMessages(['items' => 'One or more submitted items do not belong to this Site request.']);
                 }
 
-                $currentBudget = InternalBudget::query()->where('project_id', $anchor->project_id)
-                    ->where('status', 'approved')
-                    ->orderByDesc('version')->first();
-
                 foreach ($items as $id => $data) {
                     $request = $requests->get((int) $id);
                     Gate::forUser($actor)->authorize('prepareCommercial', $request);
@@ -48,7 +43,10 @@ class ExpenseRequestBatchCommercialService
 
                     $entry = null;
                     if (! empty($data['internal_budget_entry_id'])) {
-                        $entry = $currentBudget?->entries()->whereKey($data['internal_budget_entry_id'])->first();
+                        $entry = InternalBudgetEntry::query()->whereKey($data['internal_budget_entry_id'])
+                            ->whereHas('budget', fn ($query) => $query->where('project_id', $anchor->project_id)
+                                ->where('status', 'approved'))
+                            ->first();
                         if (! $entry instanceof InternalBudgetEntry) {
                             throw ValidationException::withMessages(["items.$id.internal_budget_entry_id" => 'Select a line from this project’s Director-approved internal budget.']);
                         }

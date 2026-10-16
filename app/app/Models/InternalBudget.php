@@ -13,7 +13,7 @@ class InternalBudget extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['budget_code', 'project_id', 'version', 'status', 'created_by', 'approved_by', 'approved_at', 'finalized_by', 'finalized_at', 'notes'];
+    protected $fillable = ['budget_code', 'project_id', 'project_phase_id', 'main_category', 'version', 'status', 'created_by', 'approved_by', 'approved_at', 'finalized_by', 'finalized_at', 'notes'];
 
     protected function casts(): array
     {
@@ -23,6 +23,11 @@ class InternalBudget extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function phase(): BelongsTo
+    {
+        return $this->belongsTo(ProjectPhase::class, 'project_phase_id');
     }
 
     public function createdBy(): BelongsTo

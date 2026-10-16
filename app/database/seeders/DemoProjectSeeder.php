@@ -141,20 +141,6 @@ class DemoProjectSeeder extends Seeder
                 );
             }
 
-            $budget = InternalBudget::updateOrCreate(
-                ['budget_code' => 'IB-DEMO-2026-001-V1'],
-                [
-                    'project_id' => $project->id,
-                    'version' => 1,
-                    'status' => 'approved',
-                    'created_by' => $pm->id,
-                    'finalized_by' => $pm->id,
-                    'finalized_at' => now()->subWeeks(5),
-                    'approved_by' => $director->id,
-                    'approved_at' => now()->subWeeks(5)->addDay(),
-                    'notes' => 'PM operational baseline verified by the Director for the demo project.',
-                ]
-            );
             $budgetDefinitions = [
                 'mobilisation' => ['preliminaries', 'preliminaries_overheads', 'site_office_accommodation', 'Site mobilisation and temporary facilities', 1, 'ls', 4500000],
                 'cement' => ['substructure', 'materials', 'concrete_cement', 'Cement 42.5R — foundation allocation', 650, 'bag', 18000],
@@ -171,9 +157,25 @@ class DemoProjectSeeder extends Seeder
                 'external' => ['external_works', 'labour_subcontracts', 'subcontractor', 'External works package', 1, 'ls', 20000000],
             ];
             $budgetEntries = collect();
+            $budgetDocuments = collect();
             $budgetLine = 0;
             foreach ($budgetDefinitions as $key => [$phase, $category, $subcategory, $description, $quantity, $unit, $cost]) {
                 $budgetLine++;
+                $documentKey = $phase.'|'.$category;
+                $budget = $budgetDocuments->get($documentKey);
+                if (! $budget) {
+                    $categoryCode = match ($category) {
+                        'labour_subcontracts' => 'LAB', 'logistics_equipment' => 'LOG', 'preliminaries_overheads' => 'PRE', default => 'MAT'
+                    };
+                    $budget = InternalBudget::updateOrCreate(
+                        ['budget_code' => 'DEMO-'.strtoupper($phase).'-'.$categoryCode.'-BUD-001'],
+                        ['project_id' => $project->id, 'project_phase_id' => $phases[$phase]->id, 'main_category' => $category,
+                            'version' => 1, 'status' => 'approved', 'created_by' => $pm->id, 'finalized_by' => $pm->id,
+                            'finalized_at' => now()->subWeeks(5), 'approved_by' => $director->id, 'approved_at' => now()->subWeeks(5)->addDay(),
+                            'notes' => 'Independent phase and cost-type internal budget verified by the Director.']
+                    );
+                    $budgetDocuments->put($documentKey, $budget);
+                }
                 $budgetEntries[$key] = $budget->entries()->updateOrCreate(
                     ['project_phase_id' => $phases[$phase]->id, 'item_description' => $description],
                     [

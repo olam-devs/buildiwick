@@ -28,31 +28,39 @@ class ProjectManagerBudgetService
 
     public function __construct(private readonly DatabaseManager $database) {}
 
-    public function ensureWorkingBudget(Project $project, User $actor): InternalBudget
+    public function ensureWorkingBudget(Project $project, User $actor, ?ProjectPhase $phase = null, ?string $category = null): InternalBudget
     {
         Gate::forUser($actor)->authorize('create', [InternalBudget::class, $project]);
+        $phase ??= $project->phases()->where('status', 'active')->orderBy('phase_order')->first() ?? $project->phases()->orderBy('phase_order')->firstOrFail();
+        $category ??= 'materials';
+        if ((int) $phase->project_id !== (int) $project->id || ! array_key_exists($category, self::CATEGORIES)) {
+            throw ValidationException::withMessages(['budget' => 'Select a valid project phase and budget type.']);
+        }
 
-        return $this->database->transaction(function () use ($project, $actor): InternalBudget {
+        return $this->database->transaction(function () use ($project, $actor, $phase, $category): InternalBudget {
             $lockedProject = Project::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('create', [InternalBudget::class, $lockedProject]);
-            $drafts = $lockedProject->internalBudgets()->where('status', 'draft')->lockForUpdate()->get();
+            $scope = fn ($query) => $query->where('project_phase_id', $phase->id)->where('main_category', $category);
+            $drafts = $scope($lockedProject->internalBudgets())->where('status', 'draft')->lockForUpdate()->get();
             if ($drafts->count() > 1) {
                 throw ValidationException::withMessages(['budget' => 'This project has multiple working budgets; administrator review is required.']);
             }
             if ($drafts->isNotEmpty()) {
                 return $drafts->first();
             }
-            if ($lockedProject->internalBudgets()->where('status', 'finalized')->exists()) {
-                throw ValidationException::withMessages(['budget' => 'The current internal budget is awaiting Director verification. It must be approved or returned before another version can be created.']);
+            if ($scope($lockedProject->internalBudgets())->where('status', 'finalized')->exists()) {
+                throw ValidationException::withMessages(['budget' => 'This phase budget is awaiting Director verification. It must be approved or returned before another version can be created.']);
             }
-            if ($lockedProject->internalBudgets()->exists()) {
-                throw ValidationException::withMessages(['budget' => 'Use Edit Internal Budget and provide a justification to change the approved budget.']);
+            if ($scope($lockedProject->internalBudgets())->exists()) {
+                throw ValidationException::withMessages(['budget' => 'Use Edit on this phase budget and provide a justification to change the approved document.']);
             }
 
-            $version = ((int) $lockedProject->internalBudgets()->max('version')) + 1;
+            $version = ((int) $scope($lockedProject->internalBudgets())->max('version')) + 1;
 
             return $lockedProject->internalBudgets()->create([
-                'budget_code' => $lockedProject->project_code.'-BUD-'.str_pad((string) $version, 3, '0', STR_PAD_LEFT),
+                'budget_code' => $this->budgetCode($lockedProject, $phase, $category, $version),
+                'project_phase_id' => $phase->id,
+                'main_category' => $category,
                 'version' => $version,
                 'status' => 'draft',
                 'created_by' => $actor->id,
@@ -69,13 +77,16 @@ class ProjectManagerBudgetService
             $locked = InternalBudget::query()->whereKey($source->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('revise', $locked);
             $this->requireReason($reason);
-            if ($project->internalBudgets()->whereIn('status', ['draft', 'finalized'])->exists()) {
+            $scope = $project->internalBudgets()->where('project_phase_id', $locked->project_phase_id)->where('main_category', $locked->main_category);
+            if ((clone $scope)->whereIn('status', ['draft', 'finalized'])->exists()) {
                 throw ValidationException::withMessages(['budget' => 'Finish the existing working or Director-review budget before editing the approved budget.']);
             }
 
-            $version = ((int) $project->internalBudgets()->max('version')) + 1;
+            $version = ((int) (clone $scope)->max('version')) + 1;
             $draft = $project->internalBudgets()->create([
-                'budget_code' => $project->project_code.'-BUD-'.str_pad((string) $version, 3, '0', STR_PAD_LEFT),
+                'budget_code' => $this->budgetCode($project, $locked->phase, $locked->main_category, $version),
+                'project_phase_id' => $locked->project_phase_id,
+                'main_category' => $locked->main_category,
                 'version' => $version,
                 'status' => 'draft',
                 'created_by' => $actor->id,
@@ -164,8 +175,8 @@ class ProjectManagerBudgetService
             $project = Project::query()->whereKey($budget->project_id)->lockForUpdate()->firstOrFail();
             $locked = InternalBudget::query()->whereKey($budget->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('finalize', $locked);
-            if ($project->internalBudgets()->where('status', 'draft')->count() !== 1 || $locked->entries()->doesntExist()) {
-                throw ValidationException::withMessages(['budget' => 'Exactly one working budget with at least one entry is required before finalization.']);
+            if ($locked->status !== 'draft' || $locked->entries()->doesntExist()) {
+                throw ValidationException::withMessages(['budget' => 'This phase budget must be a working document with at least one entry before finalization.']);
             }
             $locked->update(['status' => 'finalized', 'finalized_by' => $actor->id, 'finalized_at' => now()]);
 
@@ -182,7 +193,8 @@ class ProjectManagerBudgetService
             if ($locked->status !== 'finalized') {
                 throw ValidationException::withMessages(['budget' => 'Only a budget awaiting Director verification can be approved.']);
             }
-            $project->internalBudgets()->where('status', 'approved')->where('id', '!=', $locked->id)
+            $project->internalBudgets()->where('project_phase_id', $locked->project_phase_id)->where('main_category', $locked->main_category)
+                ->where('status', 'approved')->where('id', '!=', $locked->id)
                 ->update(['status' => 'superseded']);
             $locked->update([
                 'status' => 'approved',
@@ -227,21 +239,13 @@ class ProjectManagerBudgetService
 
     public function projectBudget(Project $project): string
     {
-        $budget = $this->approvedBudget($project);
-
-        return $budget ? Money::sum($budget->entries->map(fn (InternalBudgetEntry $entry) => $entry->line_total)) : '0.00';
+        return Money::sum($this->approvedBudgets($project)->flatMap->entries->map(fn (InternalBudgetEntry $entry) => $entry->line_total));
     }
 
     public function budgetFor(Project $project, int $phaseId, string $category): string
     {
-        $budget = $this->approvedBudget($project);
-        if (! $budget) {
-            return '0.00';
-        }
-
-        return Money::sum($budget->entries
-            ->where('project_phase_id', $phaseId)
-            ->where('main_category', $category)
+        return Money::sum($this->approvedBudgets($project)
+            ->where('project_phase_id', $phaseId)->where('main_category', $category)->flatMap->entries
             ->map(fn (InternalBudgetEntry $entry) => $entry->line_total));
     }
 
@@ -275,8 +279,7 @@ class ProjectManagerBudgetService
 
     public function projectComparison(Project $project): array
     {
-        $currentBudget = $this->currentBudget($project);
-        $budgetEntries = $currentBudget?->entries ?? collect();
+        $budgetEntries = $this->currentBudgets($project)->flatMap->entries;
         $requests = $project->expenseRequests()->where('status', 'approved')->get();
         $payments = $project->expensePayments()->with('expenseRequest')->get();
         $budget = Money::sum($budgetEntries->map(fn (InternalBudgetEntry $entry) => $entry->line_total));
@@ -368,9 +371,6 @@ class ProjectManagerBudgetService
     public function currentBudget(Project $project): ?InternalBudget
     {
         $drafts = $project->internalBudgets()->where('status', 'draft')->with('entries')->orderByDesc('version')->get();
-        if ($drafts->count() > 1) {
-            throw ValidationException::withMessages(['budget' => 'This project has multiple working budgets; administrator review is required.']);
-        }
         if ($drafts->isNotEmpty()) {
             return $drafts->first();
         }
@@ -381,6 +381,23 @@ class ProjectManagerBudgetService
     public function approvedBudget(Project $project): ?InternalBudget
     {
         return $project->internalBudgets()->where('status', 'approved')->with('entries')->orderByDesc('version')->first();
+    }
+
+    public function approvedBudgets(Project $project)
+    {
+        return $project->internalBudgets()->where('status', 'approved')->with(['entries', 'phase'])->orderBy('project_phase_id')->get();
+    }
+
+    public function currentBudgets(Project $project)
+    {
+        return $project->internalBudgets()->whereIn('status', ['draft', 'finalized', 'approved'])
+            ->with(['entries', 'phase'])->get()
+            ->groupBy(fn (InternalBudget $budget) => $budget->project_phase_id.'|'.$budget->main_category)
+            ->map(fn ($versions) => $versions->sortBy(fn (InternalBudget $budget) => [
+                ['draft' => 0, 'finalized' => 1, 'approved' => 2][$budget->status] ?? 3,
+                -$budget->version,
+            ])->first())
+            ->values();
     }
 
     public function entryData(array $data): array
@@ -408,10 +425,25 @@ class ProjectManagerBudgetService
         if (! $phase->exists || (int) $phase->project_id !== (int) $budget->project_id) {
             throw ValidationException::withMessages(['project_phase_id' => 'Select a phase belonging to this project.']);
         }
+        if ((int) $budget->project_phase_id !== (int) $phase->id || $budget->main_category !== $data['main_category']) {
+            throw ValidationException::withMessages(['main_category' => 'Each document belongs to one phase and one budget type. Add this item to the matching phase budget.']);
+        }
         if (! empty($data['subcategory']) && ! Lookup::where('type', 'subcategory')->where('code', $data['subcategory'])
             ->where('parent_code', $data['main_category'])->where('is_active', true)->exists()) {
             throw ValidationException::withMessages(['subcategory' => 'Choose a subcategory belonging to the selected category.']);
         }
+    }
+
+    private function budgetCode(Project $project, ProjectPhase $phase, string $category, int $version): string
+    {
+        $categoryCode = match ($category) {
+            'labour_subcontracts' => 'LAB',
+            'logistics_equipment' => 'LOG',
+            'preliminaries_overheads' => 'PRE',
+            default => 'MAT',
+        };
+
+        return $project->project_code.'-'.strtoupper($phase->stage_code).'-'.$categoryCode.'-BUD-'.str_pad((string) $version, 3, '0', STR_PAD_LEFT);
     }
 
     private function requireReason(?string $reason): void

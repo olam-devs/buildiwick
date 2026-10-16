@@ -225,8 +225,7 @@ class ProjectManagerController extends Controller
         foreach ($batchItems as $item) {
             abort_unless($request->user()->can('view', $item), 403);
         }
-        $currentBudget = $expenseRequest->project->internalBudgets()->where('status', 'approved')
-            ->orderByDesc('version')->first();
+        $approvedBudgets = $expenseRequest->project->internalBudgets()->where('status', 'approved')->with('entries.phase')->get();
 
         return view('pm.commercial-form', [
             'expenseRequest' => $expenseRequest,
@@ -236,7 +235,7 @@ class ProjectManagerController extends Controller
             'paymentMethods' => Lookup::ofType('payment_method')->get(),
             'impacts' => $batchItems->mapWithKeys(fn (ExpenseRequest $item) => [$item->id => $decisions->impact($item)]),
             'classification' => $this->lookups(),
-            'budgetEntries' => $currentBudget?->entries()->with('phase')->orderBy('project_phase_id')->orderBy('id')->get() ?? collect(),
+            'budgetEntries' => $approvedBudgets->flatMap->entries->sortBy(fn ($entry) => [$entry->project_phase_id, $entry->id])->values(),
         ]);
     }
 
@@ -338,12 +337,16 @@ class ProjectManagerController extends Controller
         abort_unless($request->user()->hasRole('admin') || $request->user()->hasRole('project_manager'), 403);
         $this->authorize('viewProject', [InternalBudget::class, $project]);
         $project->load(['client', 'activePhase', 'phases' => fn ($query) => $query->orderBy('phase_order')]);
-        $working = $project->internalBudgets()->where('status', 'draft')->with('entries.enteredBy')->first();
-        $current = $working ?? $project->internalBudgets()->whereIn('status', ['finalized', 'approved'])->orderByDesc('version')->with('entries.enteredBy')->first();
+        $allBudgets = $project->internalBudgets()->with(['phase', 'entries.enteredBy'])->orderByDesc('version')->get();
+        $budgetDocuments = $allBudgets->whereIn('status', ['draft', 'finalized', 'approved'])
+            ->groupBy(fn (InternalBudget $budget) => $budget->project_phase_id.'|'.$budget->main_category)
+            ->map(fn ($versions) => $versions->sortBy(fn ($budget) => ['draft' => 0, 'finalized' => 1, 'approved' => 2][$budget->status] ?? 3)->first())
+            ->sortBy(fn ($budget) => [$budget->phase?->phase_order, array_search($budget->main_category, array_keys(ProjectManagerBudgetService::CATEGORIES), true)]);
+        $working = $budgetDocuments->firstWhere('status', 'draft');
+        $current = $working ?? $budgetDocuments->first();
         $comparison = $budgets->projectComparison($project);
         $siteRequests = $project->expenseRequests()->where('status', '!=', 'cancelled')->with('phase')->orderByDesc('submitted_at')->get();
-        $entryGroups = $current ? $current->entries->groupBy('project_phase_id') : collect();
-        $history = $project->internalBudgets()->when($current, fn ($query) => $query->where('id', '!=', $current->id))->with('entries')->orderByDesc('version')->get()
+        $history = $allBudgets->whereNotIn('id', $budgetDocuments->pluck('id'))
             ->map(fn (InternalBudget $budget) => (object) ['budget' => $budget, 'total' => $budget->total_amount]);
         $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'internal_budget')->with('editor')->latest()->get();
 
@@ -353,7 +356,7 @@ class ProjectManagerController extends Controller
             'currentBudget' => $current,
             'comparison' => $comparison,
             'siteRequests' => $siteRequests,
-            'entryGroups' => $entryGroups,
+            'budgetDocuments' => $budgetDocuments,
             'history' => $history,
             'editLogs' => $editLogs,
             'labels' => ProjectManagerBudgetService::CATEGORIES,
@@ -366,7 +369,11 @@ class ProjectManagerController extends Controller
     public function startBudget(Request $request, Project $project, ProjectManagerBudgetService $budgets)
     {
         $this->authorize('create', [InternalBudget::class, $project]);
-        $budget = $budgets->ensureWorkingBudget($project, $request->user());
+        $validated = $request->validate(['project_phase_id' => ['nullable', 'integer', 'exists:project_phases,id'], 'main_category' => ['nullable', 'in:'.implode(',', array_keys(ProjectManagerBudgetService::CATEGORIES))]]);
+        $phase = isset($validated['project_phase_id'])
+            ? $project->phases()->findOrFail($validated['project_phase_id'])
+            : ($project->phases()->where('status', 'active')->orderBy('phase_order')->first() ?? $project->phases()->orderBy('phase_order')->firstOrFail());
+        $budget = $budgets->ensureWorkingBudget($project, $request->user(), $phase, $validated['main_category'] ?? 'materials');
 
         return redirect()->route('pm.projects.show', $project)->with('success', 'Working internal budget '.$budget->budget_code.' is ready.');
     }
@@ -384,7 +391,8 @@ class ProjectManagerController extends Controller
     {
         $this->authorize('viewProject', [InternalBudget::class, $project]);
         abort_unless((int) $phase->project_id === (int) $project->id, 404);
-        $budget = $budgets->ensureWorkingBudget($project, $request->user());
+        $category = $request->validate(['category' => ['nullable', 'in:'.implode(',', array_keys(ProjectManagerBudgetService::CATEGORIES))]])['category'] ?? 'materials';
+        $budget = $budgets->ensureWorkingBudget($project, $request->user(), $phase, $category);
         $this->authorize('create', [InternalBudgetEntry::class, $budget]);
 
         return view('pm.entry-form', ['project' => $project, 'phase' => $phase, 'budget' => $budget, 'entry' => null, 'lookups' => $this->lookups()]);
@@ -394,7 +402,8 @@ class ProjectManagerController extends Controller
     {
         $this->authorize('viewProject', [InternalBudget::class, $project]);
         abort_unless((int) $phase->project_id === (int) $project->id, 404);
-        $budget = $budgets->ensureWorkingBudget($project, $request->user());
+        $category = $request->input('main_category');
+        $budget = $budgets->ensureWorkingBudget($project, $request->user(), $phase, $category);
         $budgets->createEntry($budget, $phase, $request->validated(), $request->user());
 
         return redirect()->route('pm.projects.show', $project)->with('success', 'Internal budget entry added.');
@@ -439,17 +448,22 @@ class ProjectManagerController extends Controller
         abort_unless((int) $budget->project_id === (int) $project->id, 404);
         $this->authorize('view', $budget);
         $budget->load(['entries.phase', 'createdBy', 'approvedBy']);
-        $rows = $budget->entries->sortBy(fn ($entry) => [$entry->phase?->phase_order, $entry->id])->map(fn ($entry) => [
-            $entry->work_area ?: 'General', $entry->phase?->stage_label, $entry->work_section ?: 'General work', $entry->item_reference,
-            ProjectManagerBudgetService::CATEGORIES[$entry->main_category] ?? $entry->main_category,
-            $entry->subcategory, $entry->item_description, $entry->supplier_fundi_client,
-            $entry->quantity ?? 1, $entry->unit ?? 'LS', $entry->unit_cost, $entry->line_total, $entry->notes,
-        ]);
-        $rows->push(['', '', '', '', '', '', 'BUDGET TOTAL', '', '', '', '', $budget->total_amount, '']);
+        $rows = collect();
+        $groups = $budget->entries->sortBy(fn ($entry) => [$entry->work_area, $entry->construction_category, $entry->work_package_code, $entry->id])
+            ->groupBy(fn ($entry) => ($entry->work_area ?: 'General Work Area').'|'.($entry->construction_category ?: 'General Construction Work').'|'.($entry->work_package_code ?: 'General').'|'.($entry->work_package_name ?: 'General Work'));
+        foreach ($groups as $key => $entries) {
+            [$area, $construction, $packageCode, $packageName] = explode('|', $key, 4);
+            $rows->push([$area, $construction, $packageCode, $packageName, '', '', '', '', '', '']);
+            foreach ($entries as $entry) {
+                $rows->push(['', '', '', $entry->item_reference, $entry->item_description, $entry->quantity ?? 1, $entry->unit ?? 'LS', $entry->unit_cost, $entry->line_total, $entry->notes]);
+            }
+            $rows->push(['', '', '', '', $packageCode.' SUBTOTAL', '', '', '', Money::sum($entries->map(fn ($entry) => $entry->line_total)), '']);
+        }
+        $rows->push(['', '', '', '', strtoupper($budget->phase?->stage_label.' '.(ProjectManagerBudgetService::CATEGORIES[$budget->main_category] ?? $budget->main_category)).' BUDGET TOTAL', '', '', '', $budget->total_amount, '']);
 
-        return $excel->download($budget->budget_code, 'Internal Budget - '.$project->name,
-            ['Work Area / Building', 'Phase', 'Work Section', 'Item Ref.', 'Category', 'Subcategory', 'Description', 'Expected Supplier / Fundi', 'Quantity', 'Unit', 'Unit Cost (TSh)', 'Budget Total (TSh)', 'Notes'],
-            $rows, [$budget->budget_code, 'Project: '.$project->name, 'Location: '.($project->location ?? 'Not set'), 'Version '.$budget->version, 'Status: '.ucwords(str_replace('_', ' ', $budget->status)), 'Director review: '.($budget->approvedBy?->name ?? ($budget->status === 'approved' ? 'Grandfathered baseline' : 'Awaiting verification'))], [10, 11]);
+        return $excel->download($budget->budget_code, (ProjectManagerBudgetService::CATEGORIES[$budget->main_category] ?? 'Internal').' Budget - '.$budget->phase?->stage_label,
+            ['Work Area', 'Construction Section', 'Group', 'Item Ref.', 'Description', 'Quantity', 'Unit', 'Unit Price (TSh)', 'Total Amount (TSh)', 'Notes'],
+            $rows, [$budget->budget_code, 'Project: '.$project->name, 'Phase: '.$budget->phase?->stage_label, 'Budget type: '.(ProjectManagerBudgetService::CATEGORIES[$budget->main_category] ?? $budget->main_category), 'Version '.$budget->version, 'Status: '.ucwords(str_replace('_', ' ', $budget->status))], [7, 8]);
     }
 
     private function currentBudget(Project $project): ?InternalBudget

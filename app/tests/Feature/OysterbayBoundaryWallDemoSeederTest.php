@@ -37,11 +37,13 @@ class OysterbayBoundaryWallDemoSeederTest extends TestCase
         $this->assertTrue($estimate->entries->every(fn ($entry) => $entry->markup_percent === '15.0000'));
         $this->assertStringContainsString('published amount TSh 6,905,400.00', $estimate->entries->firstWhere('item_description', 'Concrete C25 strip footing, 600 x 200 mm')->notes);
 
-        $budget = $project->internalBudgets()->with('entries')->firstOrFail();
-        $this->assertSame('approved', $budget->status);
-        $this->assertSame(31, $budget->entries->count());
-        $this->assertSame(5, $budget->entries->pluck('project_phase_id')->unique()->count());
-        $this->assertTrue($budget->entries->every(fn ($entry) => filled($entry->work_area)
+        $budgets = $project->internalBudgets()->with('entries')->get();
+        $entries = $budgets->flatMap->entries;
+        $this->assertTrue($budgets->every(fn ($budget) => $budget->status === 'approved'));
+        $this->assertTrue($budgets->every(fn ($budget) => filled($budget->project_phase_id) && filled($budget->main_category)));
+        $this->assertSame(31, $entries->count());
+        $this->assertSame(5, $entries->pluck('project_phase_id')->unique()->count());
+        $this->assertTrue($entries->every(fn ($entry) => filled($entry->work_area)
             && filled($entry->construction_category) && filled($entry->work_package_name)));
 
         $this->assertSame(11, $project->expenseRequests()->count());

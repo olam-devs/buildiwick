@@ -147,8 +147,8 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     public function test_pm_can_budget_future_standard_phases_and_entry_records_actor_without_markup(): void
     {
         [$project, $pm] = $this->assignedProject();
-        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
         $future = $project->phases()->where('stage_code', 'roofing')->firstOrFail();
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm, $future, 'labour_subcontracts');
         $this->assertSame('not_started', $future->status);
         $entry = app(ProjectManagerBudgetService::class)->createEntry($budget, $future, $this->entryPayload([
             'main_category' => 'labour_subcontracts', 'subcategory' => 'fundi_labour',
@@ -165,7 +165,6 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     public function test_pm_budget_accepts_all_cost_categories_and_construction_units(): void
     {
         [$project, $pm] = $this->assignedProject();
-        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
         $phases = $project->phases()->orderBy('phase_order')->get();
         foreach ([
             ['main_category' => 'materials', 'unit' => 'bag'],
@@ -173,6 +172,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             ['main_category' => 'logistics_equipment', 'subcategory' => null, 'unit' => 'trip'],
             ['main_category' => 'preliminaries_overheads', 'subcategory' => null, 'unit' => 'service'],
         ] as $index => $entry) {
+            $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm, $phases[$index], $entry['main_category']);
             $created = app(ProjectManagerBudgetService::class)->createEntry($budget, $phases[$index], $this->entryPayload($entry), $pm);
             $this->assertSame('50.00', $created->line_total);
         }
@@ -180,11 +180,41 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             ->assertOk()->assertSee('Expected Supplier / Fundi / Service Provider')->assertSee('worker_day');
     }
 
+    public function test_each_phase_has_independent_budget_types_and_each_work_package_has_its_own_subtotal(): void
+    {
+        [$project, $pm] = $this->assignedProject();
+        $phase = $project->phases()->where('stage_code', 'substructure')->firstOrFail();
+        $service = app(ProjectManagerBudgetService::class);
+        $materials = $service->ensureWorkingBudget($project, $pm, $phase, 'materials');
+        $labour = $service->ensureWorkingBudget($project, $pm, $phase, 'labour_subcontracts');
+
+        $this->assertNotSame($materials->id, $labour->id);
+        $this->assertSame(1, $materials->version);
+        $this->assertSame(1, $labour->version);
+
+        foreach ([
+            ['work_package_code' => '3.1', 'work_package_name' => 'Foundation strip footing', 'item_description' => 'Cement'],
+            ['work_package_code' => '3.1', 'work_package_name' => 'Foundation strip footing', 'item_description' => 'Aggregate'],
+            ['work_package_code' => '3.2', 'work_package_name' => 'Foundation walling', 'item_description' => 'Concrete blocks'],
+        ] as $line) {
+            $service->createEntry($materials, $phase, $this->entryPayload($line + [
+                'work_area' => 'Main Building',
+                'construction_category' => 'Substructure',
+            ]), $pm);
+        }
+
+        $response = $this->actingAs($pm)->get(route('pm.projects.show', $project));
+        $response->assertOk()->assertSee('3.1 Subtotal')->assertSee('3.2 Subtotal');
+        $this->assertSame(1, substr_count($response->getContent(), 'Foundation strip footing'));
+        $this->assertSame(1, substr_count($response->getContent(), 'Foundation walling'));
+    }
+
     public function test_budget_entry_category_subcategory_relationship_and_foreign_phase_are_rejected(): void
     {
         [$project, $pm] = $this->assignedProject();
         [$other] = $this->assignedProject('BWG-PM-OTHER-002');
-        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
+        $phase = $project->phases()->firstOrFail();
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm, $phase, 'logistics_equipment');
         $service = app(ProjectManagerBudgetService::class);
 
         try {
@@ -194,7 +224,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             $this->assertArrayHasKey('project_phase_id', $exception->errors());
         }
         try {
-            $service->createEntry($budget, $project->phases()->firstOrFail(), $this->entryPayload(['main_category' => 'logistics_equipment', 'subcategory' => 'fundi_labour']), $pm);
+            $service->createEntry($budget, $phase, $this->entryPayload(['main_category' => 'logistics_equipment', 'subcategory' => 'fundi_labour']), $pm);
             $this->fail('Category/subcategory mismatch must be rejected.');
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('subcategory', $exception->errors());
@@ -204,9 +234,9 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     public function test_fixed_point_budget_line_totals_rounding_and_lump_sum_are_exact(): void
     {
         [$project, $pm] = $this->assignedProject();
-        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
         $service = app(ProjectManagerBudgetService::class);
         $phase = $project->phases()->firstOrFail();
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm, $phase, 'materials');
         $quantity = $service->createEntry($budget, $phase, $this->entryPayload(['quantity' => '1.33', 'unit_cost' => '19.99']), $pm);
         $lumpSum = $service->createEntry($budget, $phase, $this->entryPayload(['quantity' => null, 'unit' => 'ls', 'unit_cost' => '1000.25']), $pm);
 
@@ -222,8 +252,8 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     public function test_pm_budget_form_ignores_submitted_total_and_accepts_only_budget_fields(): void
     {
         [$project, $pm] = $this->assignedProject();
-        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
         $phase = $project->phases()->where('stage_code', 'finishing')->firstOrFail();
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm, $phase, 'materials');
         $payload = $this->entryPayload(['quantity' => '3.00', 'unit_cost' => '20.00', 'line_total' => '1.00', 'markup_percent' => '99.0000']);
         $response = $this->actingAs($pm)->post(route('pm.budget-entries.store', [$project, $phase]), $payload);
         $response->assertRedirect();
@@ -236,10 +266,11 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     {
         [$project, $pm] = $this->assignedProject();
         $service = app(ProjectManagerBudgetService::class);
-        $budget = $service->ensureWorkingBudget($project, $pm);
         $materialsPhase = $project->phases()->where('stage_code', 'roofing')->firstOrFail();
-        $service->createEntry($budget, $materialsPhase, $this->entryPayload(['main_category' => 'materials', 'quantity' => '1', 'unit_cost' => '100.00']), $pm);
-        $service->createEntry($budget, $materialsPhase, $this->entryPayload(['main_category' => 'labour_subcontracts', 'subcategory' => 'fundi_labour', 'quantity' => '1', 'unit_cost' => '300.00']), $pm);
+        $materialsBudget = $service->ensureWorkingBudget($project, $pm, $materialsPhase, 'materials');
+        $labourBudget = $service->ensureWorkingBudget($project, $pm, $materialsPhase, 'labour_subcontracts');
+        $service->createEntry($materialsBudget, $materialsPhase, $this->entryPayload(['main_category' => 'materials', 'quantity' => '1', 'unit_cost' => '100.00']), $pm);
+        $service->createEntry($labourBudget, $materialsPhase, $this->entryPayload(['main_category' => 'labour_subcontracts', 'subcategory' => 'fundi_labour', 'quantity' => '1', 'unit_cost' => '300.00']), $pm);
         $materialsRequest = $this->request($project, $materialsPhase, ['main_category' => 'materials', 'subcategory' => 'concrete_cement', 'quantity' => '1', 'total_amount' => '120.00', 'status' => 'approved']);
         $labourRequest = $this->request($project, $materialsPhase, ['main_category' => 'labour_subcontracts', 'subcategory' => 'fundi_labour', 'quantity' => '1', 'total_amount' => '250.00', 'status' => 'approved']);
         $wallingPhase = $project->phases()->where('stage_code', 'walling')->firstOrFail();
@@ -395,7 +426,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     {
         [$project, $pm] = $this->assignedProject();
         $phase = $project->phases()->where('stage_code', 'substructure')->firstOrFail();
-        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm, $phase, 'materials');
         $entry = app(ProjectManagerBudgetService::class)->createEntry($budget, $phase, $this->entryPayload([
             'main_category' => 'materials', 'subcategory' => 'reinforcement_steel',
             'item_description' => 'Foundation reinforcement steel',
@@ -423,7 +454,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
     {
         [$project, $pm] = $this->assignedProject();
         $phase = $project->phases()->firstOrFail();
-        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm, $phase, 'materials');
         app(ProjectManagerBudgetService::class)->createEntry($budget, $phase, $this->entryPayload(['unit_cost' => '100.00']), $pm);
         $request = $this->request($project, $phase, ['quantity' => '2', 'total_amount' => null]);
         $supplier = SupplierPayee::create(['name' => 'ABC Hardware', 'type' => 'supplier', 'contact_person' => 'Asha', 'phone' => '0712']);
@@ -492,7 +523,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->assertSame('salary_wage', $request->request_type);
         $this->assertNull($request->requested_amount);
         $this->assertSame($agreement->id, $request->labour_agreement_id);
-        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm);
+        $budget = app(ProjectManagerBudgetService::class)->ensureWorkingBudget($project, $pm, $request->phase, 'labour_subcontracts');
         $entry = app(ProjectManagerBudgetService::class)->createEntry($budget, $request->phase, $this->entryPayload([
             'main_category' => 'labour_subcontracts', 'subcategory' => 'direct_labour',
             'item_description' => 'Weekly masonry labour budget', 'unit_cost' => '300000.00',
@@ -587,15 +618,15 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             ->assertOk()->assertSee('Project Manager Dashboard')->assertSee($project->project_code)
             ->assertSee('No budget set')->assertDontSee('Estimator Estimates')->assertDontSee('New Entry');
         $this->get(route('pm.projects.show', $project))->assertOk()
-            ->assertSee('Phase 7 — External Works')->assertSee('No budget set')->assertSee('No internal budget has been created.');
+            ->assertSee('Phase 7 · External Works')->assertSee('Not created')->assertSee('Independent materials budget for this phase');
     }
 
     public function test_pm_budget_workspace_shows_future_phases_over_budget_warnings_and_read_only_requests(): void
     {
         [$project, $pm] = $this->assignedProject();
         $service = app(ProjectManagerBudgetService::class);
-        $budget = $service->ensureWorkingBudget($project, $pm);
         $future = $project->phases()->where('stage_code', 'roofing')->firstOrFail();
+        $budget = $service->ensureWorkingBudget($project, $pm, $future, 'materials');
         $service->createEntry($budget, $future, $this->entryPayload(['unit_cost' => '100.00']), $pm);
         $estimate = ProjectEstimate::create(['estimate_code' => 'EST-PM-HIDDEN-001', 'project_id' => $project->id, 'version' => 1, 'status' => 'issued']);
         $estimate->entries()->create(['project_phase_id' => $future->id, 'main_category' => 'materials', 'subcategory' => 'concrete_cement', 'item_description' => 'Director-only estimate', 'quantity' => '1', 'unit' => 'ls', 'base_unit_cost' => '987654.00', 'markup_percent' => '0']);
@@ -606,7 +637,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'amount' => '120.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
         ]);
         $response = $this->actingAs($pm)->get(route('pm.projects.show', $project));
-        $response->assertOk()->assertSee('Phase 5 — Roofing')->assertSee('Over internal budget by')
+        $response->assertOk()->assertSee('Phase 5 · Roofing')->assertSee('Over internal budget by')
             ->assertSee('Site Requests · Read Only')->assertSee('Submit for Director Verification')
             ->assertDontSee('Estimator Base')->assertDontSee('987,654.00')
             ->assertDontSee('Approve Request')->assertDontSee('Reject Request')->assertDontSee('Record Payment');
