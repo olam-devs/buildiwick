@@ -397,7 +397,10 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
 
         $this->actingAs($pm)->get(route('pm.requests.index'))
             ->assertOk()->assertSee($request->request_code)->assertDontSee($otherRequest->request_code)
-            ->assertSee('commercial details')->assertSee('Review')->assertDontSee('Record Payment');
+            ->assertSee('commercial details')->assertSee('Review')->assertDontSee('Record Payment')
+            ->assertDontSee($request->item_description);
+        $this->actingAs($pm)->get(route('pm.procurement.show', $request))
+            ->assertOk()->assertSee($request->item_description);
         $this->actingAs($pm)->get(route('pm.projects.show', $project))
             ->assertOk()->assertSee($request->request_code)->assertDontSee($otherRequest->request_code);
     }
