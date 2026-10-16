@@ -367,6 +367,7 @@ class SiteExpenseRequestWorkflowTest extends TestCase
         $this->actingAs($operator)->get('/login')->assertRedirect(route('site.index'));
         $this->actingAs($operator)->get(route('site.index'))->assertOk()
             ->assertSee('Site Operator Dashboard')->assertSee('No requests')
+            ->assertSee('responsive-project-table', false)
             ->assertDontSee('Estimator Dashboard')->assertDontSee('Estimator Estimates')->assertDontSee('New Entry');
         $this->actingAs($operator)->get(route('site.projects.show', $project))->assertOk()
             ->assertSee('Total Requests')->assertSee('Awaiting PM Review')->assertSee('No expense requests have been submitted');

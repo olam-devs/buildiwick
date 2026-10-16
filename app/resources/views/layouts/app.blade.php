@@ -60,7 +60,11 @@
   .actions a{display:block;color:var(--primary-dark);text-decoration:none;margin:3px 0;font-size:12px;font-weight:600;}
   .back-link{display:inline-block;margin-bottom:10px;color:var(--ink-dim);text-decoration:none;font-size:12.5px;}
   .back-link:hover{color:var(--primary);}
-  .estimator-project-table{min-width:1450px;}
+  .project-list-main{max-width:none;}
+  .responsive-project-table{width:100%;min-width:0;table-layout:fixed;}
+  .responsive-project-table th,.responsive-project-table td{padding-left:10px;padding-right:10px;overflow-wrap:anywhere;}
+  .responsive-project-table .name{width:22%;}
+  @media(max-width:1100px){.responsive-project-table{min-width:900px;table-layout:auto;}}
   .estimate-entry-table{min-width:1320px;}
   .phase-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px;}
   .phase-heading h3{margin:0 0 4px;}
@@ -84,7 +88,8 @@
   .request-actions{display:flex;gap:8px;margin:16px 0 32px;}
   .request-actions form{margin:0;}
   .request-submit-note{line-height:1.8;color:var(--ink-soft);}
-  .site-project-table{min-width:1080px;}
+  .site-project-table{font-size:12px;}
+  .site-project-table thead th{font-size:10px;line-height:1.25;}
   .site-request-table{min-width:760px;}
   .request-detail-grid{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));}
   tfoot th{padding:11px 16px;border-top:2px solid var(--line-strong);text-align:left;background:var(--surface-2);}
@@ -279,7 +284,7 @@
     @endauth
   </aside>
   <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Minimize sidebar" aria-expanded="true" title="Minimize sidebar">&#x2039;</button>
-  <main class="main">
+  <main class="main @yield('mainClass')">
     @if (session('success'))<div class="flash">{{ session('success') }}</div>@endif
     @yield('content')
   </main>

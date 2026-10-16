@@ -46,6 +46,8 @@ class EstimatorWorkflowTest extends TestCase
         $assignedResponse->assertViewHas('projects', fn ($rows) => $rows->contains(fn ($row) => (int) $row->project->id === (int) $assigned->id));
         $assignedResponse->assertViewHas('projects', fn ($rows) => ! $rows->contains(fn ($row) => (int) $row->project->id === (int) $unrelated->id));
         $assignedResponse->assertSee($assigned->project_code);
+        $assignedResponse->assertSee('clickable-project-row', false);
+        $assignedResponse->assertSee('data-href="'.route('estimator.projects.show', $assigned).'"', false);
         $assignedResponse->assertDontSee($unrelated->project_code);
         $this->actingAs($estimator)->get(route('estimator.projects.show', $unrelated))->assertForbidden();
         $this->actingAs($estimator)->get('/projects')->assertForbidden();
