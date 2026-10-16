@@ -347,6 +347,25 @@ class ProjectManagerController extends Controller
         $current = $working ?? $budgetDocuments->first();
         $comparison = $budgets->projectComparison($project);
         $siteRequests = $project->expenseRequests()->where('status', '!=', 'cancelled')->with('phase')->orderByDesc('submitted_at')->get();
+        $requestBatches = $this->requestBatches($siteRequests);
+        $issuedInvoices = $project->invoices()->where('status', 'issued')->with('payments')->get();
+        $invoiced = Money::sum($issuedInvoices->map(fn ($invoice) => $invoice->total_amount));
+        $received = Money::sum($issuedInvoices->flatMap(fn ($invoice) => $invoice->payments->pluck('amount')));
+        $receivables = Money::difference($invoiced, $received);
+        $financialInsights = [
+            'invoiced' => $invoiced,
+            'received' => $received,
+            'receivables' => Money::compare($receivables, '0') < 0 ? '0.00' : $receivables,
+            'payables' => Money::sum($siteRequests->where('status', 'approved')->map(fn (ExpenseRequest $item) => $item->approved_outstanding_amount)),
+            'cash' => Money::difference($received, $comparison['overall']['actual']),
+        ];
+        $requestInsights = [
+            'awaiting_pricing' => $requestBatches->where('state', 'awaiting_pricing')->count(),
+            'ready' => $requestBatches->where('state', 'ready')->count(),
+            'approved' => $requestBatches->where('state', 'approved')->count(),
+            'rejected' => $requestBatches->where('state', 'rejected')->count(),
+            'with_accounts' => $requestBatches->where('state', 'approved')->filter(fn ($batch) => Money::compare($batch->outstanding, '0') > 0)->count(),
+        ];
         $history = $allBudgets->whereNotIn('id', $budgetDocuments->pluck('id'))
             ->map(fn (InternalBudget $budget) => (object) ['budget' => $budget, 'total' => $budget->total_amount]);
         $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'internal_budget')->with('editor')->latest()->get();
@@ -362,6 +381,9 @@ class ProjectManagerController extends Controller
             'currentBudget' => $current,
             'comparison' => $comparison,
             'siteRequests' => $siteRequests,
+            'requestBatches' => $requestBatches,
+            'financialInsights' => $financialInsights,
+            'requestInsights' => $requestInsights,
             'budgetDocuments' => $budgetDocuments,
             'selectedBudget' => $selectedBudget,
             'history' => $history,
@@ -506,6 +528,9 @@ class ProjectManagerController extends Controller
                     'item_count' => $items->count(),
                     'supplier_count' => $items->pluck('supplier_payee_id')->filter()->unique()->count(),
                     'total' => Money::sum($items->map(fn ($item) => $item->commercial_total ?? '0')),
+                    'approved' => Money::sum($items->map(fn ($item) => $item->approved_payable_amount)),
+                    'paid' => Money::sum($items->map(fn ($item) => $item->paid_to_date)),
+                    'outstanding' => Money::sum($items->map(fn ($item) => $item->approved_outstanding_amount)),
                     'state' => $state,
                 ];
             })->values();

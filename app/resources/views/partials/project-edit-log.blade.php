@@ -1,5 +1,5 @@
 @if($editLogs->isNotEmpty())
-<section class="panel form-section">
+<section class="panel form-section {{ $editLogSectionClass ?? '' }}">
   <h3>{{ $editLogTitle ?? 'Project Edit Log' }}</h3>
   <p class="form-context">Every change is retained with its justification and the person who made it.</p>
   <div class="tablewrap"><table><thead><tr><th>Date</th><th>Document</th><th>Change</th><th>Item</th><th>Changed Details</th><th>Justification</th><th>Edited By</th></tr></thead><tbody>

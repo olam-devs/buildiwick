@@ -637,9 +637,13 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
             'amount' => '120.00', 'payment_date' => today()->toDateString(), 'payment_method' => 'cash',
         ]);
         $response = $this->actingAs($pm)->get(route('pm.projects.show', $project).'?budget='.$budget->id.'#budgets');
-        $response->assertOk()->assertSee('Phase 5 · Roofing')->assertSee('Over internal budget by')
-            ->assertSee('Site Requests · Read Only')->assertSee('Submit for Director Verification')
-            ->assertDontSee('Estimator Base')->assertDontSee('987,654.00')
+        $response->assertOk()->assertSee('Project Command Centre')->assertSee('Cost Analytics')
+            ->assertSee('Internal Budget vs Commitments vs Actual')->assertSee('What Needs Your Attention')
+            ->assertSee('Outstanding Payables')->assertSee('Client Invoiced')->assertSee('Client Received')
+            ->assertSee('Phase 5 · Roofing')->assertSee('Over internal budget by')
+            ->assertSee('Project Requests')->assertSee($request->request_code)->assertSee('Submit for Director Verification')
+            ->assertDontSee('Estimator Base')->assertDontSee('Estimator Client Value')->assertDontSee('Effective Markup')
+            ->assertDontSee('987,654.00')
             ->assertDontSee('Approve Request')->assertDontSee('Reject Request')->assertDontSee('Record Payment');
     }
 
