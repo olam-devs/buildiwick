@@ -50,6 +50,7 @@ class SiteOperatorController extends Controller
         $summary = $requests->projectSummary($project);
         $expenseRequests = $project->expenseRequests()->with(['phase', 'requestedBy', 'approvals.decidedBy', 'payments'])
             ->orderByDesc('submitted_at')->orderByDesc('id')->get();
+        $requestBatches = $this->requestBatches($expenseRequests);
         $activeCount = $project->phases()->where('status', 'active')->count();
         $currentPhase = $activeCount === 1
             ? $project->phases->first(fn ($phase) => $phase->status === 'active')
@@ -60,6 +61,7 @@ class SiteOperatorController extends Controller
             'summary' => $summary,
             'showFinancialDetails' => ! $request->user()->hasRole('site_operator'),
             'expenseRequests' => $expenseRequests,
+            'requestBatches' => $requestBatches,
             'activeCount' => $activeCount,
             'currentPhase' => $currentPhase,
             'categoryLabels' => SiteExpenseRequestService::CATEGORIES,
@@ -78,7 +80,7 @@ class SiteOperatorController extends Controller
             $query->whereIn('project_id', $user->assignedProjects()->select('projects.id'));
         }
 
-        return view('site.requests', ['requests' => $query->get()]);
+        return view('site.requests', ['requestBatches' => $this->requestBatches($query->get())]);
     }
 
     public function create(Request $request, Project $project)
@@ -123,14 +125,17 @@ class SiteOperatorController extends Controller
         $expenseRequest->load(['project', 'phase', 'labourAgreement', 'requestedBy', 'cancelledBy', 'approvals.decidedBy', 'payments.recordedBy']);
         $batchItems = ExpenseRequest::query()
             ->where('request_batch_code', $expenseRequest->request_batch_code ?: $expenseRequest->request_code)
-            ->with(['phase', 'approvals.decidedBy', 'payments.recordedBy'])
+            ->with(['phase', 'internalBudgetEntry', 'supplierRequestGroup', 'supplierPayee', 'latestPmApproval.decidedBy', 'approvals.decidedBy', 'payments.recordedBy'])
             ->orderBy('request_line_number')->get();
+        $supplierGroups = $batchItems->filter(fn (ExpenseRequest $item) => $item->supplier_request_group_id || $item->supplier_payee_id)
+            ->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id ?: 'supplier-'.$item->supplier_payee_id);
         $canEdit = $request->user()->can('update', $expenseRequest);
 
         return view('site.request-show', [
             'project' => $project,
             'expenseRequest' => $expenseRequest,
             'batchItems' => $batchItems,
+            'supplierGroups' => $supplierGroups,
             'canEdit' => $canEdit,
             'showFinancialDetails' => ! $request->user()->hasRole('site_operator'),
             'categoryLabels' => SiteExpenseRequestService::CATEGORIES,
@@ -191,6 +196,23 @@ class SiteOperatorController extends Controller
             'units' => Lookup::ofType('unit')->get(),
             'unitRecommendations' => CostEntryOptions::unitRecommendations(),
         ];
+    }
+
+    private function requestBatches($requests)
+    {
+        return collect($requests)->groupBy(fn (ExpenseRequest $item) => $item->request_batch_code ?: $item->request_code)
+            ->map(function ($items, string $code) {
+                $items = $items->sortBy('request_line_number')->values();
+
+                return (object) [
+                    'code' => $code,
+                    'anchor' => $items->first(),
+                    'items' => $items,
+                    'item_count' => $items->count(),
+                    'supplier_count' => $items->pluck('supplier_payee_id')->filter()->unique()->count(),
+                    'statuses' => $items->pluck('status')->unique()->values(),
+                ];
+            })->values();
     }
 
     private function authorizeWorkspaceRole(User $user): void

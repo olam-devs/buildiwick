@@ -517,14 +517,14 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         ])->assertRedirect();
 
         $this->assertSame('approved', $request->fresh()->status);
-        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertSee($request->request_code);
+        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertSee($request->request_batch_code);
         $this->actingAs($accounts)->get(route('accountant.requests.show', $request))->assertOk();
-        $this->actingAs($director)->get(route('director.requests.index'))->assertOk()->assertSee($request->request_code);
+        $this->actingAs($director)->get(route('director.requests.index'))->assertOk()->assertSee($request->request_batch_code);
 
         $request->refresh();
         $this->assertSame('approved', $request->status);
         $this->assertSame(['project_manager'], $request->approvals()->orderBy('id')->pluck('approval_stage')->all());
-        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertSee($request->request_code);
+        $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()->assertSee($request->request_batch_code);
         $this->assertDatabaseCount('expense_payments', 0);
     }
 
@@ -670,7 +670,7 @@ class ProjectManagerBudgetWorkflowTest extends TestCase
         $this->assertSame($entry->line_total, $lineImpact['budget']);
         $this->assertSame('22500.00', $lineImpact['approved_commitments']);
         $this->actingAs($accounts)->get(route('accountant.requests.index'))->assertOk()
-            ->assertSee('Cement 42.5R')->assertSee('Binding wire');
+            ->assertSee($items[0]->request_batch_code)->assertDontSee('Cement 42.5R')->assertDontSee('Binding wire');
         $this->actingAs($director)->get(route('director.requests.index'))->assertOk()
             ->assertSee('Cement 42.5R')->assertSee('Binding wire')->assertSee('No Director approval step');
         $this->actingAs($director)->post('/director/request-approvals/'.$items[0]->id.'/decision')->assertNotFound();

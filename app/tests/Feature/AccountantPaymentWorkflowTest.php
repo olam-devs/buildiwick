@@ -65,7 +65,8 @@ class AccountantPaymentWorkflowTest extends TestCase
         $second->update(['request_batch_code' => 'SRQ-GROUP-001', 'request_line_number' => 2, 'supplier_payee_id' => $plant->id, 'item_description' => 'Excavator hire']);
 
         $queue = $this->actingAs($accountant)->get(route('accountant.requests.index', ['filter' => 'all']));
-        $queue->assertOk()->assertSeeInOrder(['SRQ-GROUP-001', 'Cement', 'Excavator hire', '350.00']);
+        $queue->assertOk()->assertSeeInOrder(['SRQ-GROUP-001', '2', '2', '350.00'])
+            ->assertDontSee('Cement')->assertDontSee('Excavator hire');
         $this->assertSame(1, substr_count($queue->getContent(), '<strong>SRQ-GROUP-001</strong>'));
 
         $this->actingAs($accountant)->get(route('accountant.requests.show', $first))

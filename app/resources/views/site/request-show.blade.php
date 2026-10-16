@@ -6,22 +6,26 @@
 
 @if($batchItems->count() > 1)<section class="panel form-section"><h3>Requested Item List</h3><div class="tablewrap"><table><thead><tr><th>Line</th><th>Type</th><th>Description</th><th>Quantity</th><th>Notes</th><th>Status</th></tr></thead><tbody>@foreach($batchItems as $item)<tr><td>{{ $item->request_line_number }}</td><td>{{ \App\Models\ExpenseRequest::TYPES[$item->request_type] ?? $item->request_type }}</td><td>{{ $item->item_description }}</td><td>{{ $item->quantity ?? 1 }} {{ $unitLabels[$item->unit] ?? $item->unit ?? 'LS' }}</td><td>{{ $item->notes ?: '—' }}</td><td>{{ ucwords(str_replace('_',' ',$item->status)) }}</td></tr>@endforeach</tbody></table></div></section>@endif
 
-<section class="panel form-section"><h3>Request Line Details</h3><div class="tiles request-detail-grid">
+<section class="panel form-section"><h3>Request Details</h3><div class="tiles request-detail-grid">
   <div class="tile"><div class="label">Project</div><div>{{ $project->name }} · {{ $project->project_code }}</div></div>
   <div class="tile"><div class="label">Phase</div><div>{{ $expenseRequest->phase?->stage_label }}</div></div>
   <div class="tile"><div class="label">Request Date</div><div>{{ $expenseRequest->requested_at?->format('d M Y') }}</div></div>
   <div class="tile"><div class="label">Submitted At</div><div>{{ $expenseRequest->submitted_at?->format('d M Y H:i') ?? $expenseRequest->created_at?->format('d M Y H:i') }}</div></div>
   <div class="tile"><div class="label">Requested By</div><div>{{ $expenseRequest->requestedBy?->name ?? '—' }}</div></div>
-  <div class="tile"><div class="label">Request Type</div><div>{{ \App\Models\ExpenseRequest::TYPES[$expenseRequest->request_type] ?? $expenseRequest->request_type }}</div></div>
+  <div class="tile"><div class="label">Request Type</div><div>{{ $batchItems->pluck('request_type')->unique()->map(fn($type)=>\App\Models\ExpenseRequest::TYPES[$type] ?? $type)->join(' / ') }}</div></div>
   <div class="tile"><div class="label">Labour / Subcontract Agreement</div><div>{{ $expenseRequest->labourAgreement ? $expenseRequest->labourAgreement->agreement_code.' · '.$expenseRequest->labourAgreement->fundi_subcontractor : 'Not linked' }}</div></div>
-  <div class="tile"><div class="label">Category</div><div>{{ $categoryLabels[$expenseRequest->main_category] ?? $expenseRequest->main_category }} · {{ $subcategoryLabels[$expenseRequest->subcategory] ?? 'No subcategory' }}</div></div>
-  <div class="tile"><div class="label">Description</div><div>{{ $expenseRequest->item_description }}</div></div>
-  <div class="tile"><div class="label">Quantity / Unit</div><div>{{ $expenseRequest->quantity ?? 'Lump sum' }} · {{ $unitLabels[$expenseRequest->unit] ?? 'LS / no unit' }}</div></div>
+  <div class="tile"><div class="label">Categories</div><div>{{ $batchItems->pluck('main_category')->unique()->map(fn($category)=>$categoryLabels[$category] ?? $category)->join(' / ') }}</div></div>
   @if($showFinancialDetails && $expenseRequest->unit_cost !== null)<div class="tile"><div class="label">Historical Unit Cost</div><div>TSh {{ \App\Support\Money::format($expenseRequest->unit_cost) }}</div></div>@endif
   @if($showFinancialDetails && $expenseRequest->total_amount !== null)<div class="tile"><div class="label">Historical Requested Total</div><div>{{ \App\Support\Money::format($expenseRequest->total_amount) }} TSh</div></div>@endif
   <div class="tile"><div class="label">Evidence</div><div>@if($expenseRequest->evidence_link)<a href="{{ route('site.requests.evidence', [$project, $expenseRequest]) }}">{{ $expenseRequest->evidence_original_name ?? 'Download supporting evidence' }}</a>@else — @endif</div></div>
   <div class="tile"><div class="label">Notes</div><div>{{ $expenseRequest->notes ?: '—' }}</div></div>
 </div></section>
+
+@if($supplierGroups->isNotEmpty())<section class="panel form-section"><h3>PM-Approved Supplier Groups</h3><p class="form-context">These groups show how the Project Manager organized and approved the items from this request.</p>
+@foreach($supplierGroups as $group)
+  @php($first=$group->first())
+  <details class="site-supplier-group"><summary><span><strong>{{ $first->supplierPayee?->name ?? $first->latestPmApproval?->supplier_name_snapshot ?? 'Supplier pending' }}</strong><small>{{ $group->count() }} item(s)</small></span><span>TSh {{ \App\Support\Money::format(\App\Support\Money::sum($group->map(fn($item)=>$item->commercial_total ?? 0))) }}</span></summary><div class="tablewrap"><table><thead><tr><th>Item</th><th>Internal-Budget Allocation</th><th>Quantity</th><th>Approved Amount</th><th>Status</th></tr></thead><tbody>@foreach($group as $item)<tr><td>{{ $item->item_description }}</td><td>{{ $item->internalBudgetEntry?->item_description ?? 'Awaiting allocation' }}</td><td>{{ $item->quantity ?? 1 }} {{ $unitLabels[$item->unit] ?? $item->unit ?? 'LS' }}</td><td class="amt">{{ $item->commercial_total === null ? 'Awaiting pricing' : 'TSh '.\App\Support\Money::format($item->commercial_total) }}</td><td>{{ ucwords(str_replace('_',' ',$item->status)) }}</td></tr>@endforeach</tbody></table></div></details>
+@endforeach</section>@endif
 
 <section class="panel form-section"><h3>Approval History</h3>
 @if($expenseRequest->approvals->isEmpty())<div class="phase-empty">No approval decision has been recorded.</div>@else
@@ -34,4 +38,5 @@
 
 @if($canEdit)<div class="request-actions"><a class="btn btn-ghost" href="{{ route('site.requests.edit', [$project, $expenseRequest]) }}">Edit Pending Request</a><form method="POST" action="{{ route('site.requests.cancel', [$project, $expenseRequest]) }}" onsubmit="return confirm('Cancel this pending request? The request history will be retained.');">@csrf<button class="btn btn-ghost" type="submit">Cancel Request</button></form></div>@endif
 @if($expenseRequest->status === 'cancelled')<section class="panel form-section"><h3>Cancellation</h3><p>Cancelled {{ $expenseRequest->cancelled_at?->format('d M Y H:i') ?? '—' }} by {{ $expenseRequest->cancelledBy?->name ?? '—' }}. Request history has been retained.</p></section>@endif
+<style>.site-supplier-group{border:1px solid var(--line);border-radius:8px;margin-top:10px;overflow:hidden}.site-supplier-group>summary{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;cursor:pointer;background:var(--surface-2)}.site-supplier-group summary small{display:block;color:var(--ink-dim);margin-top:3px}.site-supplier-group .tablewrap{border:0;border-radius:0}</style>
 @endsection

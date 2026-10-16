@@ -11,6 +11,7 @@ use App\Services\AccountantReportingService;
 use App\Services\DirectorAnalyticsService;
 use App\Services\ExcelExportService;
 use App\Services\ProjectManagerBudgetService;
+use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 
@@ -33,10 +34,24 @@ class DirectorController extends Controller
             ->when($filters['category'] ?? null, fn ($builder, string $category) => $builder->where('main_category', $category))
             ->when(($filters['status'] ?? 'all') !== 'all', fn ($builder) => $builder->where('status', $filters['status']))
             ->orderByDesc('submitted_at');
-        $requests = $query->get();
+        $requestBatches = $query->get()
+            ->groupBy(fn (ExpenseRequest $item) => $item->request_batch_code ?: $item->request_code)
+            ->map(function ($items, string $code) {
+                $items = $items->sortBy('request_line_number')->values();
+
+                return (object) [
+                    'code' => $code,
+                    'anchor' => $items->first(),
+                    'items' => $items,
+                    'item_count' => $items->count(),
+                    'supplier_groups' => $items->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id ?: 'unassigned'),
+                    'total' => Money::sum($items->map(fn (ExpenseRequest $item) => $item->commercial_total ?? '0')),
+                    'statuses' => $items->pluck('status')->unique()->values(),
+                ];
+            })->values();
 
         return view('director.requests', [
-            'requests' => $requests,
+            'requestBatches' => $requestBatches,
             'projects' => Project::orderBy('name')->get(['id', 'name']),
             'filters' => $filters,
         ]);
@@ -90,9 +105,13 @@ class DirectorController extends Controller
         $snapshot = $asOf ? $analytics->projectSnapshot($project, $asOf) : null;
 
         $pendingBudgets = $project->internalBudgets()->where('status', 'finalized')->with(['entries', 'createdBy', 'finalizedBy'])->orderByDesc('version')->get();
+        $projectEstimate = $project->estimates()->whereIn('status', ['issued', 'superseded'])->with(['entries.phase', 'preparedBy', 'issuedBy'])->orderByDesc('version')->first()
+            ?? $project->estimates()->with(['entries.phase', 'preparedBy', 'issuedBy'])->orderByDesc('version')->first();
+        $projectBudget = $project->internalBudgets()->where('status', 'approved')->with(['entries.phase', 'createdBy', 'approvedBy'])->orderByDesc('version')->first()
+            ?? $project->internalBudgets()->with(['entries.phase', 'createdBy', 'approvedBy'])->orderByDesc('version')->first();
         $editLogs = ProjectEditLog::where('project_id', $project->id)->with('editor')->latest()->get();
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'editLogs'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'projectBudget', 'editLogs'));
     }
 
     public function decideBudget(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)

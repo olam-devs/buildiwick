@@ -97,11 +97,9 @@ class AccountantController extends Controller
         $batchCode = $expenseRequest->request_batch_code;
         $batchItems = $this->approvedQuery()
             ->where('project_id', $expenseRequest->project_id)
-            ->when($expenseRequest->supplier_request_group_id,
-                fn ($query) => $query->where('supplier_request_group_id', $expenseRequest->supplier_request_group_id),
-                fn ($query) => $query->where(function ($nested) use ($batchCode, $expenseRequest) {
-                    $batchCode ? $nested->where('request_batch_code', $batchCode) : $nested->whereKey($expenseRequest->id);
-                }))
+            ->where(function ($query) use ($batchCode, $expenseRequest) {
+                $batchCode ? $query->where('request_batch_code', $batchCode) : $query->whereKey($expenseRequest->id);
+            })
             ->orderBy('request_line_number')->get();
         $supplierGroups = $batchItems->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id ?: ($item->supplier_payee_id ?: ($item->latestPmApproval?->supplier_name_snapshot ?: 'unassigned')));
 
@@ -364,14 +362,14 @@ class AccountantController extends Controller
 
     private function requestBatches($requests)
     {
-        return collect($requests)->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id ? 'supplier-group-'.$item->supplier_request_group_id : ($item->request_batch_code ?: $item->request_code))
+        return collect($requests)->groupBy(fn (ExpenseRequest $item) => $item->request_batch_code ?: $item->request_code)
             ->map(function ($items, string $code) {
                 $totals = $this->financialTotals($items);
                 $paid = $totals['paid'];
                 $outstanding = $totals['outstanding'];
 
                 return (object) [
-                    'code' => $items->first()->supplierRequestGroup?->group_code ?? $code,
+                    'code' => $code,
                     'anchor' => $items->sortBy('request_line_number')->first(),
                     'items' => $items->sortBy('request_line_number')->values(),
                     'item_count' => $items->count(),
