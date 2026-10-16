@@ -83,10 +83,10 @@ class AccountantClientBillingWorkflowTest extends TestCase
             ->assertSee(route('accountant.invoices.create', ['project' => $project, 'from_estimate' => 1]), false);
 
         $this->actingAs($accountant)->get(route('accountant.invoices.create', ['project' => $project, 'from_estimate' => 1]))
-            ->assertOk()->assertSee('Create Invoice from Estimate')->assertSee('Select Estimate Items to Invoice')
-            ->assertSee('Foundation concrete')->assertSee('This Invoice');
+            ->assertOk()->assertSee('Create Invoice from Estimate')->assertSee('Select Phases or Subphases')
+            ->assertSee('Partial subphase amount')->assertSee('Foundation concrete')->assertSee('This Invoice');
 
-        $this->actingAs($accountant)->post(route('accountant.invoices.store', $project), [
+        $response = $this->actingAs($accountant)->post(route('accountant.invoices.store', $project), [
             'project_id' => $project->id, 'client_id' => $project->client_id,
             'project_estimate_id' => $estimate->id, 'due_at' => today()->addDays(30)->toDateString(),
             'items' => [$entry->id => [
@@ -96,12 +96,48 @@ class AccountantClientBillingWorkflowTest extends TestCase
                 'unit' => $entry->unit, 'unit_price' => $entry->client_unit_cost,
                 'claim_amount' => '450.00',
             ]],
-        ])->assertRedirect(route('accountant.projects.show', $project));
+        ]);
 
         $invoice = ClientInvoice::latest('id')->firstOrFail();
+        $response->assertRedirect(route('accountant.invoices.show', $invoice));
         $this->assertSame($estimate->id, $invoice->project_estimate_id);
         $this->assertSame('450.00', $invoice->total_amount);
         $this->assertSame('450.00', $invoice->items->first()->claim_amount);
+    }
+
+    public function test_one_invoice_can_claim_multiple_phases_and_subphases(): void
+    {
+        [$project, $accountant, $firstPhase] = $this->projectAndAccountant();
+        $secondPhase = $project->phases()->create(['stage_code' => 'superstructure', 'phase_order' => 2, 'status' => 'planned']);
+        $estimate = ProjectEstimate::create([
+            'estimate_code' => 'EST-MULTI-001', 'project_id' => $project->id,
+            'client_id' => $project->client_id, 'version' => 1, 'status' => 'issued',
+        ]);
+        $first = $estimate->entries()->create([
+            'project_phase_id' => $firstPhase->id, 'work_section' => '1.1 Site setup',
+            'main_category' => 'materials', 'item_description' => 'Site establishment',
+            'quantity' => '1', 'unit' => 'ls', 'base_unit_cost' => '1000.00', 'markup_percent' => '0',
+        ]);
+        $second = $estimate->entries()->create([
+            'project_phase_id' => $secondPhase->id, 'work_section' => '4.1 Walling',
+            'main_category' => 'materials', 'item_description' => 'Blockwork',
+            'quantity' => '1', 'unit' => 'ls', 'base_unit_cost' => '2000.00', 'markup_percent' => '0',
+        ]);
+
+        $response = $this->actingAs($accountant)->post(route('accountant.invoices.store', $project), [
+            'project_id' => $project->id, 'client_id' => $project->client_id,
+            'project_estimate_id' => $estimate->id, 'due_at' => today()->addDays(30)->toDateString(),
+            'items' => [
+                $first->id => $this->estimateInvoiceItem($first, '1000.00'),
+                $second->id => $this->estimateInvoiceItem($second, '750.00'),
+            ],
+        ]);
+
+        $invoice = ClientInvoice::latest('id')->firstOrFail();
+        $response->assertRedirect(route('accountant.invoices.show', $invoice));
+        $this->assertSame('1750.00', $invoice->total_amount);
+        $this->assertCount(2, $invoice->items);
+        $this->assertEqualsCanonicalizing([$firstPhase->id, $secondPhase->id], $invoice->items->pluck('project_phase_id')->all());
     }
 
     public function test_client_payment_overpayment_zero_and_non_issued_invoice_are_blocked(): void
@@ -129,6 +165,17 @@ class AccountantClientBillingWorkflowTest extends TestCase
     {
         $invoice = app(ClientInvoiceService::class)->createDraft($project, ['due_at' => now()->addDays(30)->toDateString(), 'items' => [['project_phase_id' => $phase->id, 'main_category' => 'materials', 'item_description' => 'Invoice item', 'quantity' => '1', 'unit_price' => $amount]]], $accountant);
         return app(ClientInvoiceService::class)->issue($invoice, $accountant);
+    }
+
+    private function estimateInvoiceItem(EstimateEntry $entry, string $claimAmount): array
+    {
+        return [
+            'selected' => '1', 'estimate_entry_id' => $entry->id,
+            'project_phase_id' => $entry->project_phase_id, 'main_category' => $entry->main_category,
+            'item_description' => $entry->item_description, 'quantity' => $entry->quantity,
+            'unit' => $entry->unit, 'unit_price' => $entry->client_unit_cost,
+            'claim_amount' => $claimAmount,
+        ];
     }
 
     private function projectAndAccountant(): array

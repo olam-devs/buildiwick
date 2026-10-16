@@ -181,6 +181,9 @@ class AccountantController extends Controller
                 $remaining = Money::difference($entry->line_total, $entry->claimed_amount);
                 $entry->setAttribute('remaining_amount', Money::compare($remaining, '0') < 0 ? '0.00' : $remaining);
             });
+
+            $estimate->setAttribute('claimed_amount', Money::sum($estimate->entries->pluck('claimed_amount')));
+            $estimate->setAttribute('remaining_amount', Money::sum($estimate->entries->pluck('remaining_amount')));
         }
 
         return view('accountant.invoice-form', ['project' => $project->load(['client', 'phases']), 'estimate' => $estimate]);
@@ -189,9 +192,9 @@ class AccountantController extends Controller
     public function storeInvoice(StoreClientInvoiceRequest $request, Project $project, ClientInvoiceService $invoices)
     {
         $this->authorizeWorkspace($request);
-        $invoices->createDraft($project, $request->validated(), $request->user());
+        $invoice = $invoices->createDraft($project, $request->validated(), $request->user());
 
-        return redirect()->route('accountant.projects.show', $project)->with('success', 'Draft invoice created.');
+        return redirect()->route('accountant.invoices.show', $invoice)->with('success', 'Draft invoice created. Review it, then issue it when ready.');
     }
 
     public function invoice(Request $request, ClientInvoice $clientInvoice)
