@@ -60,7 +60,7 @@ class AccountantPaymentWorkflowTest extends TestCase
         $hardware = SupplierPayee::create(['name' => 'Harbour Hardware', 'type' => 'supplier', 'contact_person' => 'Halima', 'phone' => '0711 000 111', 'address' => 'Kurasini, Dar es Salaam', 'is_active' => true]);
         $plant = SupplierPayee::create(['name' => 'Coastal Plant Hire', 'type' => 'supplier', 'is_active' => true]);
         $first = $this->approvedRequest($project, '100.00');
-        $first->update(['request_batch_code' => 'SRQ-GROUP-001', 'request_line_number' => 1, 'supplier_payee_id' => $hardware->id, 'item_description' => 'Cement']);
+        $first->update(['request_batch_code' => 'SRQ-GROUP-001', 'request_line_number' => 1, 'supplier_payee_id' => $hardware->id, 'item_description' => 'Cement', 'commercial_notes' => 'PM checked quantity, supplier grouping and internal-budget allocation.']);
         $second = $this->approvedRequest($project, '250.00');
         $second->update(['request_batch_code' => 'SRQ-GROUP-001', 'request_line_number' => 2, 'supplier_payee_id' => $plant->id, 'item_description' => 'Excavator hire']);
 
@@ -74,6 +74,7 @@ class AccountantPaymentWorkflowTest extends TestCase
             ->assertSee('Halima')->assertSee('0711 000 111')->assertSee('Kurasini, Dar es Salaam')
             ->assertSee('Coastal Plant Hire')->assertSee('Excavator hire')->assertSee('350.00')
             ->assertSee('Pay This Supplier Group')->assertDontSee('Original Request')->assertDontSee('Requested By')
+            ->assertDontSee('PM checked quantity, supplier grouping and internal-budget allocation.')
             ->assertSee('project_id='.$project->id.'&amp;filter=all', false);
 
         app(ExpensePaymentRecorder::class)->record($first->fresh(), ['amount' => '50.00', 'payment_date' => now()->toDateString(), 'payment_method' => 'bank_transfer'], $accountant);

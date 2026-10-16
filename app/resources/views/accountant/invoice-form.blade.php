@@ -2,14 +2,14 @@
 @section('title', 'Create Client Invoice · '.$project->name)
 @section('content')
 <a class="back-link" href="{{ route('accountant.projects.show', $project) }}">&larr; Back to {{ $project->name }}</a>
-<div class="topline"><div><h2>Create Client Invoice</h2><p>{{ $project->name }} · {{ $project->project_code }} · {{ $project->client?->name ?? 'No client linked' }}</p></div></div>
+<div class="topline"><div><h2>{{ $estimate ? 'Create Invoice from Estimate' : 'Create Manual Client Invoice' }}</h2><p>{{ $project->name }} · {{ $project->project_code }} · {{ $project->client?->name ?? 'No client linked' }}</p></div></div>
 @if($errors->any())<div class="flash error"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 <form method="POST" action="{{ route('accountant.invoices.store', $project) }}"><input type="hidden" name="project_id" value="{{ $project->id }}"><input type="hidden" name="client_id" value="{{ $project->client_id }}">@csrf
 <section class="panel form-section"><h3>Invoice Context</h3><div class="row2"><div class="field"><label>Project</label><input value="{{ $project->name }} · {{ $project->project_code }}" readonly></div><div class="field"><label>Client</label><input value="{{ $project->client?->name ?? 'No client linked' }}" readonly></div></div><div class="row2"><div class="field"><label for="due_at">Due Date <span class="req">*</span></label><input id="due_at" name="due_at" type="date" value="{{ old('due_at', now()->addDays(30)->toDateString()) }}" required></div><div class="field"><label for="reference">Reference / Subject</label><input id="reference" name="reference" value="{{ old('reference') }}"></div></div><div class="field"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="2">{{ old('notes') }}</textarea></div></section>
 
 @if($estimate)
 <input type="hidden" name="project_estimate_id" value="{{ $estimate->id }}">
-<section class="panel form-section"><div class="topline"><div><h3>Select Work from Approved Estimate</h3><p class="form-context">Tick any phases or individual BOQ lines. Claim the full remaining amount or type a smaller progress amount.</p></div><button type="button" class="btn btn-ghost" id="selectAllRemaining">Select All Remaining</button></div>
+<section class="panel form-section"><div class="topline"><div><h3>Select Estimate Items to Invoice</h3><p class="form-context">Tick one or more phases or individual estimate lines. Edit “This Invoice” to the exact amount being invoiced now; it cannot exceed the remaining estimate amount.</p></div><button type="button" class="btn btn-ghost" id="selectAllRemaining">Select All Remaining</button></div>
 @foreach($estimate->entries->groupBy(fn($entry) => $entry->phase?->stage_label ?? 'Other') as $phaseLabel => $phaseEntries)
 <article style="border:1px solid var(--line);border-radius:10px;margin:12px 0;overflow:hidden">
  <div style="padding:12px 14px;background:var(--surface-2);display:flex;justify-content:space-between"><label><input type="checkbox" class="phase-toggle"> <strong>{{ $phaseLabel }}</strong></label><span>Remaining TSh {{ \App\Support\Money::format(\App\Support\Money::sum($phaseEntries->pluck('remaining_amount'))) }}</span></div>

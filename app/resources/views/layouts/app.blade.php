@@ -95,7 +95,7 @@
   tfoot th{padding:11px 16px;border-top:2px solid var(--line-strong);text-align:left;background:var(--surface-2);}
   @media(max-width:700px){.main{padding:18px 14px 40px}.phase-heading{display:block}.phase-heading .btn{margin-top:8px}.estimate-actions{align-items:flex-start;flex-direction:column}}
 
-  .main{padding:22px 30px 60px;max-width:1180px;min-width:0;width:100%;}
+  .main{padding:22px 30px 60px;max-width:none;min-width:0;width:100%;}
   .crumb{font-size:12px;color:var(--ink-dim);margin-bottom:6px;}
   .crumb a{color:var(--ink-dim);text-decoration:none;} .crumb a:hover{color:var(--primary);}
   .topline{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:22px;flex-wrap:wrap;}

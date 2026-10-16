@@ -64,6 +64,46 @@ class AccountantClientBillingWorkflowTest extends TestCase
         $this->assertSame('paid', $invoice->fresh()->payment_status);
     }
 
+    public function test_create_from_estimate_is_primary_and_accepts_selected_partial_claim_amount(): void
+    {
+        [$project, $accountant, $phase] = $this->projectAndAccountant();
+        $estimate = ProjectEstimate::create([
+            'estimate_code' => 'EST-INVOICE-SOURCE-001', 'project_id' => $project->id,
+            'client_id' => $project->client_id, 'version' => 1, 'status' => 'issued',
+        ]);
+        $entry = $estimate->entries()->create([
+            'project_phase_id' => $phase->id, 'main_category' => 'materials',
+            'item_description' => 'Foundation concrete', 'quantity' => '10', 'unit' => 'm3',
+            'base_unit_cost' => '100.00', 'markup_percent' => '20.0000',
+        ]);
+
+        $projectPage = $this->actingAs($accountant)->get(route('accountant.projects.show', $project));
+        $projectPage->assertOk()
+            ->assertSeeInOrder(['Create from Estimate', 'Manual Invoice', 'Transaction Register'])
+            ->assertSee(route('accountant.invoices.create', ['project' => $project, 'from_estimate' => 1]), false);
+
+        $this->actingAs($accountant)->get(route('accountant.invoices.create', ['project' => $project, 'from_estimate' => 1]))
+            ->assertOk()->assertSee('Create Invoice from Estimate')->assertSee('Select Estimate Items to Invoice')
+            ->assertSee('Foundation concrete')->assertSee('This Invoice');
+
+        $this->actingAs($accountant)->post(route('accountant.invoices.store', $project), [
+            'project_id' => $project->id, 'client_id' => $project->client_id,
+            'project_estimate_id' => $estimate->id, 'due_at' => today()->addDays(30)->toDateString(),
+            'items' => [$entry->id => [
+                'selected' => '1', 'estimate_entry_id' => $entry->id,
+                'project_phase_id' => $phase->id, 'main_category' => 'materials',
+                'item_description' => $entry->item_description, 'quantity' => $entry->quantity,
+                'unit' => $entry->unit, 'unit_price' => $entry->client_unit_cost,
+                'claim_amount' => '450.00',
+            ]],
+        ])->assertRedirect(route('accountant.projects.show', $project));
+
+        $invoice = ClientInvoice::latest('id')->firstOrFail();
+        $this->assertSame($estimate->id, $invoice->project_estimate_id);
+        $this->assertSame('450.00', $invoice->total_amount);
+        $this->assertSame('450.00', $invoice->items->first()->claim_amount);
+    }
+
     public function test_client_payment_overpayment_zero_and_non_issued_invoice_are_blocked(): void
     {
         [$project, $accountant, $phase] = $this->projectAndAccountant();
