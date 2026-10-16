@@ -348,17 +348,8 @@ class ProjectManagerController extends Controller
         $comparison = $budgets->projectComparison($project);
         $siteRequests = $project->expenseRequests()->where('status', '!=', 'cancelled')->with('phase')->orderByDesc('submitted_at')->get();
         $requestBatches = $this->requestBatches($siteRequests);
-        $issuedInvoices = $project->invoices()->where('status', 'issued')->with('payments')->get();
-        $invoiced = Money::sum($issuedInvoices->map(fn ($invoice) => $invoice->total_amount));
-        $received = Money::sum($issuedInvoices->flatMap(fn ($invoice) => $invoice->payments->pluck('amount')));
-        $receivables = Money::difference($invoiced, $received);
-        $financialInsights = [
-            'invoiced' => $invoiced,
-            'received' => $received,
-            'receivables' => Money::compare($receivables, '0') < 0 ? '0.00' : $receivables,
-            'payables' => Money::sum($siteRequests->where('status', 'approved')->map(fn (ExpenseRequest $item) => $item->approved_outstanding_amount)),
-            'cash' => Money::difference($received, $comparison['overall']['actual']),
-        ];
+        $outstandingPayables = Money::sum($siteRequests->where('status', 'approved')
+            ->map(fn (ExpenseRequest $item) => $item->approved_outstanding_amount));
         $requestInsights = [
             'awaiting_pricing' => $requestBatches->where('state', 'awaiting_pricing')->count(),
             'ready' => $requestBatches->where('state', 'ready')->count(),
@@ -382,7 +373,7 @@ class ProjectManagerController extends Controller
             'comparison' => $comparison,
             'siteRequests' => $siteRequests,
             'requestBatches' => $requestBatches,
-            'financialInsights' => $financialInsights,
+            'outstandingPayables' => $outstandingPayables,
             'requestInsights' => $requestInsights,
             'budgetDocuments' => $budgetDocuments,
             'selectedBudget' => $selectedBudget,
