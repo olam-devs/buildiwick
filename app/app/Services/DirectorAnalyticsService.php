@@ -128,16 +128,56 @@ class DirectorAnalyticsService
     {
         return $this->loadProjects()->when($projectId, fn (Collection $projects) => $projects->where('id', $projectId))
             ->flatMap(function (Project $project) {
-                return $project->expenseRequests->where('status', 'approved')->map(function (ExpenseRequest $request) use ($project) {
-                    $approved = $request->approved_payable_amount;
-                    $paid = $request->paid_to_date;
-                    $outstanding = $request->approved_outstanding_amount;
-                    if (Money::compare($outstanding, '0') <= 0) {
-                        return null;
-                    }
+                return $project->expenseRequests->where('status', 'approved')
+                    ->groupBy(fn (ExpenseRequest $request) => $request->request_batch_code ?: $request->request_code)
+                    ->map(function (Collection $items, string $code) use ($project) {
+                        $items = $items->sortBy('request_line_number')->values();
+                        $approved = Money::sum($items->map(fn (ExpenseRequest $request) => $request->approved_payable_amount));
+                        $paid = Money::sum($items->map(fn (ExpenseRequest $request) => $request->paid_to_date));
+                        $outstanding = Money::sum($items->map(fn (ExpenseRequest $request) => $request->approved_outstanding_amount));
+                        if (Money::compare($outstanding, '0') <= 0) {
+                            return null;
+                        }
 
-                    return ['request' => $request, 'project' => $project, 'approved' => $approved, 'paid' => $paid, 'outstanding' => $outstanding];
-                })->filter();
+                        $categories = $items->groupBy('main_category')->map(function (Collection $categoryItems, string $category) {
+                            $supplierGroups = $categoryItems->groupBy(fn (ExpenseRequest $item) => $item->supplier_request_group_id
+                                ? 'group-'.$item->supplier_request_group_id
+                                : 'supplier-'.($item->supplier_payee_id ?: 'unassigned'))
+                                ->map(function (Collection $supplierItems) {
+                                    $first = $supplierItems->first();
+
+                                    return [
+                                        'code' => $first->supplierRequestGroup?->group_code ?? $first->request_batch_code,
+                                        'supplier' => $first->supplierRequestGroup?->supplier?->name ?? $first->supplierPayee?->name ?? 'Supplier not assigned',
+                                        'items' => $supplierItems->values(),
+                                        'approved' => Money::sum($supplierItems->map(fn (ExpenseRequest $item) => $item->approved_payable_amount)),
+                                        'paid' => Money::sum($supplierItems->map(fn (ExpenseRequest $item) => $item->paid_to_date)),
+                                        'outstanding' => Money::sum($supplierItems->map(fn (ExpenseRequest $item) => $item->approved_outstanding_amount)),
+                                    ];
+                                })->values();
+
+                            return [
+                                'code' => $category,
+                                'label' => ProjectManagerBudgetService::CATEGORIES[$category] ?? ucwords(str_replace('_', ' ', $category)),
+                                'items' => $categoryItems->values(),
+                                'supplier_groups' => $supplierGroups,
+                                'approved' => Money::sum($categoryItems->map(fn (ExpenseRequest $item) => $item->approved_payable_amount)),
+                                'paid' => Money::sum($categoryItems->map(fn (ExpenseRequest $item) => $item->paid_to_date)),
+                                'outstanding' => Money::sum($categoryItems->map(fn (ExpenseRequest $item) => $item->approved_outstanding_amount)),
+                            ];
+                        })->values();
+
+                        return [
+                            'request' => $items->first(),
+                            'code' => $code,
+                            'project' => $project,
+                            'items' => $items,
+                            'categories' => $categories,
+                            'approved' => $approved,
+                            'paid' => $paid,
+                            'outstanding' => $outstanding,
+                        ];
+                    })->filter();
             })->values();
     }
 

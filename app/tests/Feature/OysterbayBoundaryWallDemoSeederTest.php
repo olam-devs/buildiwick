@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Project;
 use App\Models\User;
+use App\Services\DirectorAnalyticsService;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoProjectSeeder;
 use Database\Seeders\DemoWorkspaceSeeder;
@@ -50,6 +51,11 @@ class OysterbayBoundaryWallDemoSeederTest extends TestCase
         $this->assertSame(7, $project->expenseRequests()->pluck('supplier_request_group_id')->unique()->count());
         $this->assertSame(9, $project->expensePayments()->count());
         $this->assertTrue($project->expenseRequests()->get()->every(fn ($request) => $request->internal_budget_entry_id !== null));
+        $invoice = $project->invoices()->with(['items', 'payments'])->firstOrFail();
+        $this->assertSame('48794525.00', $invoice->total_amount);
+        $this->assertSame('20000000.00', $invoice->paid_to_date);
+        $this->assertSame('6720000.00', app(DirectorAnalyticsService::class)
+            ->project($project, now()->startOfYear()->toImmutable(), now()->endOfYear()->toImmutable())['cash_balance']);
 
         $substructure = $project->phases()->where('stage_code', 'substructure')->firstOrFail();
         $estimator = User::where('email', 'twalib@buildiwick.test')->firstOrFail();
@@ -68,14 +74,22 @@ class OysterbayBoundaryWallDemoSeederTest extends TestCase
             ->assertSee('A Subtotal')->assertSee('B Subtotal')->assertSee('C Subtotal')->assertSee('8,043,500.00');
 
         $director = User::where('email', 'director@buildiwick.test')->firstOrFail();
-        $this->actingAs($director)
-            ->get(route('director.projects.show', $project).'#phases')
+        $projectPage = $this->actingAs($director)->get(route('director.projects.show', $project).'#phases');
+        $projectPage
             ->assertOk()
             ->assertSee('data-project-view="estimate"', false)
             ->assertSee('data-project-view="budget"', false)
+            ->assertDontSee('Internal Budget Category and Subcategory Usage')
             ->assertSee('Expense Trace')
             ->assertSee('Budget Origin to Supplier Payment')
             ->assertSee('Jengo Building Materials')
             ->assertSee('Cement for plastering both wall faces');
+        $this->actingAs($director)->get(route('director.budgets.show', [$project, $materialBudget]))
+            ->assertOk()->assertSee('Plastering · Materials Budget')->assertSee('Ground Floor')
+            ->assertSee('A Subtotal')->assertSee('8,043,500.00');
+        $this->actingAs($director)->get(route('director.payables.index', ['project_id' => $project->id]))
+            ->assertOk()->assertSee('MR-OYS-SUB-001')->assertSee('Materials')
+            ->assertSee('Cement for foundation works')->assertSee('Y12 reinforcement steel')
+            ->assertSee('Jengo Building Materials')->assertSee('Imara Ready Mix &amp; Steel', false);
     }
 }

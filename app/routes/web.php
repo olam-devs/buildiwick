@@ -29,6 +29,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/director/exports/projects.xlsx', [DirectorController::class, 'exportPortfolio'])->name('director.portfolio.export');
     Route::get('/director/exports/summary.xlsx', [DirectorController::class, 'exportSummary'])->name('director.summary.export');
     Route::get('/director/exports/transactions.xlsx', [DirectorController::class, 'exportTransactions'])->name('director.transactions.export');
+    Route::get('/director/projects/{project}/budgets/{budget}', [DirectorController::class, 'budget'])->name('director.budgets.show');
     Route::get('/director/projects/{project}', [DirectorController::class, 'project'])->name('director.projects.show');
     Route::post('/director/projects/{project}/budgets/{budget}/decision', [DirectorController::class, 'decideBudget'])->name('director.budgets.decision');
     Route::get('/director/receivables', [DirectorController::class, 'receivables'])->name('director.receivables.index');

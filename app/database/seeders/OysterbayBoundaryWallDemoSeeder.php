@@ -367,9 +367,12 @@ class OysterbayBoundaryWallDemoSeeder extends Seeder
                 'due_at' => today()->subWeek(),
                 'created_by' => $accounts->id,
                 'issued_by' => $accounts->id,
-                'notes' => 'Demo invoice containing completed Preliminaries and Demolition quotation items.',
+                'notes' => 'Demo invoice containing completed Preliminaries, Demolition, Substructure and Superstructure quotation items.',
             ]);
-            foreach ($estimate->entries()->whereIn('project_phase_id', [$phases['preliminaries']->id, $phases['demolition']->id])->get() as $entry) {
+            foreach ($estimate->entries()->whereIn('project_phase_id', [
+                $phases['preliminaries']->id, $phases['demolition']->id,
+                $phases['substructure']->id, $phases['superstructure']->id,
+            ])->get() as $entry) {
                 $invoice->items()->create([
                     'project_phase_id' => $entry->project_phase_id,
                     'estimate_entry_id' => $entry->id,
@@ -392,13 +395,13 @@ class OysterbayBoundaryWallDemoSeeder extends Seeder
                 'client_invoice_id' => $invoice->id,
                 'project_id' => $project->id,
                 'client_id' => $client->id,
-                'amount' => 4000000,
+                'amount' => 20000000,
                 'payment_date' => today()->subWeeks(2),
                 'payment_method' => 'bank_transfer',
                 'transaction_reference' => 'DEMO-OYS-CLIENT-001',
-                'reference' => 'BWK/OYS-BW/IP-01-PART',
+                'reference' => 'BWK/OYS-BW/IP-01-RECEIPT',
                 'recorded_by' => $accounts->id,
-                'notes' => 'Demo part payment; remaining balance is visible in receivables.',
+                'notes' => 'Demo progress payment that keeps the project cash position positive while retaining an outstanding receivable.',
             ]);
         });
     }

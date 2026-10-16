@@ -117,13 +117,21 @@ class DirectorController extends Controller
         if ($selectedEstimatePhaseId && ! $project->phases->contains('id', $selectedEstimatePhaseId)) {
             abort(404);
         }
-        $selectedBudget = null;
-        if ($request->filled('budget')) {
-            $selectedBudget = $projectBudgets->firstWhere('id', $request->integer('budget'));
-            abort_unless($selectedBudget, 404);
-        }
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId', 'selectedBudget'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId'));
+    }
+
+    public function budget(Project $project, InternalBudget $budget)
+    {
+        $this->authorize('view-director-analytics');
+        abort_unless((int) $budget->project_id === (int) $project->id, 404);
+        $budget->load(['phase', 'entries.phase', 'createdBy', 'approvedBy']);
+
+        return view('director.budget', [
+            'project' => $project,
+            'budget' => $budget,
+            'categoryLabel' => ProjectManagerBudgetService::CATEGORIES[$budget->main_category] ?? $budget->main_category,
+        ]);
     }
 
     public function decideBudget(Request $request, Project $project, InternalBudget $budget, ProjectManagerBudgetService $budgets)
