@@ -236,7 +236,8 @@ class EstimatorWorkflowTest extends TestCase
         $this->actingAs($estimator)->get(route('estimator.entries.create', [$project, $phases[0]]))
             ->assertOk()->assertSee('worker_day')->assertDontSee('Supplier / Fundi')->assertDontSee('supplier_fundi_client');
         $this->actingAs($estimator)->get(route('estimator.projects.show', $project))
-            ->assertOk()->assertSee('Client Unit Price')->assertDontSee('Supplier / Fundi / Provider')->assertDontSee('supplier_fundi_client');
+            ->assertOk()->assertSee('Rate')->assertSee('Amount')->assertDontSee('Category / Subcategory')
+            ->assertDontSee('Supplier / Fundi / Provider')->assertDontSee('supplier_fundi_client');
     }
 
     public function test_zero_base_cost_with_markup_has_zero_totals_and_effective_markup_is_zero(): void
@@ -363,8 +364,9 @@ class EstimatorWorkflowTest extends TestCase
         $this->actingAs($estimator)->get(route('estimator.projects.index'))
             ->assertOk()->assertSee('50.00')->assertSee('Draft');
         $this->actingAs($estimator)->get(route('estimator.projects.show', $project))
-            ->assertOk()->assertSee('Phase 1 — Preliminaries')->assertSee('Phase Base Cost')->assertSee('Markup Amount')
-            ->assertSee('Effective Markup')->assertSee('Issue Estimate')->assertSee('Project Base Cost');
+            ->assertOk()->assertSee('Phase 1 — Preliminaries')->assertSee('Estimator Phase Total')
+            ->assertSee('Effective Markup')->assertSee('Issue Estimate')->assertSee('Quotation Lines')
+            ->assertDontSee('Estimator Budget Analytics')->assertDontSee('Category / Subcategory');
     }
 
     public function test_landing_redirects_estimator_to_estimator_dashboard_and_hides_financial_entry_ui(): void
@@ -388,7 +390,7 @@ class EstimatorWorkflowTest extends TestCase
         $this->actingAs($this->user('site_operator'))->get(route('estimator.projects.show', $project))->assertForbidden();
         $this->actingAs($this->user('project_manager'))->get(route('estimator.projects.show', $project))->assertForbidden();
         $this->actingAs($this->user('accounts'))->get(route('estimator.projects.index'))->assertForbidden();
-        $this->actingAs($this->user('admin'))->get(route('estimator.projects.show', $project))->assertOk()->assertSee('50.0000%')->assertSee('50.00');
+        $this->actingAs($this->user('admin'))->get(route('estimator.projects.show', $project))->assertOk()->assertSee('Estimator Phase Total')->assertSee('150.00');
     }
 
     public function test_estimator_can_manage_project_specific_phases_until_estimate_is_issued(): void

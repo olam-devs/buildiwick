@@ -13,14 +13,12 @@
   <section class="panel form-section">
     <h3>Estimate Line</h3>
     <p class="form-context">Project, working estimate, phase, creator, and creation date are assigned by the system. This workspace supports future phases as well as the current operational phase.</p>
-    <div class="row3">
-      <div class="field"><label for="work_area">Work Area / Building</label><input name="work_area" id="work_area" value="{{ old('work_area', $entry?->work_area) }}" maxlength="150" placeholder="e.g. Main Building"></div>
-      <div class="field"><label for="work_section">Work Section</label><input name="work_section" id="work_section" value="{{ old('work_section', $entry?->work_section) }}" maxlength="255" placeholder="e.g. Reinforced concrete"></div>
-      <div class="field"><label for="item_reference">Item Ref.</label><input name="item_reference" id="item_reference" value="{{ old('item_reference', $entry?->item_reference) }}" maxlength="100" placeholder="e.g. 2.3.1"></div>
-    </div>
+    <input type="hidden" name="work_area" value="{{ old('work_area', $entry?->work_area) }}">
+    <input type="hidden" name="main_category" value="{{ old('main_category', $entry?->main_category ?? 'materials') }}">
+    <input type="hidden" name="subcategory" value="{{ old('subcategory', $entry?->subcategory) }}">
     <div class="row2">
-      <div class="field"><label for="main_category">Main Category <span class="req">*</span></label><select name="main_category" id="main_category" required><option value="">Select category</option>@foreach($lookups['categories'] as $item)<option value="{{ $item->code }}" @selected(old('main_category', $entry?->main_category) === $item->code)>{{ $item->label }}</option>@endforeach</select></div>
-      <div class="field"><label for="subcategory">Subcategory</label><select name="subcategory" id="subcategory"><option value="">No subcategory / Other</option>@foreach($lookups['subcategories'] as $item)<option value="{{ $item->code }}" data-parent="{{ $item->parent_code }}" @selected(old('subcategory', $entry?->subcategory) === $item->code)>{{ $item->label }}</option>@endforeach</select><div class="field-err">For categories without seeded subcategories, leave this blank.</div></div>
+      <div class="field"><label for="work_section">Subphase / Section</label><input name="work_section" id="work_section" value="{{ old('work_section', $entry?->work_section) }}" maxlength="255" placeholder="e.g. 3.1 Excavation and Earthwork"></div>
+      <div class="field"><label for="item_reference">Item Ref.</label><input name="item_reference" id="item_reference" value="{{ old('item_reference', $entry?->item_reference) }}" maxlength="100" placeholder="e.g. 2.3.1"></div>
     </div>
     <div class="field"><label for="item_description">Item / Description <span class="req">*</span></label><input name="item_description" id="item_description" value="{{ old('item_description', $entry?->item_description) }}" maxlength="1000" required></div>
     <div class="row2">
@@ -50,31 +48,6 @@
 
 <script>
 (function(){
-  const category = document.getElementById('main_category');
-  const subcategory = document.getElementById('subcategory');
-  const unit = document.getElementById('unit');
-  const unitRecommendations = @json($lookups['unitRecommendations']);
-  function updateSubcategories(){
-    const selected = category.value;
-    Array.from(subcategory.options).forEach(function(option){
-      if (!option.value) return;
-      option.hidden = option.dataset.parent !== selected;
-      if (option.hidden && option.selected) subcategory.value = '';
-    });
-  }
-  category.addEventListener('change', updateSubcategories);
-  updateSubcategories();
-  function updateCategoryGuidance(){
-    const preferred = unitRecommendations[category.value] || [];
-    Array.from(unit.options).filter(option => option.value).sort((left, right) => {
-      const leftRank = preferred.indexOf(left.value);
-      const rightRank = preferred.indexOf(right.value);
-      return (leftRank < 0 ? 1000 : leftRank) - (rightRank < 0 ? 1000 : rightRank);
-    }).forEach(option => unit.appendChild(option));
-  }
-  category.addEventListener('change', updateCategoryGuidance);
-  updateCategoryGuidance();
-
   function scaled(value, digits){
     const parts = String(value || '0').split('.');
     const whole = BigInt(parts[0] || '0');

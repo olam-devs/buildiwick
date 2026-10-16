@@ -13,7 +13,6 @@ use App\Models\ProjectPhase;
 use App\Services\EstimatorEstimateService;
 use App\Services\ExcelExportService;
 use App\Services\ProjectPhaseService;
-use App\Support\CostEntryOptions;
 use Illuminate\Http\Request;
 
 class EstimatorController extends Controller
@@ -72,13 +71,12 @@ class EstimatorController extends Controller
             'estimate' => $version,
             'summary' => $estimates->projectSummary($version),
         ]);
-        $subcategoryLabels = Lookup::where('type', 'subcategory')->pluck('label', 'code');
         $unitLabels = Lookup::where('type', 'unit')->pluck('label', 'code');
         $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'estimate')->with('editor')->latest()->get();
 
         $phasesLocked = $phases->isLocked($project);
 
-        return view('estimator.show', compact('project', 'workingEstimate', 'displayEstimate', 'phaseSummaries', 'projectSummary', 'history', 'subcategoryLabels', 'unitLabels', 'editLogs', 'phasesLocked'));
+        return view('estimator.show', compact('project', 'workingEstimate', 'displayEstimate', 'phaseSummaries', 'projectSummary', 'history', 'unitLabels', 'editLogs', 'phasesLocked'));
     }
 
     public function storePhase(Request $request, Project $project, ProjectPhaseService $phases)
@@ -201,25 +199,21 @@ class EstimatorController extends Controller
         $this->authorize('view', $estimate);
         $estimate->load(['entries.phase', 'client', 'preparedBy', 'issuedBy']);
         $rows = $estimate->entries->sortBy(fn ($entry) => [$entry->phase?->phase_order, $entry->id])->map(fn ($entry) => [
-            $entry->work_area ?: 'General', $entry->phase?->stage_label, $entry->work_section ?: 'General work', $entry->item_reference,
-            $entry->main_category, $entry->subcategory, $entry->item_description,
-            $entry->quantity ?? 1, $entry->unit ?? 'LS', $entry->base_unit_cost, $entry->base_total,
-            $entry->markup_percent, $entry->client_unit_cost, $entry->markup_amount, $entry->line_total, $entry->notes,
+            $entry->phase?->stage_label, $entry->work_section ?: 'General work', $entry->item_reference,
+            $entry->item_description, $entry->quantity ?? 1, $entry->unit ?? 'LS',
+            $entry->client_unit_cost, $entry->line_total, $entry->notes,
         ]);
-        $rows->push(['', '', '', '', 'PROJECT TOTAL', '', '', '', '', '', '', '', '', '', $estimate->total_amount, '']);
+        $rows->push(['', '', '', 'PROJECT TOTAL', '', '', '', $estimate->total_amount, '']);
 
         return $excel->download($estimate->estimate_code, 'Project Estimate - '.$project->name,
-            ['Work Area / Building', 'Phase', 'Work Section', 'Item Ref.', 'Category', 'Subcategory', 'Item / Description', 'Quantity', 'Unit', 'Base Unit Cost', 'Base Total', 'Markup %', 'Client Unit Price', 'Markup Amount', 'Client Total', 'Notes'],
-            $rows, [$estimate->estimate_code, 'Client: '.($estimate->client?->name ?? 'Not linked'), 'Location: '.($project->location ?? 'Not set'), 'Version '.$estimate->version, 'Status: '.ucfirst($estimate->status)], [9, 10, 12, 13, 14]);
+            ['Phase', 'Subphase / Section', 'Item Ref.', 'Description', 'Quantity', 'Unit', 'Rate', 'Amount', 'Notes'],
+            $rows, [$estimate->estimate_code, 'Client: '.($estimate->client?->name ?? 'Not linked'), 'Location: '.($project->location ?? 'Not set'), 'Version '.$estimate->version, 'Status: '.ucfirst($estimate->status)], [6, 7]);
     }
 
     private function lookupData(): array
     {
         return [
-            'categories' => Lookup::ofType('main_category')->get(),
-            'subcategories' => Lookup::ofType('subcategory')->get(),
             'units' => Lookup::ofType('unit')->get(),
-            'unitRecommendations' => CostEntryOptions::unitRecommendations(),
         ];
     }
 

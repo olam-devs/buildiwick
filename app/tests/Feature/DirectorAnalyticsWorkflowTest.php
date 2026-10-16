@@ -125,8 +125,8 @@ class DirectorAnalyticsWorkflowTest extends TestCase
                 && $row['actual_utilization'] === '60.00'
                 && $row['phase_analytics'][0]['approved'] === '80000000.00'
                 && $row['phase_analytics'][0]['actual'] === '60000000.00'
-                && $row['phase_analytics'][0]['estimator_base'] === '1000.00'
-                && $row['category_analytics']['materials']['estimator_base'] === '1000.00'
+                && $row['phase_analytics'][0]['estimator_client'] === '1000.00'
+                && ! array_key_exists('estimator_base', $row['category_analytics']['materials'])
                 && $row['category_analytics']['materials']['budget'] === '100000000.00'
                 && $row['category_analytics']['materials']['subcategories']->firstWhere('key', 'concrete_cement')['actual'] === '60000000.00';
         });
