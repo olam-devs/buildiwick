@@ -46,7 +46,7 @@ class AppServiceProvider extends ServiceProvider
                 if ($ability === 'delete' && ($target instanceof Project || $target instanceof ProjectPhase || in_array($target, [Project::class, ProjectPhase::class], true))) {
                     return null; // These policies enforce historical integrity even for Admin.
                 }
-                if (in_array($ability, ['update', 'delete', 'finalize'], true)
+                if (in_array($ability, ['create', 'update', 'delete', 'finalize', 'submit', 'revise', 'returnToEstimator'], true)
                     && ($target instanceof ProjectEstimate || $target instanceof EstimateEntry
                         || in_array($target, [ProjectEstimate::class, EstimateEntry::class], true))) {
                     return null; // Estimate lifecycle and invoice-reference locks apply to Admin too.

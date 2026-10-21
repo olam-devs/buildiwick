@@ -14,22 +14,15 @@ class EstimateEntryPolicy
             && $user->assignedProjects()->whereKey($entry->estimate->project_id)->exists());
     }
 
+    /** Lines follow the editability of their estimate version. */
     public function create(User $user, ProjectEstimate $estimate): bool
     {
-        return $estimate->status === 'draft'
-            && ! $estimate->invoices()->exists()
-            && ($user->hasRole('admin') || ($user->hasRole('estimator_qs')
-                && $user->assignedProjects()->whereKey($estimate->project_id)->exists()));
+        return (new ProjectEstimatePolicy)->update($user, $estimate);
     }
 
     public function update(User $user, EstimateEntry $entry): bool
     {
-        $estimate = $entry->estimate;
-
-        return $estimate->status === 'draft'
-            && ! $estimate->invoices()->exists()
-            && ($user->hasRole('admin') || ($user->hasRole('estimator_qs')
-                && $user->assignedProjects()->whereKey($estimate->project_id)->exists()));
+        return (new ProjectEstimatePolicy)->update($user, $entry->estimate);
     }
 
     public function delete(User $user, EstimateEntry $entry): bool

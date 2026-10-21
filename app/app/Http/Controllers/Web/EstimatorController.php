@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\ProjectEditLog;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
+use App\Services\EstimateTemplateService;
 use App\Services\EstimatorEstimateService;
 use App\Services\ExcelExportService;
 use App\Services\ProjectPhaseService;
@@ -30,10 +31,15 @@ class EstimatorController extends Controller
             ->with(['client', 'activePhase', 'estimates' => fn ($query) => $query->with('entries')->orderByDesc('version')])
             ->orderBy('name')
             ->get()
-            ->map(function (Project $project) use ($estimates) {
-                $estimate = $project->estimates->firstWhere('status', 'draft')
-                    ?? $project->estimates->firstWhere('status', 'issued')
-                    ?? $project->estimates->sortByDesc('version')->first();
+            ->map(function (Project $project) use ($estimates, $user) {
+                // Estimators never see an Admin-held revision; their view stops at what they submitted.
+                $visible = $user->hasRole('admin')
+                    ? $project->estimates
+                    : $project->estimates->reject(fn (ProjectEstimate $estimate) => $estimate->status === 'draft' && ! $estimate->isEstimatorEditable());
+                $estimate = $visible->firstWhere('status', 'draft')
+                    ?? $visible->firstWhere('status', 'submitted')
+                    ?? $visible->firstWhere('status', 'issued')
+                    ?? $visible->sortByDesc('version')->first();
                 $summary = $estimate ? $estimates->projectSummary($estimate) : null;
 
                 return (object) [
@@ -56,8 +62,12 @@ class EstimatorController extends Controller
             'activePhase',
             'phases' => fn ($query) => $query->orderBy('phase_order'),
         ]);
-        $workingEstimate = $project->estimates()->where('status', 'draft')->with('entries.enteredBy')->first();
-        $displayEstimate = $workingEstimate ?? $project->estimates()->whereIn('status', ['issued', 'superseded'])->orderByDesc('version')->with('entries.enteredBy')->first();
+        // The working estimate is only "working" for someone allowed to change it; everyone else sees it read-only.
+        $openEstimate = $project->estimates()->whereIn('status', ['draft', 'submitted'])->with(['entries.enteredBy', 'submittedBy', 'returnedBy'])->first();
+        $workingEstimate = $openEstimate && $request->user()->can('update', $openEstimate) ? $openEstimate : null;
+        $displayEstimate = $workingEstimate ?? $project->estimates()
+            ->whereIn('status', ['submitted', 'issued', 'superseded'])
+            ->orderByDesc('version')->with(['entries.enteredBy', 'submittedBy', 'returnedBy'])->first();
 
         $phaseSummaries = [];
         if ($displayEstimate) {
@@ -74,7 +84,8 @@ class EstimatorController extends Controller
         $unitLabels = Lookup::where('type', 'unit')->pluck('label', 'code');
         $editLogs = ProjectEditLog::where('project_id', $project->id)->where('document_type', 'estimate')->with('editor')->latest()->get();
 
-        $phasesLocked = $phases->isLocked($project);
+        $phasesLocked = $phases->isLocked($project)
+            || ($request->user()->hasRole('estimator_qs') && ! $request->user()->can('create', [ProjectEstimate::class, $project]));
         $selectedPhaseId = $request->integer('phase') ?: null;
         if ($selectedPhaseId && ! $project->phases->contains('id', $selectedPhaseId)) {
             abort(404);
@@ -189,12 +200,55 @@ class EstimatorController extends Controller
         return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate entry deleted.');
     }
 
+    public function submit(Request $request, Project $project, ProjectEstimate $estimate, EstimatorEstimateService $estimates)
+    {
+        abort_unless((int) $estimate->project_id === (int) $project->id, 404);
+        $estimates->submit($estimate, $request->user());
+
+        return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate submitted to the Director. It is now read-only for you.');
+    }
+
     public function finalize(Request $request, Project $project, ProjectEstimate $estimate, EstimatorEstimateService $estimates)
     {
         abort_unless((int) $estimate->project_id === (int) $project->id, 404);
         $estimates->finalize($estimate, $request->user());
 
-        return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate issued and locked for invoicing.');
+        return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate approved, issued and locked for invoicing.');
+    }
+
+    public function returnToEstimator(Request $request, Project $project, ProjectEstimate $estimate, EstimatorEstimateService $estimates)
+    {
+        abort_unless((int) $estimate->project_id === (int) $project->id, 404);
+        $this->authorize('returnToEstimator', $estimate);
+        $validated = $request->validate(['review_notes' => ['required', 'string', 'max:2000']]);
+        $estimates->returnToEstimator($estimate, $validated['review_notes'], $request->user());
+
+        return redirect()->route('estimator.projects.show', $project)->with('success', 'Estimate returned to the Estimator with your notes.');
+    }
+
+    public function template(Request $request, Project $project, EstimateTemplateService $templates)
+    {
+        $this->authorize('viewProject', [ProjectEstimate::class, $project]);
+        $estimate = $project->estimates()->whereIn('status', ['draft', 'submitted'])->first();
+        if (! $estimate || ! $request->user()->can('update', $estimate)) {
+            $estimate = $project->estimates()->whereIn('status', ['submitted', 'issued', 'superseded'])->orderByDesc('version')->first();
+        }
+
+        return $templates->download($project, $estimate);
+    }
+
+    public function upload(Request $request, Project $project, EstimatorEstimateService $estimates, EstimateTemplateService $templates)
+    {
+        $this->authorize('viewProject', [ProjectEstimate::class, $project]);
+        $validated = $request->validate([
+            'estimate_file' => ['required', 'file', 'mimes:xlsx', 'max:5120'],
+            'edit_reason' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $rows = $templates->parse($project, $validated['estimate_file']);
+        $estimate = $estimates->ensureWorkingEstimate($project, $request->user());
+        $estimates->replaceEntries($estimate, $rows, $validated['edit_reason'] ?? null, $request->user());
+
+        return redirect()->route('estimator.projects.show', $project)->with('success', count($rows).' estimate line(s) uploaded into '.$estimate->estimate_code.'.');
     }
 
     public function export(Request $request, Project $project, ProjectEstimate $estimate, ExcelExportService $excel)

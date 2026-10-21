@@ -251,9 +251,12 @@ class FinancialIntegritySecurityTest extends TestCase
         $estimate = app(EstimatorEstimateService::class)->ensureWorkingEstimate($project, $estimator);
         $estimate->entries()->create(['project_phase_id' => $phase->id, 'main_category' => 'materials', 'item_description' => 'Entry', 'quantity' => '1', 'unit' => 'ls', 'base_unit_cost' => '100.00', 'markup_percent' => '0']);
 
-        $issued = app(EstimatorEstimateService::class)->finalize($estimate, $estimator);
+        $submitted = app(EstimatorEstimateService::class)->submit($estimate, $estimator);
+        $this->assertSame($estimator->id, $submitted->submitted_by);
+        $admin = $this->user('admin');
+        $issued = app(EstimatorEstimateService::class)->finalize($submitted, $admin);
         $this->assertSame('issued', $issued->status);
-        $this->assertSame($estimator->id, $issued->issued_by);
+        $this->assertSame($admin->id, $issued->issued_by);
         $this->assertNotNull($issued->issued_at);
     }
 

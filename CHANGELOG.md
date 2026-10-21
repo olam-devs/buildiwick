@@ -2,6 +2,21 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-21 — Estimate Submission, Director Review and Excel Upload
+
+**The Estimator's job now ends at submission; the Director (Admin) owns the estimate afterwards.**
+
+- Estimators click **Submit to Director** instead of **Issue Estimate**. A submitted estimate is read-only for the Estimator: no line edits, uploads, phase changes, re-submission or **Edit Estimate**. Their page shows it as submitted and nothing more.
+- The Director (the Admin authority; `hasRole('admin')` is true for Director) gets a **Director Review** panel on the estimate page. From there they can edit a submitted estimate's lines in place, **Approve & Issue** it, or **Return to Estimator** with required notes. Only an issued estimate counts for invoicing and Director analytics, so a submitted estimate cannot be invoiced until it is approved.
+- The Director can also start an estimate on their own, by the form or by upload, and issue it directly. **Edit Estimate** on an issued estimate is now Director-only. It opens a Director-held revision that the Estimator neither sees nor edits. **Return to Estimator** on an issued estimate opens a revision the Estimator can edit and resubmit.
+- New **Excel Template** panel: **Download Template** gives an `.xlsx` with a Lists sheet and dropdowns for Phase, Category, Subcategory and Unit, pre-filled with the current lines. **Upload Estimate** replaces every line in the working estimate. Labels or codes are accepted, phases can be given by name or number, and percent-formatted markup cells are understood. If any row is invalid, nothing is saved and every problem is listed by row number. On revised versions (v2+) an upload requires a justification and is recorded in the edit log.
+- Additive migration `2026_10_21_190403_add_estimate_submission_review_fields`: `editor_role`, `submitted_by/at`, `returned_by/at`, `review_notes` on `project_estimates`, plus the `submitted` estimate status lookup. Existing drafts keep their current estimator-editable behaviour.
+- Tests: new `EstimateSubmissionReviewTest` (8 tests) using the real Director role. Existing estimator and security tests were updated to the submit, then approve, flow. Full suite: 160 tests / 1,650 assertions passing.
+
+### Decisions
+
+- Estimate lifecycle is `draft → submitted → issued`. The Estimator controls only drafts whose `editor_role` is not `admin`. Everything after submission belongs to the Director/Admin.
+
 ## 2026-10-15 — Accountant Supplier-Group Payment Workspace
 
 **Corrected the approved-request workspace so Accounts operates entirely from PM-approved supplier groups.**

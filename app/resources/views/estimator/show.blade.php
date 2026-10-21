@@ -4,18 +4,62 @@
 <a class="back-link" href="{{ route('estimator.projects.index') }}">&larr; Back to Estimator Dashboard</a>
 <div class="topline">
   <div><h2>{{ $project->name }}</h2><p>{{ $project->project_code }} · {{ $project->client?->name ?? 'Client not linked' }} · {{ $project->location ?? 'Location not set' }}</p></div>
+  @php($statusLabel = fn ($estimate) => $estimate->status === 'submitted' ? 'Submitted to Director' : ($estimate->status === 'draft' ? 'Working draft' : ucfirst($estimate->status)))
   @if ($workingEstimate)
     <div class="estimate-actions">
       <a class="btn btn-ghost" href="{{ route('estimator.estimates.export', [$project, $workingEstimate]) }}">Download Excel</a>
-      <span class="dot-status attn">Working draft · v{{ $workingEstimate->version }}</span>
+      <span class="dot-status attn">{{ $statusLabel($workingEstimate) }} · v{{ $workingEstimate->version }}</span>
       @if ($workingEstimate->entries->isNotEmpty())
-        <form method="POST" action="{{ route('estimator.estimates.finalize', [$project, $workingEstimate]) }}" onsubmit="return confirm('Issue this estimate? The version will be locked for editing.');">@csrf<button class="btn btn-primary" type="submit">Issue Estimate</button></form>
+        @can('submit', $workingEstimate)
+          <form method="POST" action="{{ route('estimator.estimates.submit', [$project, $workingEstimate]) }}" onsubmit="return confirm('Submit this estimate to the Director? You will not be able to edit it afterwards unless the Director returns it to you.');">@csrf<button class="btn btn-primary" type="submit">Submit to Director</button></form>
+        @endcan
+        @can('finalize', $workingEstimate)
+          <form method="POST" action="{{ route('estimator.estimates.finalize', [$project, $workingEstimate]) }}" onsubmit="return confirm('Approve and issue this estimate? It becomes the version Accounts invoices from.');">@csrf<button class="btn btn-primary" type="submit">Approve &amp; Issue</button></form>
+        @endcan
       @endif
     </div>
   @elseif ($displayEstimate)
-    <div class="estimate-actions"><span class="dot-status {{ $displayEstimate->status === 'issued' ? 'active' : 'zero' }}">{{ ucfirst($displayEstimate->status) }} · v{{ $displayEstimate->version }}</span><a class="btn btn-ghost" href="{{ route('estimator.estimates.export', [$project, $displayEstimate]) }}">Download Excel</a>@if($displayEstimate->status === 'issued')<form method="POST" action="{{ route('estimator.estimates.edit', [$project,$displayEstimate]) }}" class="edit-document-form">@csrf<div class="field"><label for="estimate_edit_reason">Why is this estimate being edited? <span class="req">*</span></label><input id="estimate_edit_reason" name="edit_reason" maxlength="2000" required></div><button class="btn btn-primary" type="submit">Edit Estimate</button></form>@endif</div>
+    <div class="estimate-actions"><span class="dot-status {{ $displayEstimate->status === 'issued' ? 'active' : ($displayEstimate->status === 'submitted' ? 'attn' : 'zero') }}">{{ $statusLabel($displayEstimate) }} · v{{ $displayEstimate->version }}</span><a class="btn btn-ghost" href="{{ route('estimator.estimates.export', [$project, $displayEstimate]) }}">Download Excel</a>@can('revise', $displayEstimate)<form method="POST" action="{{ route('estimator.estimates.edit', [$project,$displayEstimate]) }}" class="edit-document-form">@csrf<div class="field"><label for="estimate_edit_reason">Why is this estimate being edited? <span class="req">*</span></label><input id="estimate_edit_reason" name="edit_reason" maxlength="2000" required></div><button class="btn btn-primary" type="submit">Edit Estimate</button></form>@endcan</div>
   @endif
 </div>
+
+@if ($errors->any() && ! $errors->has('estimate_file'))<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+@php($reviewEstimate = $workingEstimate ?? $displayEstimate)
+@if ($reviewEstimate && $reviewEstimate->status === 'submitted' && ! $workingEstimate)
+  <div class="flash">Submitted to Director{{ $reviewEstimate->submitted_at ? ' on '.$reviewEstimate->submitted_at->format('d M Y H:i') : '' }}. This estimate is now read-only for you; the Director will approve it or return it to you if changes are needed.</div>
+@endif
+@if ($workingEstimate && $workingEstimate->status === 'draft' && $workingEstimate->returned_at && $workingEstimate->editor_role === 'estimator')
+  <div class="flash"><strong>Returned by {{ $workingEstimate->returnedBy?->name ?? 'the Director' }} on {{ $workingEstimate->returned_at->format('d M Y H:i') }}:</strong> {{ $workingEstimate->review_notes }}</div>
+@endif
+@if ($reviewEstimate && auth()->user()->can('returnToEstimator', $reviewEstimate))
+  <section class="panel form-section">
+    <h3>Director Review</h3>
+    <p class="form-context">
+      @if ($reviewEstimate->status === 'submitted')
+        Submitted by {{ $reviewEstimate->submittedBy?->name ?? 'the Estimator' }}{{ $reviewEstimate->submitted_at ? ' on '.$reviewEstimate->submitted_at->format('d M Y H:i') : '' }}. You can edit the lines directly, approve and issue it, or return it to the Estimator.
+      @else
+        This estimate is issued. Use Edit Estimate to revise it yourself, or return it to the Estimator to open a revision they can edit.
+      @endif
+    </p>
+    <form method="POST" action="{{ route('estimator.estimates.return', [$project, $reviewEstimate]) }}" class="edit-document-form">@csrf<div class="field"><label for="review_notes">What should the Estimator change? <span class="req">*</span></label><input id="review_notes" name="review_notes" maxlength="2000" required></div><button class="btn btn-ghost" type="submit">Return to Estimator</button></form>
+  </section>
+@endif
+@if ($workingEstimate || auth()->user()->can('create', [\App\Models\ProjectEstimate::class, $project]))
+  @php($uploadTarget = $workingEstimate)
+  <section class="panel form-section">
+    <h3>Excel Template</h3>
+    <p class="form-context">Download the template (it includes the current lines, if any), fill it in Excel, then upload it. Uploading replaces every line in the working estimate; nothing is saved if any row has a problem.</p>
+    <div class="estimate-actions">
+      <a class="btn btn-ghost" href="{{ route('estimator.estimates.template', $project) }}">Download Template</a>
+      <form method="POST" action="{{ route('estimator.estimates.upload', $project) }}" enctype="multipart/form-data" class="edit-document-form" onsubmit="return confirm('Replace all lines in the working estimate with the uploaded sheet?');">@csrf
+        <div class="field"><label for="estimate_file">Filled template (.xlsx) <span class="req">*</span></label><input id="estimate_file" type="file" name="estimate_file" accept=".xlsx" required></div>
+        @if ($uploadTarget && $uploadTarget->version > 1)<div class="field"><label for="upload_edit_reason">Why are the lines being replaced? <span class="req">*</span></label><input id="upload_edit_reason" name="edit_reason" maxlength="2000" required></div>@endif
+        <button class="btn btn-primary" type="submit">Upload Estimate</button>
+      </form>
+    </div>
+    @error('estimate_file')<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach ($errors->get('estimate_file') as $message)<li>{{ $message }}</li>@endforeach</ul></div>@enderror
+  </section>
+@endif
 
 <section class="panel form-section">
   <h3>Project Estimate</h3>
@@ -33,7 +77,7 @@
   <div class="phase-heading"><div><h3>Project Phases</h3><p>Set phases for this project before issuing the estimate. Draft phases and their draft lines can be changed, deleted, or reset freely.</p></div>
   @if(!$phasesLocked)<form method="POST" action="{{ route('estimator.phases.reset', $project) }}" onsubmit="return confirm('Reset all draft phases? This also removes draft estimate and draft budget lines linked to them.');">@csrf<button class="btn btn-ghost" type="submit">Reset to Default</button></form>@endif</div>
   @if($phasesLocked)
-    <div class="flash">Phase structure is locked because an estimate or internal budget has been approved. Later document corrections use the audited edit workflow.</div>
+    <div class="flash">@if(auth()->user()->hasRole('estimator_qs') && ! auth()->user()->can('create', [\App\Models\ProjectEstimate::class, $project]))Phase structure is read-only because the estimate has been submitted to the Director.@else Phase structure is locked because an estimate or internal budget has been approved. Later document corrections use the audited edit workflow.@endif</div>
   @else
     <div class="phase-editor-list">
       @foreach($project->phases as $phase)
@@ -51,6 +95,7 @@
   <section class="panel empty-state">
     <h3>No estimate has been created for this project yet.</h3>
     <p>Create one working estimate for the client and add priced entries to the project-specific construction phases above.</p>
+    <p>You can also fill the Excel template above and upload it.</p>
     <form method="POST" action="{{ route('estimator.estimates.start', $project) }}">@csrf<button class="btn btn-primary" type="submit">Start Estimate</button></form>
   </section>
 @else
