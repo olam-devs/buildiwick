@@ -2,6 +2,27 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-23 — Opening Records Import for Ongoing Projects
+
+**Ongoing projects can be brought into the system with their history, project by project, without a Site Operator.**
+
+- Accounts gets an **Opening Records** page for each project: Accountant project page → **Opening Records**. The Director can also use it through the Admin bypass. **Download Template** builds a workbook for that project with three sheets: **Expenses** (costs already incurred, with the amount paid so far), **Client Invoices** (already issued; rows sharing an Invoice No. become one invoice) and **Client Payments** (already received). Dropdowns list the project's phases, approved budget item refs, categories, subcategories, units and payment methods.
+- **Import Records** checks every row on every sheet first. If anything is wrong, nothing is saved and each problem is listed as "sheet row N: …". Dates are day/month/year or real Excel dates; labels or codes are both accepted.
+- Imported rows become ordinary records, so every Accountant and Director report counts them:
+  - an approved `ExpenseRequest`, with an `ExpenseRequestApproval` at stage `onboarding_import` dated on the expense date (payable aging stays truthful);
+  - its paid amount recorded through `ExpensePaymentRecorder`, with any unpaid balance becoming an approved payable;
+  - issued `ClientInvoice`s with their real issue and due dates, the invoice no. kept as `reference`;
+  - receipts recorded through `ClientPaymentRecorder`.
+  Suppliers are matched by name or created. A Budget Item Ref. links a cost to an approved budget line.
+- Every created record carries `onboarding_import_id`. The uploaded file is kept privately and can be downloaded from the import history. **Undo** removes everything an import created, with a required reason, until a newer payment has been recorded against those records.
+- The normal workflow is unchanged: teams can still enter past items through the usual request and approval steps if they'd rather learn the system that way.
+- Additive migration `2026_10_23_171013_create_onboarding_imports_table`: an `onboarding_imports` audit table, plus a nullable `onboarding_import_id` on `expense_requests`, `expense_payments`, `client_invoices` and `client_payments`.
+- Tests: new `OnboardingRecordsImportTest` (5 tests) covering the template, a full import feeding the register, payables and receivables, row-level errors with nothing saved, undo and its lock, and role access. Full suite: 157 tests passing on `develop` plus this change.
+
+### Decisions
+
+- Historical onboarding records are real payment and invoice events tagged with `onboarding_import_id`, not legacy `transactions` rows. Legacy rows don't feed Accountant or Director reporting.
+
 ## 2026-10-15 — Accountant Supplier-Group Payment Workspace
 
 **Corrected the approved-request workspace so Accounts operates entirely from PM-approved supplier groups.**

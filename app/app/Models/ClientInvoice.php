@@ -10,7 +10,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ClientInvoice extends Model
 {
-    protected $fillable = ['invoice_code', 'reference', 'project_id', 'client_id', 'project_estimate_id', 'status', 'issued_at', 'due_at', 'created_by', 'issued_by', 'voided_by', 'voided_at', 'void_reason', 'notes'];
+    protected $fillable = ['invoice_code', 'reference', 'project_id', 'client_id', 'project_estimate_id', 'status', 'issued_at', 'due_at', 'created_by', 'issued_by', 'voided_by', 'voided_at', 'void_reason', 'notes', 'onboarding_import_id'];
+
+    public function onboardingImport(): BelongsTo
+    {
+        return $this->belongsTo(OnboardingImport::class);
+    }
 
     protected function casts(): array
     {
