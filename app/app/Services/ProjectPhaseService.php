@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Project;
+use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Models\User;
 use Illuminate\Database\DatabaseManager;
@@ -112,6 +113,11 @@ class ProjectPhaseService
         $allowed = $actor->hasRole('admin') || ($actor->hasRole('estimator_qs')
             && $actor->assignedProjects()->whereKey($project->id)->exists());
         abort_unless($allowed, 403);
+        if ($actor->hasRole('estimator_qs') && ! $actor->can('create', [ProjectEstimate::class, $project])) {
+            throw ValidationException::withMessages([
+                'phases' => 'The estimate has been submitted to the Director, so the phase structure is read-only for the Estimator.',
+            ]);
+        }
     }
 
     private function assertEditable(Project $project): void

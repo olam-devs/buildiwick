@@ -30,20 +30,27 @@ class EstimatorEstimateService
 
     public function __construct(private readonly DatabaseManager $database) {}
 
-    /** A project has at most one editable draft; issued estimates remain immutable versions. */
+    /**
+     * A project has at most one working estimate. Estimators may only open one before their first
+     * submission or after Admin returns it; Admin works on a submitted estimate in place.
+     */
     public function ensureWorkingEstimate(Project $project, User $actor): ProjectEstimate
     {
-        Gate::forUser($actor)->authorize('create', [ProjectEstimate::class, $project]);
+        if (! Gate::forUser($actor)->allows('create', [ProjectEstimate::class, $project])) {
+            $this->denyEstimatorAfterSubmission($project, $actor);
+        }
 
         return $this->database->transaction(function () use ($project, $actor): ProjectEstimate {
             $lockedProject = Project::query()->whereKey($project->id)->lockForUpdate()->firstOrFail();
-            Gate::forUser($actor)->authorize('create', [ProjectEstimate::class, $lockedProject]);
-            $drafts = $lockedProject->estimates()->where('status', 'draft')->lockForUpdate()->get();
-            if ($drafts->count() > 1) {
+            if (! Gate::forUser($actor)->allows('create', [ProjectEstimate::class, $lockedProject])) {
+                $this->denyEstimatorAfterSubmission($lockedProject, $actor);
+            }
+            $working = $lockedProject->estimates()->whereIn('status', ['draft', 'submitted'])->lockForUpdate()->get();
+            if ($working->count() > 1) {
                 throw ValidationException::withMessages(['estimate' => 'This project has more than one working estimate; administrator review is required.']);
             }
-            if ($drafts->isNotEmpty()) {
-                return $drafts->first();
+            if ($working->isNotEmpty()) {
+                return $working->first();
             }
             if ($lockedProject->estimates()->exists()) {
                 throw ValidationException::withMessages(['estimate' => 'Use Edit Estimate and provide a justification to change the issued estimate.']);
@@ -56,55 +63,144 @@ class EstimatorEstimateService
                 'client_id' => $lockedProject->client_id,
                 'version' => $version,
                 'status' => 'draft',
+                'editor_role' => $actor->hasRole('admin') ? 'admin' : 'estimator',
                 'prepared_at' => now()->toDateString(),
                 'prepared_by' => $actor->id,
             ]);
         });
     }
 
-    public function startEditing(ProjectEstimate $source, string $reason, User $actor): ProjectEstimate
+    /** Admin opens an audited revision of an issued estimate, either for themself or for the Estimator. */
+    public function startEditing(ProjectEstimate $source, string $reason, User $actor, string $editorRole = 'admin'): ProjectEstimate
     {
-        Gate::forUser($actor)->authorize('revise', $source);
+        $ability = $editorRole === 'estimator' ? 'returnToEstimator' : 'revise';
+        Gate::forUser($actor)->authorize($ability, $source);
 
-        return $this->database->transaction(function () use ($source, $reason, $actor): ProjectEstimate {
+        return $this->database->transaction(function () use ($source, $reason, $actor, $editorRole, $ability): ProjectEstimate {
             $project = Project::query()->whereKey($source->project_id)->lockForUpdate()->firstOrFail();
             $locked = ProjectEstimate::query()->whereKey($source->id)->lockForUpdate()->firstOrFail();
-            Gate::forUser($actor)->authorize('revise', $locked);
+            Gate::forUser($actor)->authorize($ability, $locked);
             $this->requireReason($reason);
-            if ($project->estimates()->where('status', 'draft')->exists()) {
+            if ($locked->status !== 'issued') {
+                throw ValidationException::withMessages(['estimate' => 'Only the issued estimate can be opened for a revision.']);
+            }
+            if ($project->estimates()->whereIn('status', ['draft', 'submitted'])->exists()) {
                 throw ValidationException::withMessages(['estimate' => 'Finish the existing working estimate before editing the issued estimate.']);
             }
 
             $version = ((int) $project->estimates()->max('version')) + 1;
+            $returnAudit = $editorRole === 'estimator'
+                ? ['returned_by' => $actor->id, 'returned_at' => now(), 'review_notes' => $reason]
+                : [];
             $draft = $project->estimates()->create([
                 'estimate_code' => $this->estimateCode($project, $version),
                 'client_id' => $locked->client_id,
                 'version' => $version,
                 'status' => 'draft',
+                'editor_role' => $editorRole,
                 'prepared_at' => now()->toDateString(),
                 'prepared_by' => $actor->id,
                 'valid_until' => $locked->valid_until,
                 'notes' => $locked->notes,
-            ]);
+            ] + $returnAudit);
             foreach ($locked->entries()->get() as $entry) {
                 $draft->entries()->create($entry->only([
                     'project_phase_id', 'work_area', 'work_section', 'item_reference', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit',
                     'base_unit_cost', 'markup_percent', 'notes',
                 ]) + ['entered_by' => $actor->id]);
             }
-            ProjectEditLog::create([
-                'project_id' => $project->id,
-                'document_type' => 'estimate',
-                'document_id' => $draft->id,
-                'document_code' => $draft->estimate_code,
-                'from_version' => $locked->version,
-                'to_version' => $draft->version,
-                'action' => 'edit_started',
-                'reason' => $reason,
-                'edited_by' => $actor->id,
-            ]);
+            $this->logLifecycle($draft, $editorRole === 'estimator' ? 'returned_to_estimator' : 'edit_started', $reason, $actor, $locked->version);
 
             return $draft->load('entries');
+        });
+    }
+
+    /** The Estimator hands the estimate to Admin; their editing rights end here. */
+    public function submit(ProjectEstimate $estimate, User $actor): ProjectEstimate
+    {
+        Gate::forUser($actor)->authorize('submit', $estimate);
+
+        return $this->database->transaction(function () use ($estimate, $actor): ProjectEstimate {
+            Project::query()->whereKey($estimate->project_id)->lockForUpdate()->firstOrFail();
+            $current = ProjectEstimate::query()->whereKey($estimate->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('submit', $current);
+            if ($current->entries()->doesntExist()) {
+                throw ValidationException::withMessages(['estimate' => 'Add at least one estimate line before submitting.']);
+            }
+            $current->update(['status' => 'submitted', 'submitted_by' => $actor->id, 'submitted_at' => now()]);
+            $this->logLifecycle($current, 'submitted', 'Submitted to Director for approval.', $actor);
+
+            return $current->fresh();
+        });
+    }
+
+    /** Admin sends a submitted (or issued) estimate back so the Estimator can change it again. */
+    public function returnToEstimator(ProjectEstimate $estimate, string $notes, User $actor): ProjectEstimate
+    {
+        Gate::forUser($actor)->authorize('returnToEstimator', $estimate);
+        $this->requireReason($notes, 'review_notes');
+        if ($estimate->status === 'issued') {
+            return $this->startEditing($estimate, $notes, $actor, 'estimator');
+        }
+
+        return $this->database->transaction(function () use ($estimate, $notes, $actor): ProjectEstimate {
+            $current = ProjectEstimate::query()->whereKey($estimate->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('returnToEstimator', $current);
+            if ($current->status !== 'submitted') {
+                throw ValidationException::withMessages(['estimate' => 'Only a submitted estimate can be returned.']);
+            }
+            $current->update([
+                'status' => 'draft',
+                'editor_role' => 'estimator',
+                'returned_by' => $actor->id,
+                'returned_at' => now(),
+                'review_notes' => $notes,
+            ]);
+            $this->logLifecycle($current, 'returned_to_estimator', $notes, $actor);
+
+            return $current->fresh();
+        });
+    }
+
+    /**
+     * Replaces every line of a working estimate with uploaded rows that were already resolved and validated.
+     *
+     * @param  array<int, array<string, mixed>>  $rows  Entry attributes plus `project_phase_id`.
+     */
+    public function replaceEntries(ProjectEstimate $estimate, array $rows, ?string $reason, User $actor): ProjectEstimate
+    {
+        return $this->database->transaction(function () use ($estimate, $rows, $reason, $actor): ProjectEstimate {
+            $locked = ProjectEstimate::query()->whereKey($estimate->id)->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('update', $locked);
+            if ($locked->version > 1) {
+                $this->requireReason($reason);
+            }
+            $previousCount = $locked->entries()->count();
+            $locked->entries()->delete();
+            foreach ($rows as $row) {
+                $this->assertPhaseBelongsToEstimate($locked, ProjectPhase::findOrFail($row['project_phase_id']));
+                $this->assertLookupPair($row);
+                $locked->entries()->create($this->entryAttributes($row) + [
+                    'project_phase_id' => $row['project_phase_id'],
+                    'entered_by' => $actor->id,
+                ]);
+            }
+            if ($locked->version > 1) {
+                ProjectEditLog::create([
+                    'project_id' => $locked->project_id,
+                    'document_type' => 'estimate',
+                    'document_id' => $locked->id,
+                    'document_code' => $locked->estimate_code,
+                    'from_version' => $locked->version,
+                    'to_version' => $locked->version,
+                    'action' => 'entries_replaced_by_upload',
+                    'item_description' => 'Excel upload replaced '.$previousCount.' line(s) with '.count($rows).' line(s)',
+                    'reason' => $reason,
+                    'edited_by' => $actor->id,
+                ]);
+            }
+
+            return $locked->fresh('entries');
         });
     }
 
@@ -165,6 +261,7 @@ class EstimatorEstimateService
         });
     }
 
+    /** Admin approval: the estimate becomes the issued version Accounts can invoice from. */
     public function finalize(ProjectEstimate $estimate, User $actor): ProjectEstimate
     {
         Gate::forUser($actor)->authorize('finalize', $estimate);
@@ -173,8 +270,7 @@ class EstimatorEstimateService
             $project = Project::query()->whereKey($estimate->project_id)->lockForUpdate()->firstOrFail();
             $current = ProjectEstimate::query()->whereKey($estimate->id)->lockForUpdate()->firstOrFail();
             Gate::forUser($actor)->authorize('finalize', $current);
-            if ($current->status !== 'draft'
-                || $project->estimates()->where('status', 'draft')->count() !== 1
+            if ($project->estimates()->whereIn('status', ['draft', 'submitted'])->count() !== 1
                 || $current->entries()->doesntExist()) {
                 throw ValidationException::withMessages(['estimate' => 'Exactly one working estimate must exist, with at least one entry, before it can be issued.']);
             }
@@ -301,11 +397,36 @@ class EstimatorEstimateService
         return $project->project_code.'-EST-'.str_pad((string) $version, 3, '0', STR_PAD_LEFT);
     }
 
-    private function requireReason(?string $reason): void
+    private function requireReason(?string $reason, string $field = 'edit_reason'): void
     {
         if (trim((string) $reason) === '') {
-            throw ValidationException::withMessages(['edit_reason' => 'Explain why this change is needed.']);
+            throw ValidationException::withMessages([$field => 'Explain why this change is needed.']);
         }
+    }
+
+    private function denyEstimatorAfterSubmission(Project $project, User $actor): never
+    {
+        if ($actor->hasRole('estimator_qs') && $actor->assignedProjects()->whereKey($project->id)->exists()) {
+            throw ValidationException::withMessages(['estimate' => 'This estimate has been submitted to the Director and is read-only. The Director can return it to you if changes are needed.']);
+        }
+
+        Gate::forUser($actor)->authorize('create', [ProjectEstimate::class, $project]);
+        abort(403);
+    }
+
+    private function logLifecycle(ProjectEstimate $estimate, string $action, string $reason, User $actor, ?int $fromVersion = null): void
+    {
+        ProjectEditLog::create([
+            'project_id' => $estimate->project_id,
+            'document_type' => 'estimate',
+            'document_id' => $estimate->id,
+            'document_code' => $estimate->estimate_code,
+            'from_version' => $fromVersion ?? $estimate->version,
+            'to_version' => $estimate->version,
+            'action' => $action,
+            'reason' => $reason,
+            'edited_by' => $actor->id,
+        ]);
     }
 
     private function logEntryChange(ProjectEstimate $estimate, EstimateEntry $entry, string $action, string $reason, User $actor, ?array $before, ?array $after): void

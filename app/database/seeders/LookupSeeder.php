@@ -115,7 +115,7 @@ class LookupSeeder extends Seeder
         ]);
 
         $this->seedType('estimate_status', [
-            ['draft', 'Draft'], ['issued', 'Issued'], ['superseded', 'Superseded'],
+            ['draft', 'Draft'], ['submitted', 'Submitted'], ['issued', 'Issued'], ['superseded', 'Superseded'],
         ]);
 
         $this->seedType('internal_budget_status', [

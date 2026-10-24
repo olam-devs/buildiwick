@@ -22,7 +22,7 @@
             <td>{{ $row->project->client?->name ?? '—' }}</td>
             <td>{{ $row->project->activePhase?->stage_label ?? '—' }}</td>
             <td class="amt">{{ \App\Support\Money::format($row->summary['clientTotal'] ?? '0.00') }}</td>
-            <td><span class="dot-status {{ $row->status === 'issued' ? 'active' : ($row->status === 'draft' ? 'attn' : 'zero') }}">{{ $row->status === 'not_started' ? 'Not started' : ucfirst($row->status) }}</span></td>
+            <td><span class="dot-status {{ $row->status === 'issued' ? 'active' : (in_array($row->status, ['draft', 'submitted'], true) ? 'attn' : 'zero') }}">{{ $row->status === 'not_started' ? 'Not started' : ucfirst($row->status) }}</span></td>
           </tr>
         @endforeach
       </tbody>

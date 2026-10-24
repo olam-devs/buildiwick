@@ -95,19 +95,23 @@ class EstimatorWorkflowTest extends TestCase
         $this->assertSame(1, $project->estimates()->where('status', 'draft')->count());
 
         $first->update(['status' => 'issued']);
-        $this->actingAs($estimator)->post(route('estimator.estimates.edit', [$project, $first]), [])
+        $admin = $this->user('admin');
+        $this->actingAs($estimator)->post(route('estimator.estimates.edit', [$project, $first]), ['edit_reason' => 'Trying to change it.'])
+            ->assertForbidden();
+        $this->actingAs($admin)->post(route('estimator.estimates.edit', [$project, $first]), [])
             ->assertSessionHasErrors('edit_reason');
         $this->assertSame(0, $project->estimates()->where('status', 'draft')->count());
-        $second = $service->startEditing($first, 'Client changed the construction specification.', $estimator);
+        $second = $service->startEditing($first, 'Client changed the construction specification.', $admin);
         $this->assertSame(2, $second->version);
         $this->assertNotSame($first->id, $second->id);
         $this->assertSame('issued', $first->fresh()->status);
         $this->assertSame('draft', $second->status);
         $this->assertSame($project->client_id, $second->client_id);
-        $this->assertSame($estimator->id, $second->prepared_by);
+        $this->assertSame($admin->id, $second->prepared_by);
+        $this->assertSame('admin', $second->editor_role);
         $this->assertDatabaseHas('project_edit_logs', [
             'project_id' => $project->id, 'document_type' => 'estimate', 'action' => 'edit_started',
-            'reason' => 'Client changed the construction specification.', 'edited_by' => $estimator->id,
+            'reason' => 'Client changed the construction specification.', 'edited_by' => $admin->id,
         ]);
         $this->actingAs($estimator)->get(route('estimator.projects.show', $project))->assertOk()
             ->assertSee('Estimate Edit Log')->assertSee('Client changed the construction specification.');
@@ -294,7 +298,9 @@ class EstimatorWorkflowTest extends TestCase
         $this->assertDatabaseMissing('estimate_entries', ['id' => $entry->id]);
 
         $entry = app(EstimatorEstimateService::class)->createEntry($estimate, $phase, $this->entryPayload($estimate, $phase), $estimator);
-        $issued = app(EstimatorEstimateService::class)->finalize($estimate, $estimator);
+        app(EstimatorEstimateService::class)->submit($estimate, $estimator);
+        $this->actingAs($estimator)->put(route('estimator.entries.update', [$project, $phase, $entry]), $changed)->assertForbidden();
+        $issued = app(EstimatorEstimateService::class)->finalize($estimate->fresh(), $this->user('admin'));
         $this->assertSame('issued', $issued->status);
         $this->actingAs($estimator)->put(route('estimator.entries.update', [$project, $phase, $entry]), $changed)->assertForbidden();
         $this->actingAs($estimator)->delete(route('estimator.entries.delete', [$project, $phase, $entry]))->assertForbidden();
@@ -308,20 +314,22 @@ class EstimatorWorkflowTest extends TestCase
         [$project, $estimator] = $this->projectAndEstimatorAssignment();
         $service = app(EstimatorEstimateService::class);
         $draft = $service->ensureWorkingEstimate($project, $estimator);
+        $admin = $this->user('admin');
         try {
-            $service->finalize($draft, $estimator);
+            $service->finalize($draft, $admin);
             $this->fail('Cannot issue an empty estimate.');
         } catch (ValidationException) {
             $this->assertSame('draft', $draft->fresh()->status);
         }
         $phase = $project->phases()->firstOrFail();
         $service->createEntry($draft, $phase, $this->entryPayload($draft, $phase), $estimator);
-        $service->finalize($draft, $estimator);
+        $service->submit($draft, $estimator);
+        $service->finalize($draft->fresh(), $admin);
         $this->assertSame('issued', $draft->fresh()->status);
 
-        $next = $service->startEditing($draft->fresh(), 'Client requested an updated estimate.', $estimator);
+        $next = $service->startEditing($draft->fresh(), 'Client requested an updated estimate.', $admin);
         $this->assertSame(2, $next->version);
-        $service->finalize($next, $estimator);
+        $service->finalize($next, $admin);
         $this->assertSame('issued', $next->fresh()->status);
         $this->assertSame('superseded', $draft->fresh()->status);
         $this->assertSame(2, $project->estimates()->count());
@@ -367,7 +375,7 @@ class EstimatorWorkflowTest extends TestCase
             ->assertOk()->assertSee('50.00')->assertSee('Draft');
         $this->actingAs($estimator)->get(route('estimator.projects.show', $project))
             ->assertOk()->assertSee('Phase 1 · Preliminaries')->assertSee('Estimation Total')
-            ->assertSee('Effective Markup')->assertSee('Issue Estimate')->assertSee('quotation line(s)')
+            ->assertSee('Effective Markup')->assertSee('Submit to Director')->assertDontSee('Approve &amp; Issue', false)->assertSee('quotation line(s)')
             ->assertDontSee('Estimator Budget Analytics')->assertDontSee('Category / Subcategory');
     }
 
@@ -417,7 +425,8 @@ class EstimatorWorkflowTest extends TestCase
         app(EstimatorEstimateService::class)->createEntry($estimate, $custom->fresh(), $this->entryPayload($estimate, $custom, [
             'work_area' => 'Main Building', 'work_section' => 'First fix', 'item_reference' => '6.1',
         ]), $estimator);
-        app(EstimatorEstimateService::class)->finalize($estimate, $estimator);
+        app(EstimatorEstimateService::class)->submit($estimate, $estimator);
+        app(EstimatorEstimateService::class)->finalize($estimate->fresh(), $this->user('admin'));
 
         $this->actingAs($estimator)->delete(route('estimator.phases.delete', [$project, $custom]))
             ->assertSessionHasErrors('phases');

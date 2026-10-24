@@ -52,6 +52,10 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::put('/estimator/projects/{project}/phases/{phase}/entries/{entry}', [EstimatorController::class, 'updateEntry'])->name('estimator.entries.update');
     Route::delete('/estimator/projects/{project}/phases/{phase}/entries/{entry}', [EstimatorController::class, 'deleteEntry'])->name('estimator.entries.delete');
     Route::post('/estimator/projects/{project}/estimates/{estimate}/finalize', [EstimatorController::class, 'finalize'])->name('estimator.estimates.finalize');
+    Route::post('/estimator/projects/{project}/estimates/{estimate}/submit', [EstimatorController::class, 'submit'])->name('estimator.estimates.submit');
+    Route::post('/estimator/projects/{project}/estimates/{estimate}/return', [EstimatorController::class, 'returnToEstimator'])->name('estimator.estimates.return');
+    Route::get('/estimator/projects/{project}/estimate-template.xlsx', [EstimatorController::class, 'template'])->name('estimator.estimates.template');
+    Route::post('/estimator/projects/{project}/estimate-upload', [EstimatorController::class, 'upload'])->name('estimator.estimates.upload');
 
     Route::get('/site', [SiteOperatorController::class, 'index'])->name('site.index');
     Route::get('/site/requests', [SiteOperatorController::class, 'requests'])->name('site.requests.index');
