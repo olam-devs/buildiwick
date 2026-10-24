@@ -7,7 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ClientPayment extends Model
 {
-    protected $fillable = ['payment_code', 'idempotency_key', 'client_invoice_id', 'project_id', 'client_id', 'amount', 'payment_date', 'payment_method', 'transaction_reference', 'reference', 'evidence_link', 'evidence_original_name', 'recorded_by', 'notes'];
+    protected $fillable = ['payment_code', 'idempotency_key', 'client_invoice_id', 'project_id', 'client_id', 'amount', 'payment_date', 'payment_method', 'transaction_reference', 'reference', 'evidence_link', 'evidence_original_name', 'recorded_by', 'notes', 'onboarding_import_id'];
+
+    public function onboardingImport(): BelongsTo
+    {
+        return $this->belongsTo(OnboardingImport::class);
+    }
 
     protected function casts(): array
     {

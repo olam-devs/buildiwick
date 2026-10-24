@@ -70,6 +70,12 @@ class AppServiceProvider extends ServiceProvider
             $user->role?->name, ['admin', 'accounts', 'project_manager'], true
         ));
 
+        // Bringing an ongoing project's past expenses, invoices and receipts in creates payment events,
+        // so it stays with Accounts (and Admin/Director through the bypass above).
+        Gate::define('import-onboarding-records', fn (User $user, Project $project) => in_array(
+            $user->role?->name, ['accounts', 'accountant'], true
+        ));
+
         Gate::define('view-director-analytics', fn (User $user) => in_array(
             $user->role?->name, ['admin', 'director'], true
         ));

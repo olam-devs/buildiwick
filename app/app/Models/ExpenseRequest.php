@@ -34,8 +34,12 @@ class ExpenseRequest extends Model
         'commercial_payment_destination', 'commercial_payment_destination_id', 'commercial_notes', 'commercial_evidence_link', 'commercial_prepared_by',
         'commercial_prepared_at', 'approved_amount', 'requested_at', 'submitted_at', 'verified_by', 'verified_at',
         'pm_edited', 'pm_edit_summary',
-        'status', 'cancelled_at', 'cancelled_by', 'requested_by', 'evidence_link', 'evidence_original_name', 'notes',
-    ];
+        'status', 'cancelled_at', 'cancelled_by', 'requested_by', 'evidence_link', 'evidence_original_name', 'notes', 'onboarding_import_id'];
+
+    public function onboardingImport(): BelongsTo
+    {
+        return $this->belongsTo(OnboardingImport::class);
+    }
 
     protected function casts(): array
     {
