@@ -121,6 +121,11 @@ class OnboardingRecordsImportTest extends TestCase
         $this->actingAs($accounts)->get(route('accountant.projects.show', $project))->assertOk()->assertSee('Opening Records');
         $this->actingAs($accounts)->get(route('accountant.requests.show', $requests[1]))->assertOk()->assertSee('Foundation labour');
         $this->actingAs($accounts)->get(route('accountant.payables.index'))->assertOk();
+        foreach (['accountant.invoices.index', 'accountant.receivables.index'] as $route) {
+            $this->actingAs($accounts)->get(route($route))->assertOk()->assertSee('Client ref: IPC-01');
+        }
+        $this->actingAs($accounts)->get(route('accountant.projects.show', $project))->assertSee('Client ref: IPC-01');
+        $this->actingAs($this->user('director'))->get(route('director.receivables.index'))->assertOk()->assertSee('Client ref: IPC-01');
         $this->actingAs($this->user('director'))->get(route('director.projects.show', $project))->assertOk();
     }
 
