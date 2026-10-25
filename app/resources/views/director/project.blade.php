@@ -53,8 +53,9 @@
 <section class="panel form-section">
   <h3>Choose Reporting Dates</h3>
   <p class="form-context">These dates filter financial activity only; they do not mean the current construction phase.</p>
-  <form method="GET" class="date-filter"><div class="field"><label for="range">Activity range</label><select name="range" id="range"><option value="this_month" @selected($range['name'] === 'this_month')>This month</option><option value="last_3_months" @selected($range['name'] === 'last_3_months')>Last 3 months</option><option value="this_year" @selected($range['name'] === 'this_year')>This year</option><option value="custom" @selected($range['name'] === 'custom')>Custom dates</option></select></div><div class="field"><label for="from">From</label><input type="date" id="from" name="from" value="{{ $range['name'] === 'custom' ? $range['from']->toDateString() : '' }}"></div><div class="field"><label for="to">To</label><input type="date" id="to" name="to" value="{{ $range['name'] === 'custom' ? $range['to']->toDateString() : '' }}"></div><div class="field filter-button"><button class="btn btn-primary" type="submit">Apply dates</button></div></form>
+  <form method="GET" class="date-filter"><div class="field"><label for="range">Activity range</label><select name="range" id="range">@foreach(\App\Support\ReviewPeriod::PRESETS as $value => $label)<option value="{{ $value }}" @selected($range['name'] === $value)>{{ $label }}</option>@endforeach</select></div><div class="field"><label for="from">From</label><input type="date" id="from" name="from" value="{{ $range['name'] === 'custom' ? $range['from']->toDateString() : '' }}"></div><div class="field"><label for="to">To</label><input type="date" id="to" name="to" value="{{ $range['name'] === 'custom' ? $range['to']->toDateString() : '' }}"></div><div class="field filter-button"><button class="btn btn-primary" type="submit">Apply dates</button></div></form>
 </section>
+@include('director.partials.period-comparison', ['current' => $row, 'previous' => $previousRow])
 
 <section class="panel form-section">
   <h3>Trace the Project at the End of a Day</h3>
@@ -103,6 +104,25 @@
 </section>
 
 <section class="panel form-section"><h3>Factual Attention Indicators</h3><div class="attention-list">@if($row['over_budget'])<div><span class="badge warn">OVER BUDGET</span> Approved commitments exceed the internal budget.</div>@endif @if($row['no_budget'])<div><span class="badge warn">NO BUDGET SET</span> Budget utilization cannot be calculated.</div>@endif @if($row['receivables_current'] !== '0.00')<div><span class="badge warn">AWAITING CLIENT PAYMENT</span> TSh {{ $money::format($row['receivables_current']) }} remains receivable.</div>@endif @if($row['payables_current'] !== '0.00')<div><span class="badge warn">APPROVED PAYMENTS OUTSTANDING</span> TSh {{ $money::format($row['payables_current']) }} remains payable.</div>@endif @if(!$row['over_budget'] && !$row['no_budget'] && $row['receivables_current'] === '0.00' && $row['payables_current'] === '0.00')<div>No current attention indicators from these financial records.</div>@endif</div></section>
+<section class="panel form-section" id="project-warnings">
+  <div class="section-heading"><h3>Warnings &amp; KPI Targets</h3><a class="btn btn-ghost" href="{{ route('director.kpis.index') }}">Manage KPI Targets</a></div>
+  @if(count($projectWarnings))
+    <div class="warning-list">@foreach($projectWarnings as $warning)<div class="warning-item"><div><strong>{{ $warning['label'] }}</strong><span>{{ $warning['message'] }}</span></div></div>@endforeach</div>
+  @else
+    <p class="form-context">No warning rule is triggered for this project.</p>
+  @endif
+  @if($projectKpis->isNotEmpty())
+    <div class="tablewrap" style="margin-top:12px"><table style="min-width:760px"><thead><tr><th>Measure</th><th>Period</th><th class="amt">Target</th><th class="amt">Actual</th><th>Progress</th><th>Status</th></tr></thead><tbody>
+    @foreach($projectKpis as $kpi)@include('director.partials.kpi-row', ['row' => $kpi])@endforeach
+    </tbody></table></div>
+  @endif
+  <details style="margin-top:12px"><summary><strong>Warning limits for this project</strong></summary>
+    <p class="form-context">Change a limit here to override the company default for this project only.</p>
+    @include('director.partials.warning-rules-form', ['rules' => $projectRules, 'action' => route('director.projects.warning-rules.save', $row['project']), 'project' => $row['project']])
+    @can('manage-director-strategy')@if(collect($projectRules)->contains('source', 'project'))<form method="POST" action="{{ route('director.projects.warning-rules.reset', $row['project']) }}" style="margin-top:8px">@csrf @method('DELETE')<button class="btn btn-ghost" type="submit">Use company defaults</button></form>@endif @endcan
+  </details>
+</section>
+@include('director.partials.kpi-styles')
 
 <style>
 .project-view-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
@@ -131,9 +151,9 @@
     const heading=section.querySelector('h3')?.textContent.trim()||'';
     if(section.classList.contains('director-estimate-section'))groups.estimate.push(section);
     else if(section.classList.contains('director-budget-section')||heading.startsWith('Internal Budgets Awaiting'))groups.budget.push(section);
-    else if(section.classList.contains('director-position-grid')||section.classList.contains('utilization-tiles')||heading.startsWith('Project Overview')||heading.startsWith('Factual Attention'))groups.overview.push(section);
+    else if(section.classList.contains('director-position-grid')||section.classList.contains('utilization-tiles')||heading.startsWith('Project Overview')||heading.startsWith('Factual Attention')||heading.startsWith('Warnings'))groups.overview.push(section);
     else if(heading.startsWith('Phase History')||heading.startsWith('Cost Visualizations')||heading.startsWith('Phase Cost')||heading.startsWith('Expense Trace'))groups.phases.push(section);
-    else if(heading.startsWith('Choose Reporting')||heading.startsWith('Trace the Project')||heading.startsWith('Financial Activity'))groups.activity.push(section);
+    else if(heading.startsWith('Choose Reporting')||heading.startsWith('Period Review')||heading.startsWith('Trace the Project')||heading.startsWith('Financial Activity'))groups.activity.push(section);
   });
   const show=name=>{Object.values(groups).flat().forEach(section=>section.hidden=true);(groups[name]||groups.overview).forEach(section=>section.hidden=false);tabs.querySelectorAll('button').forEach(button=>{button.classList.toggle('btn-primary',button.dataset.projectView===name);button.classList.toggle('btn-ghost',button.dataset.projectView!==name)});history.replaceState(null,'','#'+name)};
   tabs.addEventListener('click',event=>{const button=event.target.closest('[data-project-view]');if(button)show(button.dataset.projectView)});show(location.hash.slice(1)||'overview');
