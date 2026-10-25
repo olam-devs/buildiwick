@@ -50,6 +50,10 @@ class EstimatorController extends Controller
                 ];
             });
 
+        if ($request->query('status') === 'submitted') {
+            $projects = $projects->where('status', 'submitted')->values();
+        }
+
         return view('estimator.index', compact('projects'));
     }
 

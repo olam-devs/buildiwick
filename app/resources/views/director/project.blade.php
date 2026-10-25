@@ -13,7 +13,13 @@
   <div class="project-actions"><a class="btn btn-ghost" href="{{ route('director.transactions.index', ['range' => $range['name'], 'from' => $range['from']->toDateString(), 'to' => $range['to']->toDateString()]) }}">Transaction Register</a><a class="btn btn-ghost" href="{{ route('director.receivables.index', ['project_id' => $row['project']->id]) }}">Receivables</a><a class="btn btn-ghost" href="{{ route('director.payables.index', ['project_id' => $row['project']->id]) }}">Approved Payables</a></div>
 </div>
 
-<section class="panel form-section director-estimate-section"><h3>Project Estimation</h3>
+<section class="panel form-section director-estimate-section"><div class="section-heading"><h3>Project Estimation</h3>
+  @if($openEstimate?->status === 'submitted')<a class="btn btn-primary" href="{{ route('estimator.projects.show', $row['project']) }}">Review Estimate</a>
+  @elseif($openEstimate)<a class="btn btn-ghost" href="{{ route('estimator.projects.show', $row['project']) }}">Open Working Estimate</a>
+  @elseif($projectEstimate)<a class="btn btn-ghost" href="{{ route('estimator.projects.show', $row['project']) }}">Edit Estimate</a>
+  @else<a class="btn btn-ghost" href="{{ route('estimator.projects.show', $row['project']) }}">Create Estimate</a>@endif</div>
+@if($openEstimate?->status === 'submitted')<div class="flash warning">Estimate v{{ $openEstimate->version }} was submitted by {{ $openEstimate->submittedBy?->name ?? 'the Estimator' }}{{ $openEstimate->submitted_at ? ' on '.$openEstimate->submitted_at->format('d M Y') : '' }} and is awaiting your approval.</div>
+@elseif($openEstimate)<p class="form-context">A working draft (v{{ $openEstimate->version }}) is in progress; the figures below are the last issued version.</p>@endif
 @if(!$projectEstimate)<p>No estimate has been prepared for this project.</p>@else
   @php($estimateTotal=\App\Support\Money::sum($projectEstimate->entries->map($estimateLineTotal)))
   <div class="document-heading"><div><strong>{{ $projectEstimate->estimate_code }} · Version {{ $projectEstimate->version }}</strong><small>{{ ucfirst($projectEstimate->status) }} · prepared by {{ $projectEstimate->preparedBy?->name ?? '—' }}</small></div><div class="document-total"><span>Estimation Total</span><strong>TSh {{ $money::format($estimateTotal) }}</strong></div></div>
