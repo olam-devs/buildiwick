@@ -72,6 +72,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Bringing an ongoing project's past expenses, invoices and receipts in creates payment events,
         // so it stays with Accounts (and Admin/Director through the bypass above).
+        // KPI targets and warning thresholds are the Directors' own rules; Admin passes via the bypass.
+        Gate::define('manage-director-strategy', fn (User $user) => $user->role?->name === 'director');
+
         Gate::define('import-onboarding-records', fn (User $user, Project $project) => in_array(
             $user->role?->name, ['accounts', 'accountant'], true
         ));

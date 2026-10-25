@@ -2,6 +2,33 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-25 — Director Strategic Review: Periods, KPI Targets and Warning Rules
+
+**Directors can now review any period against the one before it, set their own KPI targets, and define warning limits per project.**
+
+- **Review periods:** Director pages offer last month, this quarter, last quarter and last year, alongside the existing this month, last 3 months, this year and custom (`App\Support\ReviewPeriod`). A **Period Review** panel on the dashboard and on each project's *Dates & Activity* tab compares invoiced, client receipts, money paid out and net cash flow with the previous period, with the change in TSh and %. The previous period is the same span one month, quarter or year earlier; custom ranges use the equal-length span just before.
+- **KPI Targets:** a new page (Director dashboard → **KPI Targets**). Directors set a target for this or next month, quarter or year, or custom dates, for the whole company or one project. The default measures:
+  - client money received, invoiced, and net cash flow (floors);
+  - money paid out, overdue client invoices, and % of budget paid out (ceilings).
+
+  Actuals come from `DirectorAnalyticsService` (payment events, issued invoices, budgets). Status is Met / On track / Behind / Missed for floors (on track means ahead of a straight-line pace through the period) and Within / Over limit for ceilings; future periods show "Not started". Current targets appear on the dashboard, and project targets on the project page.
+- **Warning Rules:** company defaults (Director dashboard → **Warning Rules**) with per-project overrides on each project page (*Warning limits for this project*, plus **Use company defaults** to reset). The built-in defaults:
+  - budget paid out above 85%;
+  - approved commitments above 100% of budget;
+  - a client invoice overdue more than 30 days;
+  - an approved payment unpaid for more than 30 days (counted from approval);
+  - a phase past its planned finish by more than 14 days;
+  - unpaid client invoices above TSh 50m (off by default).
+
+  Triggered warnings show on the project page and as a "N warning(s)" badge in the dashboard project list, and a **Projects with Warnings** tile shows the count.
+- Writing targets and rules needs the `manage-director-strategy` gate (Director role; Admin through the bypass). Other roles get 403.
+- Additive migration `2026_10_25_183345_create_director_kpi_targets_and_warning_rules`: `director_kpi_targets` and `project_warning_rules`. No seeding is needed: built-in defaults apply until a Director saves their own.
+- Tests: new `DirectorStrategicAnalyticsTest` (4 tests) covering period resolution and comparison, the dashboard comparison, KPI evaluation and statuses with permissions, and warning defaults, overrides and reset. Full suite: 169 tests / 1,798 assertions.
+
+### Decisions
+
+- KPI actuals and warning checks reuse the Director analytics row and summary. There are no KPI-owned figures or alternative money formulas. Warnings are the Directors' own thresholds applied to recorded facts, not a computed risk score.
+
 ## 2026-10-25 — Director Estimate Access
 
 - The Director's project page now has an estimate button that changes with the estimate's status: **Review Estimate** when one is submitted, together with an "awaiting your approval" notice; **Open Working Estimate** for a draft; **Edit Estimate** for an issued one; **Create Estimate** when none exists. Previously the Director's page showed only the last issued estimate, with no way to reach editing.

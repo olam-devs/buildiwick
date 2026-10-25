@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\DirectorKpiTarget;
 use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\Project;
@@ -10,9 +11,12 @@ use App\Models\ProjectEditLog;
 use App\Models\ProjectEstimate;
 use App\Services\AccountantReportingService;
 use App\Services\DirectorAnalyticsService;
+use App\Services\DirectorKpiService;
 use App\Services\ExcelExportService;
 use App\Services\ProjectManagerBudgetService;
+use App\Services\ProjectWarningService;
 use App\Support\Money;
+use App\Support\ReviewPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 
@@ -58,7 +62,7 @@ class DirectorController extends Controller
         ]);
     }
 
-    public function index(Request $request, DirectorAnalyticsService $analytics)
+    public function index(Request $request, DirectorAnalyticsService $analytics, ProjectWarningService $warnings, DirectorKpiService $kpis)
     {
         $this->authorize('view-director-analytics');
         $filters = $request->validate([
@@ -67,6 +71,9 @@ class DirectorController extends Controller
         ]);
         $range = $this->dateRange($request);
         $report = $analytics->portfolio($range['from'], $range['to']);
+        $previousRange = ReviewPeriod::previous($range);
+        $previousSummary = $analytics->portfolio($previousRange['from'], $previousRange['to'])['summary'];
+        $periodSummary = $report['summary'];
         $projects = $report['projects']
             ->when(($filters['search'] ?? null), function ($rows, string $search) {
                 $needle = mb_strtolower($search);
@@ -84,6 +91,7 @@ class DirectorController extends Controller
             'overdue_invoices' => $report['summary']['overdue_invoice_count'],
             'overdue_receivables' => $report['summary']['overdue_receivables'],
             'estimates_awaiting' => ProjectEstimate::query()->where('status', 'submitted')->count(),
+            'projects_with_warnings' => 0,
             'setup_incomplete' => Project::query()->with('assignedUsers.role')->get()->filter(function (Project $project): bool {
                 $roles = $project->assignedUsers->map(fn ($user) => $user->role?->name)->filter();
 
@@ -94,15 +102,28 @@ class DirectorController extends Controller
             })->count(),
         ];
 
-        return view('director.index', compact('projects', 'actionCounts', 'range', 'filters'));
+        $projectWarnings = $report['projects']->mapWithKeys(fn (array $row) => [$row['project']->id => $warnings->evaluate($row)]);
+        $actionCounts['projects_with_warnings'] = $projectWarnings->filter()->count();
+        $today = CarbonImmutable::today();
+        $currentKpis = $kpis->evaluate(DirectorKpiTarget::query()->with('project')
+            ->whereDate('period_start', '<=', $today)->whereDate('period_end', '>=', $today)
+            ->orderByRaw('project_id is not null')->orderBy('metric')->limit(8)->get());
+
+        return view('director.index', compact('projects', 'actionCounts', 'range', 'filters', 'previousRange', 'previousSummary', 'periodSummary', 'projectWarnings', 'currentKpis'));
     }
 
-    public function project(Request $request, Project $project, DirectorAnalyticsService $analytics)
+    public function project(Request $request, Project $project, DirectorAnalyticsService $analytics, ProjectWarningService $warnings, DirectorKpiService $kpis)
     {
         $this->authorize('view-director-analytics');
         $snapshotInput = $request->validate(['as_of' => ['nullable', 'date', 'before_or_equal:today']]);
         $range = $this->dateRange($request);
         $row = $analytics->project($project, $range['from'], $range['to']);
+        $previousRange = ReviewPeriod::previous($range);
+        $previousRow = $analytics->project($project, $previousRange['from'], $previousRange['to']);
+        $projectWarnings = $warnings->evaluate($row);
+        $projectRules = $warnings->rules($project->id);
+        $projectKpis = $kpis->evaluate(DirectorKpiTarget::query()->where('project_id', $project->id)
+            ->whereDate('period_end', '>=', CarbonImmutable::today()->subMonths(3))->orderBy('period_start')->get());
         $asOf = isset($snapshotInput['as_of']) ? CarbonImmutable::parse($snapshotInput['as_of']) : null;
         $snapshot = $asOf ? $analytics->projectSnapshot($project, $asOf) : null;
 
@@ -121,7 +142,7 @@ class DirectorController extends Controller
             abort(404);
         }
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'openEstimate', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'openEstimate', 'previousRange', 'previousRow', 'projectWarnings', 'projectRules', 'projectKpis', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId'));
     }
 
     public function budget(Project $project, InternalBudget $budget)
@@ -245,20 +266,11 @@ class DirectorController extends Controller
     private function dateRange(Request $request): array
     {
         $validated = $request->validate([
-            'range' => ['nullable', 'in:this_month,last_3_months,this_year,custom'],
+            'range' => ['nullable', 'in:'.implode(',', array_keys(ReviewPeriod::PRESETS))],
             'from' => ['required_if:range,custom', 'nullable', 'date'],
             'to' => ['required_if:range,custom', 'nullable', 'date', 'after_or_equal:from'],
         ]);
-        $preset = $validated['range'] ?? 'this_year';
-        $today = CarbonImmutable::today();
 
-        [$from, $to] = match ($preset) {
-            'this_month' => [$today->startOfMonth(), $today],
-            'last_3_months' => [$today->startOfMonth()->subMonths(2), $today],
-            'custom' => [CarbonImmutable::parse($validated['from']), CarbonImmutable::parse($validated['to'])],
-            default => [$today->startOfYear(), $today],
-        };
-
-        return ['name' => $preset, 'from' => $from, 'to' => $to];
+        return ReviewPeriod::resolve($validated['range'] ?? 'this_year', $validated['from'] ?? null, $validated['to'] ?? null);
     }
 }

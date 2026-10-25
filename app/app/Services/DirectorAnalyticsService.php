@@ -454,7 +454,7 @@ class DirectorAnalyticsService
     {
         return Project::query()->with([
             'client', 'activePhase', 'phases', 'estimates.entries', 'internalBudgets.entries',
-            'expenseRequests.phase', 'expenseRequests.payments', 'expenseRequests.latestPmApproval',
+            'expenseRequests.phase', 'expenseRequests.payments', 'expenseRequests.latestPmApproval', 'expenseRequests.latestApproval',
             'expenseRequests.internalBudgetEntry', 'expenseRequests.supplierPayee', 'expenseRequests.supplierRequestGroup.supplier',
             'expensePayments.expenseRequest', 'clientPayments',
             'invoices.client', 'invoices.items', 'invoices.payments',

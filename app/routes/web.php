@@ -5,6 +5,7 @@ use App\Http\Controllers\Web\AdminUserController;
 use App\Http\Controllers\Web\AuthController;
 use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\DirectorController;
+use App\Http\Controllers\Web\DirectorStrategyController;
 use App\Http\Controllers\Web\EntryController;
 use App\Http\Controllers\Web\EstimatorController;
 use App\Http\Controllers\Web\OnboardingRecordsController;
@@ -36,6 +37,13 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/director/receivables', [DirectorController::class, 'receivables'])->name('director.receivables.index');
     Route::get('/director/payables', [DirectorController::class, 'payables'])->name('director.payables.index');
     Route::get('/director/transactions', [DirectorController::class, 'transactions'])->name('director.transactions.index');
+    Route::get('/director/kpis', [DirectorStrategyController::class, 'kpis'])->name('director.kpis.index');
+    Route::post('/director/kpis', [DirectorStrategyController::class, 'storeKpi'])->name('director.kpis.store');
+    Route::delete('/director/kpis/{target}', [DirectorStrategyController::class, 'destroyKpi'])->name('director.kpis.destroy');
+    Route::get('/director/warning-rules', [DirectorStrategyController::class, 'warningRules'])->name('director.warning-rules.index');
+    Route::post('/director/warning-rules', [DirectorStrategyController::class, 'saveWarningRules'])->name('director.warning-rules.save');
+    Route::post('/director/projects/{project}/warning-rules', [DirectorStrategyController::class, 'saveProjectWarningRules'])->name('director.projects.warning-rules.save');
+    Route::delete('/director/projects/{project}/warning-rules', [DirectorStrategyController::class, 'resetProjectWarningRules'])->name('director.projects.warning-rules.reset');
     Route::get('/director/request-approvals', [DirectorController::class, 'requests'])->name('director.requests.index');
 
     Route::get('/estimator/projects', [EstimatorController::class, 'index'])->name('estimator.projects.index');
