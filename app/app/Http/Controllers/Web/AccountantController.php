@@ -329,7 +329,7 @@ class AccountantController extends Controller
     {
         $this->authorizeWorkspace($request);
 
-        return $excel->download('receivables', 'Receivables Register', ['Invoice', 'Project', 'Client', 'Invoice Date', 'Due Date', 'Invoice Total', 'Received', 'Outstanding', 'Age', 'Status'], $reporting->receivables($request->only(['project_id']))->map(fn ($invoice) => [$invoice->invoice_code, $invoice->project->name, $invoice->client->name, $invoice->issued_at, $invoice->due_at, $invoice->total_amount, $invoice->paid_to_date, $invoice->outstanding_amount, $invoice->due_at?->diffInDays(today()), $invoice->overdue ? 'Overdue' : 'Current']), [], [5, 6, 7], [3, 4]);
+        return $excel->download('receivables', 'Receivables Register', ['Invoice', 'Project', 'Client', 'Invoice Date', 'Due Date', 'Invoice Total', 'Received', 'Outstanding', 'Age', 'Status', 'Client Ref.'], $reporting->receivables($request->only(['project_id']))->map(fn ($invoice) => [$invoice->invoice_code, $invoice->project->name, $invoice->client->name, $invoice->issued_at, $invoice->due_at, $invoice->total_amount, $invoice->paid_to_date, $invoice->outstanding_amount, $invoice->due_at?->diffInDays(today()), $invoice->overdue ? 'Overdue' : 'Current', $invoice->reference]), [], [5, 6, 7], [3, 4]);
     }
 
     public function exportPayables(Request $request, AccountantReportingService $reporting, ExcelExportService $excel)
