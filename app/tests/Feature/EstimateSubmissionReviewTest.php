@@ -70,6 +70,10 @@ class EstimateSubmissionReviewTest extends TestCase
         $this->estimates->submit($estimate, $estimator);
         $director = $this->user('director');
 
+        $this->actingAs($director)->get(route('director.index'))->assertOk()->assertSee('Estimates Awaiting Approval');
+        $this->actingAs($director)->get(route('director.projects.show', $project))->assertOk()
+            ->assertSee('Review Estimate')->assertSee('awaiting your approval')->assertSee('Project Estimate');
+        $this->actingAs($director)->get(route('estimator.projects.index', ['status' => 'submitted']))->assertOk()->assertSee($project->name);
         $this->actingAs($director)->get(route('estimator.projects.show', $project))->assertOk()
             ->assertSee('Director Review')->assertSee('Approve &amp; Issue', false)->assertSee('Return to Estimator')->assertSee('Upload Estimate');
         $this->actingAs($director)->post(route('estimator.entries.store', [$project, $phase]), $this->payload(['item_description' => 'Director added line']))->assertRedirect();

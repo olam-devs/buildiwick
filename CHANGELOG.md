@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-25 — Director Estimate Access
+
+- The Director's project page now has an estimate button that changes with the estimate's status: **Review Estimate** when one is submitted, together with an "awaiting your approval" notice; **Open Working Estimate** for a draft; **Edit Estimate** for an issued one; **Create Estimate** when none exists. Previously the Director's page showed only the last issued estimate, with no way to reach editing.
+- The Director's project sidebar gains **Project Estimate**. The Director dashboard gains an **Estimates Awaiting Approval** tile that opens the estimate list filtered to submitted estimates (`?status=submitted`).
+
 ## 2026-10-25 — Client Invoice Number on Lists
 
 - Invoice lists now show the client's own invoice number (`reference`, e.g. an imported `IPC-01`) as "Client ref:" under the system code. This covers Accountant Invoices, Accountant Receivables, the Accountant project billing table and Director Receivables, so people can find invoices by the number they already know. The receivables Excel export gains a **Client Ref.** column at the end.

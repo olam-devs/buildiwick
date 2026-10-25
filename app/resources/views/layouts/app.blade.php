@@ -203,6 +203,7 @@
       <div class="project-workspace-card"><div class="label">Project Workspace</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
       @if(auth()->user()->hasRole('director'))
         <a class="navitem {{ request()->routeIs('director.projects.show') ? 'active' : '' }}" href="{{ route('director.projects.show', $workspaceProject) }}">Project Overview</a>
+        <a class="navitem {{ request()->routeIs('estimator.projects.*') ? 'active' : '' }}" href="{{ route('estimator.projects.show', $workspaceProject) }}">Project Estimate</a>
         <a class="navitem {{ request()->routeIs('director.requests.*') ? 'active' : '' }}" href="{{ route('director.requests.index', ['project_id'=>$workspaceProject->id]) }}">Request Oversight</a>
         <a class="navitem {{ request()->routeIs('director.receivables.*') ? 'active' : '' }}" href="{{ route('director.receivables.index', ['project_id'=>$workspaceProject->id]) }}">Receivables</a>
         <a class="navitem {{ request()->routeIs('director.payables.*') ? 'active' : '' }}" href="{{ route('director.payables.index', ['project_id'=>$workspaceProject->id]) }}">Approved Payables</a>

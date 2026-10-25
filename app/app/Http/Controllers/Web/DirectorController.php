@@ -7,6 +7,7 @@ use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\Project;
 use App\Models\ProjectEditLog;
+use App\Models\ProjectEstimate;
 use App\Services\AccountantReportingService;
 use App\Services\DirectorAnalyticsService;
 use App\Services\ExcelExportService;
@@ -82,6 +83,7 @@ class DirectorController extends Controller
             'over_budget' => $report['projects']->where('over_budget', true)->count(),
             'overdue_invoices' => $report['summary']['overdue_invoice_count'],
             'overdue_receivables' => $report['summary']['overdue_receivables'],
+            'estimates_awaiting' => ProjectEstimate::query()->where('status', 'submitted')->count(),
             'setup_incomplete' => Project::query()->with('assignedUsers.role')->get()->filter(function (Project $project): bool {
                 $roles = $project->assignedUsers->map(fn ($user) => $user->role?->name)->filter();
 
@@ -107,6 +109,7 @@ class DirectorController extends Controller
         $pendingBudgets = $project->internalBudgets()->where('status', 'finalized')->with(['entries', 'createdBy', 'finalizedBy'])->orderByDesc('version')->get();
         $projectEstimate = $project->estimates()->whereIn('status', ['issued', 'superseded'])->with(['entries.phase', 'preparedBy', 'issuedBy'])->orderByDesc('version')->first()
             ?? $project->estimates()->with(['entries.phase', 'preparedBy', 'issuedBy'])->orderByDesc('version')->first();
+        $openEstimate = $project->estimates()->whereIn('status', ['draft', 'submitted'])->with('submittedBy')->first();
         $projectBudgets = $project->internalBudgets()->whereIn('status', ['approved', 'finalized', 'draft'])
             ->with(['phase', 'entries.phase', 'createdBy', 'approvedBy'])->orderByDesc('version')->get()
             ->groupBy(fn (InternalBudget $budget) => $budget->project_phase_id.'|'.$budget->main_category)
@@ -118,7 +121,7 @@ class DirectorController extends Controller
             abort(404);
         }
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'openEstimate', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId'));
     }
 
     public function budget(Project $project, InternalBudget $budget)
