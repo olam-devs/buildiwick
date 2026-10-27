@@ -105,22 +105,12 @@
 
 <section class="panel form-section"><h3>Factual Attention Indicators</h3><div class="attention-list">@if($row['over_budget'])<div><span class="badge warn">OVER BUDGET</span> Approved commitments exceed the internal budget.</div>@endif @if($row['no_budget'])<div><span class="badge warn">NO BUDGET SET</span> Budget utilization cannot be calculated.</div>@endif @if($row['receivables_current'] !== '0.00')<div><span class="badge warn">AWAITING CLIENT PAYMENT</span> TSh {{ $money::format($row['receivables_current']) }} remains receivable.</div>@endif @if($row['payables_current'] !== '0.00')<div><span class="badge warn">APPROVED PAYMENTS OUTSTANDING</span> TSh {{ $money::format($row['payables_current']) }} remains payable.</div>@endif @if(!$row['over_budget'] && !$row['no_budget'] && $row['receivables_current'] === '0.00' && $row['payables_current'] === '0.00')<div>No current attention indicators from these financial records.</div>@endif</div></section>
 <section class="panel form-section" id="project-warnings">
-  <div class="section-heading"><h3>Warnings &amp; KPI Targets</h3><a class="btn btn-ghost" href="{{ route('director.kpis.index') }}">Manage KPI Targets</a></div>
+  <div class="section-heading"><h3>Warnings</h3><a class="btn btn-ghost" href="{{ route('director.projects.warnings', $row['project']) }}">Open Warnings &amp; KPIs</a></div>
   @if(count($projectWarnings))
     <div class="warning-list">@foreach($projectWarnings as $warning)<div class="warning-item"><div><strong>{{ $warning['label'] }}</strong><span>{{ $warning['message'] }}</span></div></div>@endforeach</div>
   @else
     <p class="form-context">No warning rule is triggered for this project.</p>
   @endif
-  @if($projectKpis->isNotEmpty())
-    <div class="tablewrap" style="margin-top:12px"><table style="min-width:760px"><thead><tr><th>Measure</th><th>Period</th><th class="amt">Target</th><th class="amt">Actual</th><th>Progress</th><th>Status</th></tr></thead><tbody>
-    @foreach($projectKpis as $kpi)@include('director.partials.kpi-row', ['row' => $kpi])@endforeach
-    </tbody></table></div>
-  @endif
-  <details style="margin-top:12px"><summary><strong>Warning limits for this project</strong></summary>
-    <p class="form-context">Change a limit here to override the company default for this project only.</p>
-    @include('director.partials.warning-rules-form', ['rules' => $projectRules, 'action' => route('director.projects.warning-rules.save', $row['project']), 'project' => $row['project']])
-    @can('manage-director-strategy')@if(collect($projectRules)->contains('source', 'project'))<form method="POST" action="{{ route('director.projects.warning-rules.reset', $row['project']) }}" style="margin-top:8px">@csrf @method('DELETE')<button class="btn btn-ghost" type="submit">Use company defaults</button></form>@endif @endcan
-  </details>
 </section>
 @include('director.partials.kpi-styles')
 

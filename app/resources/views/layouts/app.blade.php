@@ -204,6 +204,7 @@
       @if(auth()->user()->hasRole('director'))
         <a class="navitem {{ request()->routeIs('director.projects.show') ? 'active' : '' }}" href="{{ route('director.projects.show', $workspaceProject) }}">Project Overview</a>
         <a class="navitem {{ request()->routeIs('estimator.projects.*') ? 'active' : '' }}" href="{{ route('estimator.projects.show', $workspaceProject) }}">Project Estimate</a>
+        <a class="navitem {{ request()->routeIs('director.projects.warnings') ? 'active' : '' }}" href="{{ route('director.projects.warnings', $workspaceProject) }}">Warnings &amp; KPIs</a>
         <a class="navitem {{ request()->routeIs('director.requests.*') ? 'active' : '' }}" href="{{ route('director.requests.index', ['project_id'=>$workspaceProject->id]) }}">Request Oversight</a>
         <a class="navitem {{ request()->routeIs('director.receivables.*') ? 'active' : '' }}" href="{{ route('director.receivables.index', ['project_id'=>$workspaceProject->id]) }}">Receivables</a>
         <a class="navitem {{ request()->routeIs('director.payables.*') ? 'active' : '' }}" href="{{ route('director.payables.index', ['project_id'=>$workspaceProject->id]) }}">Approved Payables</a>
@@ -257,6 +258,9 @@
       <a class="navitem {{ request()->routeIs('director.receivables.*') ? 'active' : '' }}" href="{{ route('director.receivables.index') }}">Receivables</a>
       <a class="navitem {{ request()->routeIs('director.payables.*') ? 'active' : '' }}" href="{{ route('director.payables.index') }}">Approved Payables</a>
       <a class="navitem {{ request()->routeIs('director.transactions.*') ? 'active' : '' }}" href="{{ route('director.transactions.index') }}">Transactions</a>
+      <div class="label">Company Targets</div>
+      <a class="navitem {{ request()->routeIs('director.kpis.*') ? 'active' : '' }}" href="{{ route('director.kpis.index') }}">Company KPI Targets</a>
+      <a class="navitem {{ request()->routeIs('director.warning-rules.*') ? 'active' : '' }}" href="{{ route('director.warning-rules.index') }}">Default Warning Rules</a>
       @else
       <a class="navitem {{ request()->routeIs('dashboard.index') ? 'active' : '' }}" href="{{ url('/projects') }}">
         <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="2.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="11.5" y="2.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="11.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="11.5" y="11.5" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/></svg>

@@ -97,7 +97,8 @@ class DirectorStrategicAnalyticsTest extends TestCase
             ['metric' => 'budget_used_pct', 'period' => 'this_year', 'target_value' => '80', 'project_id' => $project->id],
             ['metric' => 'invoiced', 'period' => 'next_quarter', 'target_value' => '1000000'],
         ] as $payload) {
-            $this->actingAs($director)->post(route('director.kpis.store'), $payload)->assertRedirect()->assertSessionHasNoErrors();
+            $route = isset($payload['project_id']) ? route('director.projects.kpis.store', $payload['project_id']) : route('director.kpis.store');
+            $this->actingAs($director)->post($route, $payload)->assertRedirect()->assertSessionHasNoErrors();
         }
 
         $rows = app(DirectorKpiService::class)->evaluate(DirectorKpiTarget::query()->orderBy('id')->get())->values();
@@ -109,9 +110,15 @@ class DirectorStrategicAnalyticsTest extends TestCase
         $this->assertSame(['50.00', 'within'], [$rows[2]['actual'], $rows[2]['status']]);
         $this->assertSame([null, 'upcoming'], [$rows[3]['actual'], $rows[3]['status']]);
 
-        $this->actingAs($director)->get(route('director.kpis.index'))->assertOk()->assertSee('On track')->assertSee('Over limit')->assertSee('Not started');
-        $this->actingAs($director)->get(route('director.index'))->assertOk()->assertSee('Current KPI Targets')->assertSee('Client money received');
-        $this->actingAs($director)->get(route('director.projects.show', $project))->assertOk()->assertSee('Budget used, % paid of budget');
+        $this->assertSame($project->id, $rows[2]['target']->project_id);
+        $this->assertNull($rows[0]['target']->project_id);
+        // Company pages list company targets only; the project target lives inside the project.
+        $this->actingAs($director)->get(route('director.kpis.index'))->assertOk()->assertSee('On track')->assertSee('Over limit')->assertSee('Not started')
+            ->assertDontSee('Budget used, % paid of budget (ceiling)</td>', false)->assertSee('Company KPI Targets')->assertDontSee('>Warnings &amp; KPIs</a>', false);
+        $this->actingAs($director)->get(route('director.index'))->assertOk()->assertSee('Company KPI Targets')->assertSee('Client money received')->assertDontSee('Budget used, % paid of budget');
+        $this->actingAs($director)->get(route('director.projects.warnings', $project))->assertOk()->assertSee('Budget used, % paid of budget')->assertDontSee('Client money received</td>', false)
+            ->assertSee('>Warnings &amp; KPIs</a>', false)->assertDontSee('>Company KPI Targets</a>', false)->assertDontSee('>Default Warning Rules</a>', false);
+        $this->actingAs($director)->get(route('director.projects.show', $project))->assertOk()->assertSee('Open Warnings &amp; KPIs', false);
 
         $this->actingAs($director)->delete(route('director.kpis.destroy', $rows[3]['target']))->assertRedirect();
         $this->assertSame(3, DirectorKpiTarget::count());
@@ -147,8 +154,10 @@ class DirectorStrategicAnalyticsTest extends TestCase
         $this->actingAs($director)->post(route('director.warning-rules.save'), ['rules' => $defaults])->assertRedirect()->assertSessionHasNoErrors();
         $this->actingAs($director)->delete(route('director.projects.warning-rules.reset', $project))->assertRedirect();
         $page = $this->actingAs($director)->get(route('director.projects.show', $project))->assertOk();
-        $page->assertDontSee('client invoice(s) overdue')->assertDontSee('of the budget has been paid out')->assertSee('No warning rule is triggered')->assertSee('Company default');
-        $this->actingAs($director)->get(route('director.warning-rules.index'))->assertOk()->assertSee('Company defaults');
+        $page->assertDontSee('client invoice(s) overdue')->assertDontSee('of the budget has been paid out')->assertSee('No warning rule is triggered');
+        $this->actingAs($director)->get(route('director.projects.warnings', $project))->assertOk()->assertSee('Company default')->assertDontSee('Use company defaults');
+        $this->actingAs($director)->get(route('director.warning-rules.index'))->assertOk()->assertSee('Company defaults')
+            ->assertSee('>Default Warning Rules</a>', false)->assertDontSee('>Warnings &amp; KPIs</a>', false);
     }
 
     /** @return array{0: Project, 1: ProjectPhase} */

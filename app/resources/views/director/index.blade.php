@@ -3,7 +3,7 @@
 @section('content')
 <div class="topline">
   <div><h2>Director Dashboard</h2><p>Start with a project, then open its detailed financial and construction analytics.</p></div>
-  <div class="director-actions"><a class="btn btn-ghost" href="{{ route('director.kpis.index') }}">KPI Targets</a><a class="btn btn-ghost" href="{{ route('director.warning-rules.index') }}">Warning Rules</a><a class="btn btn-ghost" href="{{ route('director.receivables.index') }}">Receivables</a><a class="btn btn-ghost" href="{{ route('director.payables.index') }}">Payables</a><a class="btn btn-ghost" href="{{ route('director.transactions.index') }}">Transactions</a></div>
+  <div class="director-actions"><a class="btn btn-ghost" href="{{ route('director.receivables.index') }}">Receivables</a><a class="btn btn-ghost" href="{{ route('director.payables.index') }}">Payables</a><a class="btn btn-ghost" href="{{ route('director.transactions.index') }}">Transactions</a></div>
 </div>
 
 <section class="tiles director-alerts">
@@ -22,12 +22,12 @@
 @include('director.partials.period-comparison', ['current' => $periodSummary, 'previous' => $previousSummary])
 
 <section class="panel form-section">
-  <div class="section-heading"><h3>Current KPI Targets</h3><a class="btn btn-ghost" href="{{ route('director.kpis.index') }}">Manage Targets</a></div>
+  <div class="section-heading"><h3>Company KPI Targets</h3><a class="btn btn-ghost" href="{{ route('director.kpis.index') }}">Manage Company Targets</a></div>
   @if($currentKpis->isEmpty())
-    <p class="form-context">No targets cover today yet. Open <strong>KPI Targets</strong> to set targets for this month, quarter or year.</p>
+    <p class="form-context">No company targets cover today yet. Open <strong>Company KPI Targets</strong> in the sidebar to set targets for this month, quarter or year. Project targets are set inside each project under <strong>Warnings &amp; KPIs</strong>.</p>
   @else
-    <div class="tablewrap"><table style="min-width:800px"><thead><tr><th>Measure</th><th>For</th><th>Period</th><th class="amt">Target</th><th class="amt">Actual</th><th>Progress</th><th>Status</th></tr></thead><tbody>
-    @foreach($currentKpis as $kpi)@include('director.partials.kpi-row', ['row' => $kpi, 'showProject' => true])@endforeach
+    <div class="tablewrap"><table style="min-width:800px"><thead><tr><th>Measure</th><th>Period</th><th class="amt">Target</th><th class="amt">Actual</th><th>Progress</th><th>Status</th></tr></thead><tbody>
+    @foreach($currentKpis as $kpi)@include('director.partials.kpi-row', ['row' => $kpi])@endforeach
     </tbody></table></div>
   @endif
 </section>

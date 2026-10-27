@@ -42,6 +42,8 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::delete('/director/kpis/{target}', [DirectorStrategyController::class, 'destroyKpi'])->name('director.kpis.destroy');
     Route::get('/director/warning-rules', [DirectorStrategyController::class, 'warningRules'])->name('director.warning-rules.index');
     Route::post('/director/warning-rules', [DirectorStrategyController::class, 'saveWarningRules'])->name('director.warning-rules.save');
+    Route::get('/director/projects/{project}/warnings', [DirectorStrategyController::class, 'project'])->name('director.projects.warnings');
+    Route::post('/director/projects/{project}/kpis', [DirectorStrategyController::class, 'storeProjectKpi'])->name('director.projects.kpis.store');
     Route::post('/director/projects/{project}/warning-rules', [DirectorStrategyController::class, 'saveProjectWarningRules'])->name('director.projects.warning-rules.save');
     Route::delete('/director/projects/{project}/warning-rules', [DirectorStrategyController::class, 'resetProjectWarningRules'])->name('director.projects.warning-rules.reset');
     Route::get('/director/request-approvals', [DirectorController::class, 'requests'])->name('director.requests.index');
