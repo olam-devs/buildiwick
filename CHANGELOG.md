@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-27 — Director Sidebar: Company vs Project Scope
+
+- Company-level pages now sit only in the Director's main sidebar, under **Company Targets**: **Company KPI Targets** (company-wide targets only, with no project picker) and **Default Warning Rules**. The duplicate dashboard header buttons are gone.
+- Each project workspace sidebar gains **Warnings & KPIs** (`/director/projects/{project}/warnings`). The page shows that project's current warnings, its KPI targets with an add form scoped to the project (`director.projects.kpis.store`), and its warning limits with **Use company defaults**. The project overview keeps a short **Warnings** summary with **Open Warnings & KPIs**.
+- The dashboard's KPI panel is now **Company KPI Targets** and lists company targets only.
+
 ## 2026-10-25 — Director Strategic Review: Periods, KPI Targets and Warning Rules
 
 **Directors can now review any period against the one before it, set their own KPI targets, and define warning limits per project.**

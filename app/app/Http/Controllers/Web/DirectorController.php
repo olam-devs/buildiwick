@@ -105,14 +105,14 @@ class DirectorController extends Controller
         $projectWarnings = $report['projects']->mapWithKeys(fn (array $row) => [$row['project']->id => $warnings->evaluate($row)]);
         $actionCounts['projects_with_warnings'] = $projectWarnings->filter()->count();
         $today = CarbonImmutable::today();
-        $currentKpis = $kpis->evaluate(DirectorKpiTarget::query()->with('project')
+        $currentKpis = $kpis->evaluate(DirectorKpiTarget::query()->whereNull('project_id')
             ->whereDate('period_start', '<=', $today)->whereDate('period_end', '>=', $today)
-            ->orderByRaw('project_id is not null')->orderBy('metric')->limit(8)->get());
+            ->orderBy('metric')->limit(8)->get());
 
         return view('director.index', compact('projects', 'actionCounts', 'range', 'filters', 'previousRange', 'previousSummary', 'periodSummary', 'projectWarnings', 'currentKpis'));
     }
 
-    public function project(Request $request, Project $project, DirectorAnalyticsService $analytics, ProjectWarningService $warnings, DirectorKpiService $kpis)
+    public function project(Request $request, Project $project, DirectorAnalyticsService $analytics, ProjectWarningService $warnings)
     {
         $this->authorize('view-director-analytics');
         $snapshotInput = $request->validate(['as_of' => ['nullable', 'date', 'before_or_equal:today']]);
@@ -121,9 +121,6 @@ class DirectorController extends Controller
         $previousRange = ReviewPeriod::previous($range);
         $previousRow = $analytics->project($project, $previousRange['from'], $previousRange['to']);
         $projectWarnings = $warnings->evaluate($row);
-        $projectRules = $warnings->rules($project->id);
-        $projectKpis = $kpis->evaluate(DirectorKpiTarget::query()->where('project_id', $project->id)
-            ->whereDate('period_end', '>=', CarbonImmutable::today()->subMonths(3))->orderBy('period_start')->get());
         $asOf = isset($snapshotInput['as_of']) ? CarbonImmutable::parse($snapshotInput['as_of']) : null;
         $snapshot = $asOf ? $analytics->projectSnapshot($project, $asOf) : null;
 
@@ -142,7 +139,7 @@ class DirectorController extends Controller
             abort(404);
         }
 
-        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'openEstimate', 'previousRange', 'previousRow', 'projectWarnings', 'projectRules', 'projectKpis', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId'));
+        return view('director.project', compact('row', 'range', 'asOf', 'snapshot', 'pendingBudgets', 'projectEstimate', 'openEstimate', 'previousRange', 'previousRow', 'projectWarnings', 'projectBudgets', 'editLogs', 'selectedEstimatePhaseId'));
     }
 
     public function budget(Project $project, InternalBudget $budget)
