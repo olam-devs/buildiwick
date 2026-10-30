@@ -6,6 +6,7 @@ use App\Models\ExpenseRequest;
 use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectEditLog;
+use App\Models\ProjectPhase;
 use App\Models\User;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
@@ -59,6 +60,7 @@ class ExpenseLedgerService
             if (! $phase) {
                 throw ValidationException::withMessages(['project_phase_id' => 'Choose a phase of this project.']);
             }
+            $this->assertLowestLevel($phase);
             $date = CarbonImmutable::parse($data['expense_date'])->toDateString();
             $request = ExpenseRequest::create([
                 'request_code' => $this->nextCode($locked),
@@ -121,8 +123,13 @@ class ExpenseLedgerService
             if ($locked->payments()->exists()) {
                 throw ValidationException::withMessages(['line' => 'This line already has a payment recorded and can no longer be edited.']);
             }
-            if (! $locked->project->phases()->whereKey($data['project_phase_id'])->exists()) {
+            $phase = $locked->project->phases()->whereKey($data['project_phase_id'])->first();
+            if (! $phase) {
                 throw ValidationException::withMessages(['project_phase_id' => 'Choose a phase of this project.']);
+            }
+            // A line already sitting on a phase that later got subphases may stay there; moving it needs the lowest level.
+            if ((int) $phase->id !== (int) $locked->project_phase_id) {
+                $this->assertLowestLevel($phase);
             }
             $before = $locked->only(['project_phase_id', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit', 'unit_cost', 'total_amount', 'requested_at']);
             $locked->update([
@@ -199,6 +206,14 @@ class ExpenseLedgerService
             $locked->approvals()->delete();
             $locked->delete();
         });
+    }
+
+    /** Expenses go to the lowest level: a phase with subphases is recorded through one of its subphases. */
+    private function assertLowestLevel(ProjectPhase $phase): void
+    {
+        if (ProjectPhase::query()->where('parent_id', $phase->id)->exists()) {
+            throw ValidationException::withMessages(['project_phase_id' => '"'.$phase->stage_label.'" has subphases. Choose the subphase the expense belongs to.']);
+        }
     }
 
     /** @return array{0: ?string, 1: ?string, 2: string} quantity, unit cost, total */

@@ -35,9 +35,14 @@ class PhaseBudgetService
                 if (! in_array((int) $phaseId, $phaseIds, true)) {
                     throw ValidationException::withMessages(['budget' => 'A budget line refers to a phase outside this project.']);
                 }
+                $hasSubphases = $project->phases()->where('parent_id', $phaseId)->exists();
                 foreach ($categories as $category => $value) {
                     if (! array_key_exists($category, LedgerAnalyticsService::CATEGORIES)) {
                         continue;
+                    }
+                    // Category budgets live at the lowest level; a phase with subphases shows their totals.
+                    if ($hasSubphases && $value !== null && trim((string) $value) !== '' && (float) $value > 0) {
+                        throw ValidationException::withMessages(['budget' => 'A phase with subphases takes its budget from them. Set the amounts on its subphases.']);
                     }
                     $changed += $this->set($project, (int) $phaseId, $category, $value, $actor) ? 1 : 0;
                 }

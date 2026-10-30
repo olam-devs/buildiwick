@@ -2,6 +2,15 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — Expenses and Category Budgets at the Lowest Phase Level
+
+- The Director can create phases and subphases at any time. Budgets are optional, so recording starts as soon as a phase exists.
+- Categories belong to the lowest level. A phase without subphases takes expenses and category budgets directly. Once it has subphases:
+  - Record Expense lists it as a heading (▸) that can't be picked, so the expense goes on a subphase;
+  - Phases & Budget shows its category totals from the subphases instead of input boxes.
+- Lines already on a phase before it got subphases stay where they are. A budget set on a phase before it got subphases is flagged so it can be cleared and moved to the subphases.
+- The rule is enforced in `ExpenseLedgerService` and `PhaseBudgetService` as well as the UI. Full suite: 178 tests.
+
 ## 2026-10-30 — Recording Mode (Phase 1 rollout) and Tracker Import
 
 **The client starts by only recording what happens, with no approvals. Director, PM and Accounts use one clean, per-project workspace. The live tracker workbook (36 projects, 5,805 lines) can be imported unchanged.**
