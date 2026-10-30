@@ -41,9 +41,8 @@
 <div class="lg-catbar" id="catBar" style="margin-bottom:12px"></div>
 
 <div class="lg-cards">
-  <div class="lg-card accent"><div class="k">Recorded spend</div><div class="v" id="cRecorded">TSh {{ $money::format($t['recorded']) }}</div><div class="s"><span id="cLines">{{ number_format($t['lines']) }}</span> lines @if($t['last_entry'])· last {{ \Carbon\Carbon::parse($t['last_entry'])->format('d M Y') }}@endif</div></div>
-  <div class="lg-card good"><div class="k">Paid</div><div class="v" id="cPaid">TSh {{ $money::format($t['paid']) }}</div><div class="s">Confirmed by Accounts</div></div>
-  <a class="lg-card warn" id="cConfirmLink" href="{{ route('ledger.expenses', [$project, 'status' => 'to_confirm', 'sort' => 'oldest']) }}"><div class="k">To confirm</div><div class="v" id="cConfirm">TSh {{ $money::format($t['to_confirm']) }}</div><div class="s"><span id="cConfirmCount">{{ number_format($t['to_confirm_count']) }}</span> lines waiting</div></a>
+  <div class="lg-card accent"><div class="k">Confirmed spend</div><div class="v" id="cRecorded">TSh {{ $money::format($t['recorded']) }}</div><div class="s"><span id="cLines">{{ number_format($t['lines']) }}</span> lines @if($t['last_entry'])· last {{ \Carbon\Carbon::parse($t['last_entry'])->format('d M Y') }}@endif</div></div>
+  <a class="lg-card warn" id="cConfirmLink" href="{{ route('ledger.expenses', [$project, 'status' => 'to_confirm', 'sort' => 'oldest']) }}"><div class="k">Awaiting confirmation</div><div class="v" id="cConfirm">TSh {{ $money::format($t['to_confirm']) }}</div><div class="s"><span id="cConfirmCount">{{ number_format($t['to_confirm_count']) }}</span> lines, not counted as spend yet</div></a>
   <a class="lg-card" href="{{ route('ledger.structure', $project) }}"><div class="k">Budget used</div><div class="v" id="cUsed">—</div><div class="lg-meter" id="cMeterWrap"><span id="cMeter" style="width:0"></span></div><div class="s" id="cBudget"></div></a>
 </div>
 
@@ -59,10 +58,10 @@
   <section class="lg-panel span-5"><h3>Top items</h3><p class="hint">Largest items by recorded amount</p><div class="lg-bars lg-chart" id="topItems"></div></section>
 
   <section class="lg-panel span-12">
-    <h3>Categories against budget</h3><p class="hint">Recorded and paid per main category, with the Director's budget</p>
-    <div class="tablewrap" style="border:0"><table class="lg-table lg-cards-sm"><thead><tr><th>Category</th><th class="amt">Lines</th><th class="amt">Recorded</th><th class="amt">Paid</th><th class="amt">To confirm</th><th class="amt">Budget</th><th style="min-width:160px">Used</th></tr></thead><tbody>
+    <h3>Categories against budget</h3><p class="hint">Confirmed spend and what awaits confirmation per main category, with the Director's budget</p>
+    <div class="tablewrap" style="border:0"><table class="lg-table lg-cards-sm"><thead><tr><th>Category</th><th class="amt">Lines</th><th class="amt">Confirmed spend</th><th class="amt">Awaiting confirmation</th><th class="amt">Budget</th><th style="min-width:160px">Used</th></tr></thead><tbody>
       @foreach($report['categories'] as $code => $c)
-        <tr><td data-label="Category"><a href="{{ route('ledger.expenses', [$project, 'category' => $code]) }}" class="lg-cat" style="color:inherit;text-decoration:none"><i style="background:{{ $c['color'] }}"></i>{{ $c['label'] }}</a></td><td data-label="Lines" class="amt">{{ number_format($c['count']) }}</td><td data-label="Recorded" class="amt">{{ $money::format($c['recorded']) }}</td><td data-label="Paid" class="amt">{{ $money::format($c['paid']) }}</td><td data-label="To confirm" class="amt">{{ (float) $c['to_confirm'] ? $money::format($c['to_confirm']) : '—' }}</td><td data-label="Budget" class="amt">{{ (float) $c['budget'] > 0 ? $money::format($c['budget']) : '—' }}</td>
+        <tr><td data-label="Category"><a href="{{ route('ledger.expenses', [$project, 'category' => $code]) }}" class="lg-cat" style="color:inherit;text-decoration:none"><i style="background:{{ $c['color'] }}"></i>{{ $c['label'] }}</a></td><td data-label="Lines" class="amt">{{ number_format($c['count']) }}</td><td data-label="Confirmed" class="amt">{{ $money::format($c['recorded']) }}</td><td data-label="Awaiting" class="amt">{{ (float) $c['to_confirm'] ? $money::format($c['to_confirm']) : '—' }}</td><td data-label="Budget" class="amt">{{ (float) $c['budget'] > 0 ? $money::format($c['budget']) : '—' }}</td>
           <td data-label="Used">@if($c['used'] !== null)<div class="lg-meter" style="margin-top:3px"><span class="{{ (float) $c['used'] > 100 ? 'over' : ((float) $c['used'] >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $c['used']) }}%"></span></div><span class="muted">{{ $money::format($c['used']) }}%</span>@else<span class="muted">No budget</span>@endif</td></tr>
       @endforeach
     </tbody></table></div>
@@ -86,7 +85,6 @@
     const totals = sel ? D.totals[sel] : D.all;
     document.getElementById('cRecorded').textContent = 'TSh ' + L.fmt(totals.recorded);
     document.getElementById('cLines').textContent = Number(totals.count).toLocaleString();
-    document.getElementById('cPaid').textContent = 'TSh ' + L.fmt(totals.paid);
     document.getElementById('cConfirm').textContent = 'TSh ' + L.fmt(totals.to_confirm);
     document.getElementById('cConfirmCount').textContent = Number(totals.to_confirm_count).toLocaleString();
     document.getElementById('cConfirmLink').href = confirmBase + (sel ? '&category=' + sel : '');

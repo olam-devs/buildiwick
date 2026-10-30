@@ -56,7 +56,7 @@ class ExpenseLedgerService
         // The Director's own entries need no confirmation: a line with an amount is recorded as paid.
         if ($actor->hasRole('admin')) {
             $markPaid = Money::compare($total, '0') > 0;
-            $data['payment_method'] = ($data['payment_method'] ?? null) ?: 'cash';
+            $data['payment_method'] = ($data['payment_method'] ?? null) ?: 'other';
         }
         if ($markPaid && Money::compare($total, '0') <= 0) {
             throw ValidationException::withMessages(['total_amount' => 'Enter the amount before recording the line as paid.']);
@@ -110,7 +110,7 @@ class ExpenseLedgerService
                 $this->payments->record($request->id, [
                     'amount' => $total,
                     'payment_date' => $data['payment_date'] ?? $date,
-                    'payment_method' => $data['payment_method'],
+                    'payment_method' => ($data['payment_method'] ?? null) ?: 'other',
                     'invoice_receipt_no' => $data['invoice_receipt_no'] ?? null,
                     'transaction_reference' => $data['transaction_reference'] ?? null,
                 ], $actor);
@@ -183,6 +183,9 @@ class ExpenseLedgerService
         }
         Gate::forUser($actor)->authorize('confirm-payments', $line->project);
 
+        // Method and receipt number are optional; a payment with no method given is stored as "Other".
+        $data['payment_method'] = ($data['payment_method'] ?? null) ?: 'other';
+
         return $this->database->transaction(function () use ($line, $data, $actor): ExpenseRequest {
             $locked = ExpenseRequest::query()->whereKey($line->id)->lockForUpdate()->firstOrFail();
             if (isset($data['total_amount']) && $data['total_amount'] !== '' && $locked->payments()->doesntExist()) {
@@ -202,7 +205,7 @@ class ExpenseLedgerService
                 'payment_date' => $data['payment_date'],
                 'payment_method' => $data['payment_method'],
                 'transaction_reference' => $data['transaction_reference'] ?? null,
-                'invoice_receipt_no' => $data['invoice_receipt_no'] ?? $locked->invoice_receipt_no,
+                'invoice_receipt_no' => ($data['invoice_receipt_no'] ?? null) ?: $locked->invoice_receipt_no,
             ], $actor);
 
             return $locked->fresh(['payments', 'phase']);

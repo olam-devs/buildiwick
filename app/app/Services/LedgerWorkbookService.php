@@ -95,23 +95,23 @@ class LedgerWorkbookService
         $rows = $portfolio['rows']->values()->map(fn (array $row, int $index) => [
             $index + 1, $row['project']->project_code, $row['project']->name, $row['project']->location, ucfirst(str_replace('_', ' ', (string) $row['project']->status)),
             $row['project']->planned_start_date, $row['project']->expected_completion_date, $row['lines'],
-            (float) $row['recorded'], (float) $row['paid'], (float) $row['to_confirm'], (float) $row['budget'],
+            (float) $row['recorded'], (float) $row['to_confirm'], (float) $row['budget'],
             $row['used'] === null ? null : round((float) $row['used'], 2), $row['last_entry'] ? CarbonImmutable::parse($row['last_entry']) : null,
         ])->all();
         $this->table($sheet, 'Projects · '.($range['label'] ?? 'All time'), $info,
-            ['#', 'Project ID', 'Project', 'Location', 'Status', 'Start', 'End', 'Lines', 'Recorded (TSh)', 'Paid (TSh)', 'To Confirm (TSh)', 'Budget (TSh)', 'Budget Used (to date)', 'Last Entry'],
-            [5, 24, 36, 20, 12, 12, 12, 8, 18, 18, 18, 18, 12, 12], $rows, money: [8, 9, 10, 11], dates: [5, 6, 13], totals: [7, 8, 9, 10, 11], percent: [12]);
+            ['#', 'Project ID', 'Project', 'Location', 'Status', 'Start', 'End', 'Lines', 'Confirmed Spend (TSh)', 'Awaiting Confirmation (TSh)', 'Budget (TSh)', 'Budget Used (to date)', 'Last Entry'],
+            [5, 24, 36, 20, 12, 12, 12, 8, 19, 19, 18, 12, 12], $rows, money: [8, 9, 10], dates: [5, 6, 12], totals: [7, 8, 9, 10], percent: [11]);
 
         $sheet = $book->createSheet()->setTitle('By Category');
         $rows = $portfolio['rows']->values()->map(fn (array $row) => [$row['project']->project_code, $row['project']->name,
             ...array_map(fn ($code) => (float) $row['by_category'][$code], array_keys($categories)), (float) $row['recorded']])->all();
-        $this->table($sheet, 'Spend by category · '.($range['label'] ?? 'All time'), $info, ['Project ID', 'Project', ...array_values($categories), 'Total (TSh)'],
+        $this->table($sheet, 'Confirmed spend by category · '.($range['label'] ?? 'All time'), $info, ['Project ID', 'Project', ...array_values($categories), 'Total (TSh)'],
             [24, 36, 18, 18, 18, 22, 18], $rows, money: [2, 3, 4, 5, 6], totals: [2, 3, 4, 5, 6]);
 
         $sheet = $book->createSheet()->setTitle('Monthly');
         $rows = collect($portfolio['monthly'])->map(fn (array $month) => [$month['label'],
             ...array_map(fn ($code) => (float) $month['categories'][$code], array_keys($categories)), (float) $month['total']])->all();
-        $this->table($sheet, 'Monthly spend · all projects', $info, ['Month', ...array_values($categories), 'Total (TSh)'],
+        $this->table($sheet, 'Monthly confirmed spend · all projects', $info, ['Month', ...array_values($categories), 'Total (TSh)'],
             [12, 18, 18, 18, 22, 18], $rows, money: [1, 2, 3, 4, 5], totals: [1, 2, 3, 4, 5]);
 
         $sheet = $book->createSheet()->setTitle('All Expenditure');
@@ -146,7 +146,7 @@ class LedgerWorkbookService
         $row = $this->info($sheet, 3, $info);
 
         $row += 1;
-        $cards = [['Recorded spend', (float) $t['recorded'], self::MONEY], ['Paid', (float) $t['paid'], self::MONEY], ['To confirm', (float) $t['to_confirm'], self::MONEY],
+        $cards = [['Confirmed spend', (float) $t['recorded'], self::MONEY], ['Awaiting confirmation', (float) $t['to_confirm'], self::MONEY], ['Lines awaiting', $t['to_confirm_count'], '#,##0'],
             ['Budget', (float) $t['budget'], self::MONEY], ['Budget used', $t['used'] === null ? 'No budget' : round((float) $t['used'], 2) / 100, '0.00%'], ['Lines', $t['lines'], '#,##0']];
         foreach ($cards as $index => [$label, $value, $format]) {
             $column = Coordinate::stringFromColumnIndex(1 + ($index % 3) * 3);
@@ -159,17 +159,17 @@ class LedgerWorkbookService
         }
         $row += 5;
 
-        $headers = ['Category', 'Lines', 'Recorded (TSh)', 'Paid (TSh)', 'To Confirm (TSh)', 'Budget (TSh)', 'Used'];
-        $rows = collect($report['categories'])->map(fn (array $c) => [$c['label'], $c['count'], (float) $c['recorded'], (float) $c['paid'], (float) $c['to_confirm'],
+        $headers = ['Category', 'Lines', 'Confirmed Spend (TSh)', 'Awaiting Confirmation (TSh)', 'Budget (TSh)', 'Used'];
+        $rows = collect($report['categories'])->map(fn (array $c) => [$c['label'], $c['count'], (float) $c['recorded'], (float) $c['to_confirm'],
             (float) $c['budget'], $c['used'] === null ? null : round((float) $c['used'], 2) / 100])->values()->all();
-        $row = $this->block($sheet, $row, 'By category', $headers, $rows, money: [2, 3, 4, 5], percent: [6], totals: [1, 2, 3, 4, 5]);
+        $row = $this->block($sheet, $row, 'By category', $headers, $rows, money: [2, 3, 4], percent: [5], totals: [1, 2, 3, 4]);
 
         $categories = LedgerAnalyticsService::CATEGORIES;
         $headers = ['Phase', ...array_values($categories), 'Total (TSh)', 'Budget (TSh)', 'Used'];
         $rows = $report['phases']->map(fn (array $p) => [str_repeat('    ', $p['depth'] - 1).$p['label'],
             ...array_map(fn ($code) => (float) $p['categories'][$code]['recorded'], array_keys($categories)),
             (float) $p['recorded'], (float) $p['budget'], $p['used'] === null ? null : round((float) $p['used'], 2) / 100])->all();
-        $this->block($sheet, $row + 1, 'By phase (each phase includes its subphases)', $headers, $rows, money: [1, 2, 3, 4, 5, 6], percent: [7],
+        $this->block($sheet, $row + 1, 'Confirmed spend by phase (each phase includes its subphases)', $headers, $rows, money: [1, 2, 3, 4, 5, 6], percent: [7],
             bold: $report['phases']->map(fn ($p) => $p['depth'] === 1)->all());
 
         foreach ([34, 18, 18, 18, 22, 18, 18, 10] as $index => $width) {

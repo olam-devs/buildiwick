@@ -273,8 +273,10 @@ class DirectorController extends Controller
     {
         $range = $this->dateRange($request);
         $previousRange = ReviewPeriod::previous($range);
-        $projects = Project::query()->orderBy('name')->get();
+        $projects = Project::query()->where('is_company_overheads', false)->orderBy('name')->get();
         $portfolio = $ledger->portfolio($projects, $range['from'], $range['to']);
+        $overheadLedgers = Project::query()->where('is_company_overheads', true)->orderBy('name')->get();
+        $overheads = $overheadLedgers->isEmpty() ? null : $ledger->portfolio($overheadLedgers, $range['from'], $range['to'])['totals'];
         $previous = $ledger->portfolio($projects, $previousRange['from'], $previousRange['to'])['totals'];
         $attention = $projects->map(fn (Project $project) => ['project' => $project, 'warnings' => $warnings->evaluateLedger($ledger->project($project))])
             ->filter(fn ($row) => $row['warnings'])->values();
@@ -282,7 +284,7 @@ class DirectorController extends Controller
         $companyKpis = $kpis->evaluate(DirectorKpiTarget::query()->whereNull('project_id')
             ->whereDate('period_start', '<=', $today)->whereDate('period_end', '>=', $today)->orderBy('metric')->get());
 
-        return view('director.recording-dashboard', compact('portfolio', 'previous', 'range', 'previousRange', 'attention', 'companyKpis'));
+        return view('director.recording-dashboard', compact('portfolio', 'previous', 'range', 'previousRange', 'attention', 'companyKpis', 'overheads'));
     }
 
     private function dateRange(Request $request): array

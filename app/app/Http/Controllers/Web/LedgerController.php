@@ -71,12 +71,24 @@ class LedgerController extends Controller
         ]);
     }
 
+    /** The Director's company overheads ledger (one, normally); it opens like a project workspace. */
+    public function overheads(Request $request)
+    {
+        abort_unless($request->user()->hasRole('admin'), 403);
+        $ledgers = Project::query()->where('is_company_overheads', true)->orderBy('name')->get();
+        if ($ledgers->count() === 1) {
+            return redirect()->route('ledger.overview', $ledgers->first());
+        }
+
+        return view('ledger.overheads', ['ledgers' => $ledgers]);
+    }
+
     public function toConfirm(Request $request, LedgerAnalyticsService $analytics)
     {
         if (! $request->user()->can('confirm-payments')) {
             return redirect()->route('ledger.index');
         }
-        $projects = $analytics->projectsFor($request->user());
+        $projects = $analytics->projectsFor($request->user(), withOverheads: true);
         $lines = ExpenseRequest::query()->whereIn('project_id', $projects->pluck('id'))->where('status', 'approved')->with('payments')
             ->get(['id', 'project_id', 'total_amount', 'approved_amount', 'commercial_total', 'status', 'requested_at']);
         $lines = LedgerAnalyticsService::normalize($lines)->filter(fn ($line) => $line->ledger_open_c > 0);
@@ -193,7 +205,7 @@ class LedgerController extends Controller
         $request->merge(['rows' => $rows]);
         if ($request->user()->hasRole('admin')) {
             // The Director's entries are confirmed as they are recorded.
-            $request->merge(['status' => 'paid', 'payment_method' => $request->input('payment_method') ?: 'cash',
+            $request->merge(['status' => 'paid',
                 'payment_date' => $request->input('payment_date') ?: $request->input('expense_date')]);
         }
         $phaseRule = Rule::exists('project_phases', 'id')->where('project_id', $project->id);
@@ -201,7 +213,7 @@ class LedgerController extends Controller
             'expense_date' => ['required', 'date', 'before_or_equal:today'],
             'status' => ['required', Rule::in(['to_confirm', 'paid'])],
             'payment_date' => ['nullable', 'required_if:status,paid', 'date', 'before_or_equal:today'],
-            'payment_method' => ['nullable', 'required_if:status,paid', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
+            'payment_method' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
             'transaction_reference' => ['nullable', 'string', 'max:255'],
             'rows' => ['required', 'array', 'min:1', 'max:100'],
             'rows.*.main_category' => ['required', Rule::in(array_keys(LedgerAnalyticsService::CATEGORIES))],
@@ -287,8 +299,9 @@ class LedgerController extends Controller
             'ids.*' => ['integer'],
             'reason' => ['nullable', 'required_if:action,deny', 'string', 'max:1000'],
             'payment_date' => ['nullable', 'required_if:action,confirm', 'date', 'before_or_equal:today'],
-            'payment_method' => ['nullable', 'required_if:action,confirm', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
+            'payment_method' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
             'transaction_reference' => ['nullable', 'string', 'max:255'],
+            'invoice_receipt_no' => ['nullable', 'string', 'max:255'],
         ], ['ids.required' => 'Tick at least one line first.', 'reason.required_if' => 'Say why the selected lines are denied.']);
         $user = $request->user();
         abort_unless(match ($validated['action']) {
@@ -329,8 +342,8 @@ class LedgerController extends Controller
         if ($line->status !== 'approved' || Money::compare($open, '0') <= 0) {
             throw ValidationException::withMessages(['line' => 'Nothing to confirm.']);
         }
-        $ledger->confirm($line, ['amount' => $open, 'payment_date' => $validated['payment_date'], 'payment_method' => $validated['payment_method'],
-            'transaction_reference' => $validated['transaction_reference'] ?? null], $user);
+        $ledger->confirm($line, ['amount' => $open, 'payment_date' => $validated['payment_date'], 'payment_method' => $validated['payment_method'] ?? null,
+            'transaction_reference' => $validated['transaction_reference'] ?? null, 'invoice_receipt_no' => ($validated['invoice_receipt_no'] ?? null) ?: null], $user);
         $amount = Money::sum([$amount, $open]);
     }
 
@@ -341,8 +354,9 @@ class LedgerController extends Controller
             'total_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
             'amount' => ['required', 'numeric', 'gt:0', 'max:999999999999.99'],
             'payment_date' => ['required', 'date', 'before_or_equal:today'],
-            'payment_method' => ['required', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
+            'payment_method' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
             'transaction_reference' => ['nullable', 'string', 'max:255'],
+            'invoice_receipt_no' => ['nullable', 'string', 'max:255'],
         ]);
         $line = $ledger->confirm($line, $validated, $request->user());
 
@@ -522,7 +536,7 @@ class LedgerController extends Controller
             'labour_agreement_id' => ['nullable', 'integer', Rule::exists('labour_agreements', 'id')->where('project_id', $project->id)],
             'status' => [$editing ? 'nullable' : 'required', Rule::in(['to_confirm', 'paid'])],
             'payment_date' => ['nullable', 'required_if:status,paid', 'date', 'before_or_equal:today'],
-            'payment_method' => ['nullable', 'required_if:status,paid', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
+            'payment_method' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
             'transaction_reference' => ['nullable', 'string', 'max:255'],
         ]);
     }

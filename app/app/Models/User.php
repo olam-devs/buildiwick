@@ -22,6 +22,9 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
+    /** @var array<int, ?Project> projects looked up by canAccessProject() during this request */
+    protected array $projectLookup = [];
+
     /**
      * Get the attributes that should be cast.
      *
@@ -112,9 +115,16 @@ class User extends Authenticatable
 
     public function canAccessProject(Project|int $project): bool
     {
-        $id = $project instanceof Project ? $project->id : $project;
+        $project = $project instanceof Project ? $project : ($this->projectLookup[$project] ??= Project::query()->find($project, ['id', 'is_company_overheads']));
+        if (! $project) {
+            return false;
+        }
+        // Company overheads (salaries, rent, statutory) are the Director's only.
+        if ($project->is_company_overheads) {
+            return $this->hasRole('admin');
+        }
 
-        return $this->seesAllProjects() || $this->assignedProjects()->whereKey($id)->exists();
+        return $this->seesAllProjects() || $this->assignedProjects()->whereKey($project->id)->exists();
     }
 
     public function hasRole(string $name): bool

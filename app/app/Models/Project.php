@@ -16,13 +16,14 @@ class Project extends Model
     protected $fillable = [
         'project_code', 'name', 'status', 'location', 'created_by', 'client_id',
         'contract_reference', 'contract_signed', 'contract_signed_at',
-        'planned_start_date', 'expected_completion_date', 'notes',
+        'planned_start_date', 'expected_completion_date', 'notes', 'is_company_overheads',
     ];
 
     protected function casts(): array
     {
         return [
             'contract_signed' => 'boolean',
+            'is_company_overheads' => 'boolean',
             'contract_signed_at' => 'date',
             'planned_start_date' => 'date',
             'expected_completion_date' => 'date',

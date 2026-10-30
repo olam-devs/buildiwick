@@ -171,7 +171,7 @@ class DirectorKpiService
     /** Recording-mode actual for a target's project / phase / category scope. */
     private function ledgerActual(DirectorKpiTarget $target, CarbonImmutable $from, CarbonImmutable $to): ?string
     {
-        $projects = $target->project_id ? Project::query()->whereKey($target->project_id)->get() : Project::all();
+        $projects = $target->project_id ? Project::query()->whereKey($target->project_id)->get() : Project::query()->where('is_company_overheads', false)->get();
         $spend = '0.00';
         $paid = '0.00';
         $outstanding = '0.00';
@@ -186,10 +186,11 @@ class DirectorKpiService
                 ->when($ids, fn ($rows) => $rows->whereIn('project_phase_id', $ids))
                 ->when($target->main_category, fn ($rows) => $rows->where('main_category', $target->main_category));
             $period = $lines->filter(fn ($line) => $line->requested_at && $line->requested_at->between($from->startOfDay(), $to->endOfDay()));
-            $spend = Money::sum([$spend, ...$period->pluck('total_amount')]);
+            // Spend is confirmed (paid) spend, as on every dashboard; "to confirm" lines count only once confirmed.
+            $spend = Money::sum([$spend, LedgerAnalyticsService::money((int) $period->sum('ledger_paid_c'))]);
             $paid = Money::sum([$paid, ...$period->flatMap(fn ($line) => $line->payments->filter(fn ($payment) => $payment->payment_date->between($from->startOfDay(), $to->endOfDay()))->pluck('amount'))]);
             $outstanding = Money::sum([$outstanding, LedgerAnalyticsService::money((int) $lines->sum('ledger_open_c'))]);
-            $allSpend = Money::sum([$allSpend, ...$lines->pluck('total_amount')]);
+            $allSpend = Money::sum([$allSpend, LedgerAnalyticsService::money((int) $lines->sum('ledger_paid_c'))]);
             foreach ($this->ledger->budgets($project) as $key => $amount) {
                 [$phaseId, $category] = explode('|', $key);
                 if ((! $ids || in_array((int) $phaseId, $ids, true)) && (! $target->main_category || $target->main_category === $category)) {

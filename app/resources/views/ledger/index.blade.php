@@ -14,19 +14,18 @@
 </div>
 
 <div class="lg-cards">
-  <div class="lg-card accent"><div class="k">Total recorded</div><div class="v">TSh {{ $money::format($totals['recorded']) }}</div><div class="s">{{ number_format($totals['lines']) }} expense lines</div></div>
-  <div class="lg-card good"><div class="k">Paid</div><div class="v">TSh {{ $money::format($totals['paid']) }}</div><div class="s">Confirmed by Accounts</div></div>
+  <div class="lg-card accent"><div class="k">Confirmed spend</div><div class="v">TSh {{ $money::format($totals['recorded']) }}</div><div class="s">{{ number_format($totals['lines']) }} expense lines</div></div>
   @can('confirm-payments')
-    <a class="lg-card warn" href="{{ route('ledger.to-confirm') }}"><div class="k">To confirm</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div><div class="s">{{ number_format($totals['to_confirm_count']) }} lines waiting for Accounts</div></a>
+    <a class="lg-card warn" href="{{ route('ledger.to-confirm') }}"><div class="k">Awaiting confirmation</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div><div class="s">{{ number_format($totals['to_confirm_count']) }} lines, not counted as spend yet</div></a>
   @else
-    <div class="lg-card warn"><div class="k">To confirm</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div><div class="s">{{ number_format($totals['to_confirm_count']) }} lines waiting for Accounts</div></div>
+    <div class="lg-card warn"><div class="k">Awaiting confirmation</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div><div class="s">{{ number_format($totals['to_confirm_count']) }} lines, not counted as spend yet</div></div>
   @endcan
   <div class="lg-card"><div class="k">Projects</div><div class="v">{{ $portfolio['rows']->count() }}</div><div class="s">{{ $totals['active_projects'] }} active</div></div>
 </div>
 
 <div class="lg-scroll" style="max-height:none">
   <table class="lg-table lg-cards-sm" id="projectTable">
-    <thead><tr><th style="width:40px">#</th><th>Project</th><th>Status</th><th class="amt">Recorded</th><th class="amt">Paid</th><th class="amt">To confirm</th><th style="min-width:150px">Budget used</th><th>Last entry</th><th></th></tr></thead>
+    <thead><tr><th style="width:40px">#</th><th>Project</th><th>Status</th><th class="amt">Confirmed spend</th><th class="amt">Awaiting confirmation</th><th style="min-width:150px">Budget used</th><th>Last entry</th><th></th></tr></thead>
     <tbody>
     @forelse($portfolio['rows'] as $index => $row)
       @php($project = $row['project'])
@@ -34,17 +33,16 @@
         <td data-label="#" class="lg-num">{{ $index + 1 }}</td>
         <td data-label="Project"><b>{{ $project->name }}</b><span class="muted">{{ $project->project_code }}@if($project->location) · {{ $project->location }}@endif</span></td>
         <td data-label="Status"><span class="dot-status {{ $project->status === 'active' ? 'active' : 'zero' }}">{{ ucfirst(str_replace('_', ' ', $project->status)) }}</span></td>
-        <td data-label="Recorded" class="amt">{{ $money::format($row['recorded']) }}</td>
-        <td data-label="Paid" class="amt">{{ $money::format($row['paid']) }}</td>
-        <td data-label="To confirm" class="amt">@if($row['to_confirm_count']){{ $money::format($row['to_confirm']) }}<span class="muted">{{ $row['to_confirm_count'] }} lines</span>@else — @endif</td>
+        <td data-label="Confirmed spend" class="amt">{{ $money::format($row['recorded']) }}</td>
+        <td data-label="Awaiting" class="amt">@if($row['to_confirm_count']){{ $money::format($row['to_confirm']) }}<span class="muted">{{ $row['to_confirm_count'] }} lines</span>@else — @endif</td>
         <td data-label="Budget used">@if($row['used'] !== null)<div class="lg-meter" style="margin-top:3px"><span class="{{ (float) $row['used'] > 100 ? 'over' : ((float) $row['used'] >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $row['used']) }}%"></span></div><span class="muted">{{ $money::format($row['used']) }}% of TSh {{ $money::format($row['budget']) }}</span>@else<span class="muted">No budget yet</span>@endif</td>
         <td data-label="Last entry">{{ $row['last_entry'] ? \Carbon\Carbon::parse($row['last_entry'])->format('d M Y') : '—' }}</td>
         <td><a class="btn btn-ghost" href="{{ route('ledger.overview', $project) }}">Open</a></td>
       </tr>
     @empty
-      <tr><td colspan="9" class="lg-empty">No projects to show.@if(! auth()->user()->seesAllProjects()) Ask the Director to give you access to your projects in User Management.@endif</td></tr>
+      <tr><td colspan="8" class="lg-empty">No projects to show.@if(! auth()->user()->seesAllProjects()) Ask the Director to give you access to your projects in User Management.@endif</td></tr>
     @endforelse
-    <tr id="noMatch" hidden><td colspan="9" class="lg-empty">No project matches your search.</td></tr>
+    <tr id="noMatch" hidden><td colspan="8" class="lg-empty">No project matches your search.</td></tr>
     </tbody>
   </table>
 </div>

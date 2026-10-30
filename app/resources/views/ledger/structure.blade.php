@@ -22,7 +22,7 @@
 @if($showSpend)
 <div class="lg-cards">
   <div class="lg-card accent"><div class="k">Total budget</div><div class="v">TSh {{ $money::format($totalBudget) }}</div></div>
-  <div class="lg-card"><div class="k">Recorded spend</div><div class="v">TSh {{ $money::format($totalRecorded) }}</div></div>
+  <div class="lg-card"><div class="k">Confirmed spend</div><div class="v">TSh {{ $money::format($totalRecorded) }}</div></div>
   @php($used = (float) $totalBudget > 0 ? $money::percentage($totalRecorded, $totalBudget) : null)
   <div class="lg-card {{ $used !== null && (float) $used > 100 ? 'danger' : '' }}"><div class="k">Budget used</div><div class="v">{{ $used !== null ? $money::format($used).'%' : '—' }}</div>@if($used !== null)<div class="lg-meter"><span class="{{ (float) $used > 100 ? 'over' : ((float) $used >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $used) }}%"></span></div>@endif</div>
 </div>

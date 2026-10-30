@@ -28,6 +28,7 @@
         box.addEventListener('change', count); count();
         if (q) q.addEventListener('input', () => rows.forEach(r => r.hidden = !r.dataset.search.includes(q.value.trim().toLowerCase()))); })();</script>
       @endif</div>
+    <label class="field" style="grid-column:1/-1;display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" name="is_company_overheads" value="1" style="width:16px;height:16px" @checked(old('is_company_overheads', $project?->is_company_overheads))> Company overheads, not a construction project (salaries, rent, statutory, subscriptions). Only the Director sees it, and it stays out of project totals.</label>
     <div class="field" style="grid-column:1/-1"><label for="notes">Notes</label><input id="notes" name="notes" value="{{ old('notes', $project?->notes) }}" maxlength="2000"></div>
   </div>
   @unless($project)
