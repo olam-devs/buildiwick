@@ -69,6 +69,12 @@ class PhaseTree
         return $ids;
     }
 
+    /** A phase with no subphases: the level where expenses are recorded and category budgets are set. */
+    public function isLeaf(int $phaseId): bool
+    {
+        return $this->children($phaseId)->isEmpty();
+    }
+
     public function depth(int $phaseId): int
     {
         $depth = 1;

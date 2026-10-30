@@ -307,7 +307,7 @@ class LedgerController extends Controller
 
         return [
             'project' => $project,
-            'phases' => $tree->flatten(),
+            'phases' => $tree->flatten()->map(fn ($node) => $node + ['leaf' => $tree->isLeaf($node['phase']->id)]),
             'subcategories' => Lookup::ofType('subcategory')->get(['code', 'label', 'parent_code']),
             'units' => Lookup::ofType('unit')->get(['code', 'label']),
             'methods' => Lookup::ofType('payment_method')->pluck('label', 'code'),

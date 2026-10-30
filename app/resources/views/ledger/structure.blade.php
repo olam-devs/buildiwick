@@ -12,7 +12,7 @@
   $totalRecorded = $money::sum($rows->where('depth', 1)->pluck('recorded'));
 @endphp
 <div class="lg-head">
-  <div><h2>Phases &amp; Budget</h2><p>{{ $project->name }} · phases, optional subphases and sub-subphases, each with a budget per main category.@unless($canEdit) Only the Director can change them.@endunless</p></div>
+  <div><h2>Phases &amp; Budget</h2><p>{{ $project->name }} · phases with optional subphases and sub-subphases. Expenses and category budgets go on the lowest level: a phase without subphases takes them itself; a phase with subphases shows their totals. Budgets are optional, so recording can start as soon as a phase exists.@unless($canEdit) Only the Director can change them.@endunless</p></div>
   @if($canEdit)<form method="POST" action="{{ route('ledger.phases.store', $project) }}" class="lg-actions">@csrf<input name="phase_name" maxlength="150" placeholder="New phase name" required style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:220px"><button class="btn btn-primary" type="submit">+ Add Phase</button></form>@endif
 </div>
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
@@ -37,7 +37,9 @@
           <span class="muted">{{ $row['depth'] === 1 ? 'Phase' : ($row['depth'] === 2 ? 'Subphase' : 'Sub-subphase') }} · {{ $row['count'] }} lines</span>
         </td>
         @foreach(array_keys($categories) as $code)
-          <td class="amt">@if($canEdit)<input form="budgetForm" type="number" step="0.01" min="0" name="budget[{{ $phase->id }}][{{ $code }}]" value="{{ $row['categories'][$code]['own_budget'] !== null ? (float) $row['categories'][$code]['own_budget'] : '' }}" placeholder="—" style="width:104px;text-align:right;padding:5px 7px;border:1px solid var(--line);border-radius:6px">@else{{ $row['categories'][$code]['own_budget'] !== null ? $money::format($row['categories'][$code]['own_budget']) : '—' }}@endif
+          <td class="amt">@php($cat = $row['categories'][$code])@if(count($row['ids']) === 1 || $cat['own_budget'] !== null)@if($canEdit)<input form="budgetForm" type="number" step="0.01" min="0" name="budget[{{ $phase->id }}][{{ $code }}]" value="{{ $cat['own_budget'] !== null ? (float) $cat['own_budget'] : '' }}" placeholder="—" style="width:104px;text-align:right;padding:5px 7px;border:1px solid var(--line);border-radius:6px">@else{{ $cat['own_budget'] !== null ? $money::format($cat['own_budget']) : '—' }}@endif
+            @if(count($row['ids']) > 1)<span class="muted" style="color:#9a6400">set before subphases — clear it and budget the subphases</span>@endif
+            @else<span title="Total of its subphases">{{ (float) $cat['budget'] ? $money::format($cat['budget']) : '—' }}</span>@endif
             @if((float) $row['categories'][$code]['recorded'])<span class="muted">spent {{ $money::format($row['categories'][$code]['recorded']) }}</span>@endif</td>
         @endforeach
         <td><b>{{ (float) $row['budget'] ? 'TSh '.$money::format($row['budget']) : 'No budget' }}</b><span class="muted">spent {{ $money::format($row['recorded']) }}@if($row['used'] !== null) · {{ $money::format($row['used']) }}%@endif</span>

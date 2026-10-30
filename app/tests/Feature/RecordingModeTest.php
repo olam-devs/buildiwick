@@ -136,21 +136,49 @@ class RecordingModeTest extends TestCase
         $this->actingAs($director)->post(route('ledger.phases.store', $project), ['phase_name' => 'Too deep', 'parent_id' => $tiling->id])->assertSessionHasErrors('parent_id');
 
         $this->actingAs($director)->post(route('ledger.budget.save', $project), ['budget' => [
-            $ground->id => ['materials' => '1000000', 'labour_subcontracts' => '400000'], $tiling->id => ['materials' => '600000'],
+            $tiling->id => ['materials' => '600000', 'labour_subcontracts' => '400000'],
         ]])->assertRedirect()->assertSessionHasNoErrors();
         $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($tiling, ['unit_cost' => '20000']));
 
         $rows = app(LedgerAnalyticsService::class)->project($project)['phases']->keyBy(fn ($row) => $row['phase']->id);
-        $this->assertSame('2000000.00', $rows[$finishing->id]['budget']);
+        $this->assertSame('1000000.00', $rows[$finishing->id]['budget']);
         $this->assertSame('800000.00', $rows[$finishing->id]['recorded']);
-        $this->assertSame('1600000.00', $rows[$ground->id]['categories']['materials']['budget']);
-        $this->assertSame('1000000.00', $rows[$ground->id]['categories']['materials']['own_budget']);
-        $this->assertSame('133.33', $rows[$tiling->id]['used']);
-        $this->actingAs($pm)->get(route('ledger.structure', $project))->assertOk()->assertSee('Tiling')->assertSee('2,000,000.00')->assertDontSee('Save Budget');
+        $this->assertSame('600000.00', $rows[$ground->id]['categories']['materials']['budget']);
+        $this->assertNull($rows[$ground->id]['categories']['materials']['own_budget']);
+        $this->assertSame('80.00', $rows[$tiling->id]['used']);
+        $this->actingAs($pm)->get(route('ledger.structure', $project))->assertOk()->assertSee('Tiling')->assertSee('1,000,000.00')->assertDontSee('Save Budget');
         $this->actingAs($director)->delete(route('ledger.phases.destroy', [$project, $finishing]))->assertSessionHasErrors('phase');
 
         $this->actingAs($director)->post(route('ledger.budget.save', $project), ['budget' => [$tiling->id => ['materials' => '']]]);
-        $this->assertSame('1400000.00', app(LedgerAnalyticsService::class)->project($project)['totals']['budget']);
+        $this->assertSame('400000.00', app(LedgerAnalyticsService::class)->project($project)['totals']['budget']);
+    }
+
+    public function test_expenses_and_category_budgets_go_on_the_lowest_level(): void
+    {
+        [$project] = $this->project(stages: false);
+        $director = $this->user('director');
+        $pm = $this->user('project_manager', $project);
+        $this->actingAs($director)->post(route('ledger.phases.store', $project), ['phase_name' => 'Walling']);
+        $walling = ProjectPhase::where('phase_name', 'Walling')->sole();
+
+        // No budget and no subphases yet: recording can start on the phase itself.
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($walling))->assertSessionHasNoErrors();
+        $this->actingAs($director)->post(route('ledger.budget.save', $project), ['budget' => [$walling->id => ['materials' => '500000']]])->assertSessionHasNoErrors();
+
+        $this->actingAs($director)->post(route('ledger.phases.store', $project), ['phase_name' => 'Block 1', 'parent_id' => $walling->id]);
+        $block = ProjectPhase::where('phase_name', 'Block 1')->sole();
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($walling, ['item_description' => 'Sand']))->assertSessionHasErrors('project_phase_id');
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($block, ['item_description' => 'Sand']))->assertSessionHasNoErrors();
+        $this->actingAs($director)->post(route('ledger.budget.save', $project), ['budget' => [$walling->id => ['labour_subcontracts' => '100']]])->assertSessionHasErrors('budget');
+        $this->actingAs($director)->post(route('ledger.budget.save', $project), ['budget' => [$block->id => ['materials' => '300000']]])->assertSessionHasNoErrors();
+
+        $form = $this->actingAs($pm)->get(route('ledger.expenses.create', $project))->assertOk();
+        $form->assertSee('value="'.$walling->id.'"  disabled', false)->assertSee('Walling ▸');
+        $page = $this->actingAs($director)->get(route('ledger.structure', $project))->assertOk();
+        $page->assertSee('name="budget['.$block->id.'][materials]"', false)->assertDontSee('name="budget['.$walling->id.'][labour_subcontracts]"', false)
+            ->assertSee('set before subphases');
+        $this->assertSame('800000.00', app(LedgerAnalyticsService::class)->project($project)['phases']->firstWhere('label', 'Walling')['budget']);
+        $this->assertSame(2, ExpenseRequest::where('project_id', $project->id)->count());
     }
 
     public function test_workers_link_labour_payments_and_show_contract_progress(): void
