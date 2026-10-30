@@ -2,6 +2,15 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — Bulk Confirm / Deny / Delete
+
+- **Expenditure rows can be ticked**, one by one or with "select all on page", and handled together from a bar at the bottom of the screen (`ledger.expenses.bulk`):
+  - **✓ Confirm** pays what is still open on each line, with one date, method and reference;
+  - **Deny** uses one reason for every selected line;
+  - **Delete** removes the selected lines.
+- Each line goes through the same service call and permission check as its own button. Lines that can't take the action (already paid, already denied, someone else's line for a PM) are skipped and named in the message. Lines from other projects are never touched.
+- Full suite: 186 tests.
+
 ## 2026-10-30 — Staff Roles Without Totals, Director Auto-Confirm, Team KPIs, Excel Workbooks, Project Dates
 
 - **Totals and analytics are now a permission**, "See totals & analytics" (`view_analytics`). It is off for staff by default; the Director always has it. Without it:

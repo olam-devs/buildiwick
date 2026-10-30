@@ -430,6 +430,38 @@ class RecordingModeTest extends TestCase
         $this->actingAs($this->user('project_manager', $project))->get(route('ledger.export'))->assertForbidden();
     }
 
+    public function test_selected_lines_are_confirmed_denied_or_deleted_in_bulk(): void
+    {
+        [$project, $phases] = $this->project();
+        [$other, $otherPhases] = $this->project('BWG-TST-B-2026-001');
+        $pm = $this->user('project_manager', $project);
+        $accounts = $this->user('accounts');
+        foreach (['Cement', 'Sand', 'Nails', 'Timber'] as $item) {
+            $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => $item]));
+        }
+        $this->actingAs($this->user('director'))->post(route('ledger.expenses.store', $other), $this->line($otherPhases[0], ['item_description' => 'Elsewhere']));
+        $ids = ExpenseRequest::query()->where('project_id', $project->id)->orderBy('id')->pluck('id');
+        $foreign = ExpenseRequest::where('item_description', 'Elsewhere')->value('id');
+
+        $this->actingAs($accounts)->get(route('ledger.expenses', [$project, 'status' => 'to_confirm']))->assertOk()->assertSee('id="bulkBar"', false);
+        $this->actingAs($pm)->post(route('ledger.expenses.bulk', $project), ['action' => 'confirm', 'ids' => [$ids[0]], 'payment_date' => '2026-10-30', 'payment_method' => 'cash'])->assertForbidden();
+        $this->actingAs($accounts)->post(route('ledger.expenses.bulk', $project), ['action' => 'deny', 'ids' => [$ids[0]]])->assertSessionHasErrors('reason');
+
+        $this->actingAs($accounts)->post(route('ledger.expenses.bulk', $project), ['action' => 'confirm', 'ids' => [$ids[0], $ids[1], $foreign], 'payment_date' => '2026-10-30', 'payment_method' => 'bank_transfer'])
+            ->assertRedirect()->assertSessionHas('success', '2 line(s) confirmed · TSh 1,840,000.00 paid.');
+        $this->assertSame(['paid', 'paid', 'unpaid'], ExpenseRequest::query()->whereIn('id', [$ids[0], $ids[1], $ids[2]])->orderBy('id')->get()->map->payment_status->all());
+        $this->assertSame(1, ExpensePayment::where('expense_request_id', $foreign)->count(), 'Lines of another project are never touched.');
+
+        $this->actingAs($accounts)->post(route('ledger.expenses.bulk', $project), ['action' => 'deny', 'ids' => [$ids[1], $ids[2]], 'reason' => 'Duplicates'])
+            ->assertSessionHas('success', fn ($message) => str_starts_with($message, '1 line(s) denied.') && str_contains($message, 'TST-A-TXN-0002'));
+        $this->assertSame('rejected', ExpenseRequest::find($ids[2])->status);
+
+        $this->actingAs($pm)->post(route('ledger.expenses.bulk', $project), ['action' => 'delete', 'ids' => [$ids[0], $ids[3]]])
+            ->assertSessionHas('success', fn ($message) => str_starts_with($message, '1 line(s) deleted.'));
+        $this->assertNull(ExpenseRequest::find($ids[3]));
+        $this->assertNotNull(ExpenseRequest::find($ids[0]), 'A paid line is skipped for the PM.');
+    }
+
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
     {
         $project = Project::create(['project_code' => $code, 'name' => 'Project '.$code, 'status' => 'active', 'location' => 'Dar es Salaam']);

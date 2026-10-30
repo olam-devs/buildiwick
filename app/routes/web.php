@@ -50,6 +50,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/ledger/projects/{project}/expenses/{line}/edit', [LedgerController::class, 'edit'])->name('ledger.expenses.edit');
     Route::put('/ledger/projects/{project}/expenses/{line}', [LedgerController::class, 'update'])->name('ledger.expenses.update');
     Route::delete('/ledger/projects/{project}/expenses/{line}', [LedgerController::class, 'destroy'])->name('ledger.expenses.destroy');
+    Route::post('/ledger/projects/{project}/expenses/bulk', [LedgerController::class, 'bulk'])->name('ledger.expenses.bulk');
     Route::post('/ledger/projects/{project}/expenses/{line}/confirm', [LedgerController::class, 'confirm'])->name('ledger.expenses.confirm');
     Route::post('/ledger/projects/{project}/expenses/{line}/deny', [LedgerController::class, 'deny'])->name('ledger.expenses.deny');
     Route::post('/ledger/projects/{project}/expenses/{line}/restore', [LedgerController::class, 'restore'])->name('ledger.expenses.restore');
