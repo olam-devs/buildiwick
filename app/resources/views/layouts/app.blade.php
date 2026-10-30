@@ -30,7 +30,17 @@
   .sidebar-toggle{position:fixed;z-index:35;top:18px;left:214px;width:34px;height:34px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink-soft);box-shadow:0 2px 8px rgba(16,24,32,.10);cursor:pointer;transition:left .18s ease;}
   .sidebar-toggle:hover{color:var(--primary-dark);border-color:var(--primary);}
   .sidebar-collapsed .sidebar-toggle{left:12px;}
-  @media (max-width:860px){ .shell{grid-template-columns:1fr;} .sidebar,.sidebar-toggle{display:none;} }
+  .mobile-bar,.nav-scrim{display:none}
+  @media (max-width:860px){
+    .shell{grid-template-columns:1fr;} .sidebar-toggle{display:none;}
+    .sidebar{position:fixed;inset:0 auto 0 0;width:270px;z-index:60;transform:translateX(-105%);transition:transform .2s ease;box-shadow:4px 0 24px rgba(16,24,32,.18);overflow-y:auto;}
+    body.nav-open .sidebar{transform:none;}
+    .nav-scrim{display:none;position:fixed;inset:0;background:rgba(20,30,40,.35);z-index:55;}
+    body.nav-open .nav-scrim{display:block;}
+    .mobile-bar{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:40;margin:0 0 14px;border-radius:10px;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 14px;}
+    .mobile-bar button{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;}
+    .mobile-bar .title{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  }
 
   .sidebar{background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:18px;transition:opacity .14s ease;}
   .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 14px;border-bottom:1px solid var(--line);margin-bottom:2px;}
@@ -293,7 +303,9 @@
     @endauth
   </aside>
   <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Minimize sidebar" aria-expanded="true" title="Minimize sidebar">&#x2039;</button>
+  <div class="nav-scrim" onclick="document.body.classList.remove('nav-open')"></div>
   <main class="main @yield('mainClass')">
+    <div class="mobile-bar"><button type="button" aria-label="Open menu" onclick="document.body.classList.add('nav-open')">&#9776;</button><span class="title">@yield('title', 'Buildiwick')</span></div>
     @if (session('success'))<div class="flash">{{ session('success') }}</div>@endif
     @yield('content')
   </main>

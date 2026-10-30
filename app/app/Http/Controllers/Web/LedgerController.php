@@ -20,6 +20,7 @@ use App\Support\ReviewPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -44,19 +45,30 @@ class LedgerController extends Controller
 
     public function toConfirm(Request $request, LedgerAnalyticsService $analytics)
     {
-        abort_unless(ExpenseLedgerService::canMarkPaid($request->user()), 403);
-        $projectIds = $analytics->projectsFor($request->user())->pluck('id');
-        $lines = ExpenseRequest::query()->whereIn('project_id', $projectIds)->where('status', 'approved')->with(['payments', 'project', 'phase', 'requestedBy'])
-            ->orderBy('requested_at')->get();
-        $lines = LedgerAnalyticsService::normalize($lines)->filter(fn ($line) => $line->ledger_open_c > 0)->values();
+        abort_unless($request->user()->can('confirm-payments'), 403);
+        $projects = $analytics->projectsFor($request->user());
+        $lines = ExpenseRequest::query()->whereIn('project_id', $projects->pluck('id'))->where('status', 'approved')->with('payments')
+            ->get(['id', 'project_id', 'total_amount', 'approved_amount', 'commercial_total', 'status', 'requested_at']);
+        $lines = LedgerAnalyticsService::normalize($lines)->filter(fn ($line) => $line->ledger_open_c > 0);
+        $rows = $lines->groupBy('project_id')->map(fn ($group, $projectId) => [
+            'project' => $projects->firstWhere('id', $projectId),
+            'count' => $group->count(),
+            'amount' => LedgerAnalyticsService::money((int) $group->sum('ledger_open_c')),
+            'oldest' => $group->min('requested_at'),
+        ])->sortByDesc(fn ($row) => (int) round((float) $row['amount'] * 100))->values();
 
-        return view('ledger.to-confirm', ['lines' => $lines, 'methods' => Lookup::ofType('payment_method')->pluck('label', 'code'), 'project' => null]);
+        return view('ledger.to-confirm', ['rows' => $rows, 'total' => LedgerAnalyticsService::money((int) $lines->sum('ledger_open_c')), 'count' => $lines->count()]);
     }
 
     public function overview(Request $request, Project $project, LedgerAnalyticsService $analytics)
     {
         $this->authorize('view-ledger', $project);
-        $range = $request->filled('range') ? ReviewPeriod::resolve((string) $request->query('range'), $request->query('from'), $request->query('to')) : null;
+        $input = $request->validate([
+            'range' => ['nullable', Rule::in(array_keys(ReviewPeriod::PRESETS))],
+            'from' => ['nullable', 'required_if:range,custom', 'date'],
+            'to' => ['nullable', 'required_if:range,custom', 'date', 'after_or_equal:from'],
+        ]);
+        $range = ! empty($input['range']) ? ReviewPeriod::resolve($input['range'], $input['from'] ?? null, $input['to'] ?? null) : null;
         $report = $analytics->project($project, $range['from'] ?? null, $range['to'] ?? null);
 
         return view('ledger.overview', compact('project', 'report', 'range'));
@@ -86,7 +98,7 @@ class LedgerController extends Controller
 
     public function export(Request $request, Project $project, LedgerAnalyticsService $analytics, ExcelExportService $excel)
     {
-        $this->authorize('view-ledger', $project);
+        $this->authorize('export-ledger', $project);
         [$lines, , $tree] = $this->filteredLines($request, $project, $analytics);
         $subcategories = Lookup::ofType('subcategory')->pluck('label', 'code');
         $units = ExpenseLedgerService::units();
@@ -109,16 +121,61 @@ class LedgerController extends Controller
     {
         $this->authorize('record-expense', $project);
 
-        return view('ledger.expense-form', $this->formData($project) + ['line' => null]);
+        return view('ledger.expense-batch', $this->formData($project));
     }
 
     public function store(Request $request, Project $project, ExpenseLedgerService $ledger)
     {
         $this->authorize('record-expense', $project);
+        if ($request->has('rows')) {
+            return $this->storeRows($request, $project, $ledger);
+        }
         $line = $ledger->record($project, $this->validated($request, $project), $request->user());
         $next = $request->input('after') === 'another' ? route('ledger.expenses.create', $project) : route('ledger.expenses', $project);
 
         return redirect($next)->with('success', $line->request_code.' recorded: '.$line->item_description.' · TSh '.Money::format($line->total_amount).'.');
+    }
+
+    /** Several lines in one go: a header (date, category, phase, status) and one table row per item. */
+    private function storeRows(Request $request, Project $project, ExpenseLedgerService $ledger)
+    {
+        $rows = collect($request->input('rows', []))
+            ->filter(fn ($row) => is_array($row) && collect($row)->except(['main_category', 'project_phase_id'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
+            ->values()->all();
+        $request->merge(['rows' => $rows]);
+        $phaseRule = Rule::exists('project_phases', 'id')->where('project_id', $project->id);
+        $header = $request->validate([
+            'expense_date' => ['required', 'date', 'before_or_equal:today'],
+            'status' => ['required', Rule::in(['to_confirm', 'paid'])],
+            'payment_date' => ['nullable', 'required_if:status,paid', 'date', 'before_or_equal:today'],
+            'payment_method' => ['nullable', 'required_if:status,paid', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
+            'transaction_reference' => ['nullable', 'string', 'max:255'],
+            'rows' => ['required', 'array', 'min:1', 'max:100'],
+            'rows.*.main_category' => ['required', Rule::in(array_keys(LedgerAnalyticsService::CATEGORIES))],
+            'rows.*.project_phase_id' => ['required', 'integer', $phaseRule],
+            'rows.*.item_description' => ['required', 'string', 'max:255'],
+            'rows.*.subcategory' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'subcategory')],
+            'rows.*.quantity' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
+            'rows.*.unit' => ['nullable', 'string', 'max:30'],
+            'rows.*.unit_cost' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
+            'rows.*.total_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
+            'rows.*.invoice_receipt_no' => ['nullable', 'string', 'max:255'],
+            'rows.*.labour_agreement_id' => ['nullable', 'integer', Rule::exists('labour_agreements', 'id')->where('project_id', $project->id)],
+            'rows.*.details' => ['nullable', 'string', 'max:2000'],
+        ], [
+            'rows.required' => 'Add at least one item.',
+            'rows.*.item_description.required' => 'Row :position needs an item name.',
+            'rows.*.project_phase_id.required' => 'Row :position needs a phase.',
+            'rows.*.main_category.required' => 'Row :position needs a category.',
+        ]);
+        $lines = DB::transaction(fn () => collect($header['rows'])->map(fn (array $row) => $ledger->record($project, $row + [
+            'expense_date' => $header['expense_date'], 'status' => $header['status'], 'payment_date' => $header['payment_date'] ?? null,
+            'payment_method' => $header['payment_method'] ?? null, 'transaction_reference' => $header['transaction_reference'] ?? null,
+        ], $request->user())));
+        $total = LedgerAnalyticsService::money((int) $lines->sum(fn ($line) => LedgerAnalyticsService::cents($line->total_amount)));
+        $next = $request->input('after') === 'another' ? route('ledger.expenses.create', $project) : route('ledger.expenses', $project);
+
+        return redirect($next)->with('success', $lines->count().' line(s) recorded ('.$lines->first()->request_code.($lines->count() > 1 ? ' – '.$lines->last()->request_code : '').') · TSh '.Money::format($total).'.');
     }
 
     public function edit(Project $project, ExpenseRequest $line)
@@ -144,6 +201,23 @@ class LedgerController extends Controller
         $ledger->delete($line, $request->user());
 
         return back()->with('success', $line->request_code.' deleted.');
+    }
+
+    public function deny(Request $request, Project $project, ExpenseRequest $line, ExpenseLedgerService $ledger)
+    {
+        $this->owned($project, $line);
+        $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+        $ledger->deny($line, $validated['reason'], $request->user());
+
+        return back()->with('success', $line->request_code.' denied. It no longer counts in any total.');
+    }
+
+    public function restore(Request $request, Project $project, ExpenseRequest $line, ExpenseLedgerService $ledger)
+    {
+        $this->owned($project, $line);
+        $ledger->restore($line, $request->user());
+
+        return back()->with('success', $line->request_code.' restored.');
     }
 
     public function confirm(Request $request, Project $project, ExpenseRequest $line, ExpenseLedgerService $ledger)
@@ -262,7 +336,7 @@ class LedgerController extends Controller
             'category' => ['nullable', Rule::in(array_keys(LedgerAnalyticsService::CATEGORIES))],
             'phase' => ['nullable', 'integer'],
             'subcategory' => ['nullable', 'string', 'max:100'],
-            'status' => ['nullable', Rule::in(['paid', 'to_confirm', 'part_paid'])],
+            'status' => ['nullable', Rule::in(['paid', 'to_confirm', 'part_paid', 'denied'])],
             'worker' => ['nullable', 'integer'],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
@@ -271,7 +345,8 @@ class LedgerController extends Controller
         ]);
         $tree = new PhaseTree($project->phases()->get());
         $phaseIds = ! empty($filters['phase']) ? $tree->withDescendants((int) $filters['phase']) : null;
-        $lines = $project->expenseRequests()->where('status', 'approved')->with(['payments', 'labourAgreement', 'requestedBy'])
+        $denied = ($filters['status'] ?? null) === 'denied';
+        $lines = $project->expenseRequests()->where('status', $denied ? 'rejected' : 'approved')->with(['payments', 'labourAgreement', 'requestedBy', 'latestApproval.decidedBy'])
             ->when($filters['category'] ?? null, fn ($query, $category) => $query->where('main_category', $category))
             ->when($phaseIds, fn ($query) => $query->whereIn('project_phase_id', $phaseIds))
             ->when($filters['subcategory'] ?? null, fn ($query, $subcategory) => $query->where('subcategory', $subcategory))
@@ -282,7 +357,7 @@ class LedgerController extends Controller
                 ->orWhere('request_code', 'like', '%'.$search.'%')->orWhere('notes', 'like', '%'.$search.'%')->orWhere('invoice_receipt_no', 'like', '%'.$search.'%')))
             ->get()
             ->pipe(fn ($rows) => LedgerAnalyticsService::normalize($rows))
-            ->when($filters['status'] ?? null, fn ($rows, $status) => $rows->filter(fn ($line) => $line->ledger_status === match ($status) {
+            ->when(! $denied && ($filters['status'] ?? null), fn ($rows) => $rows->filter(fn ($line) => $line->ledger_status === match ($filters['status']) {
                 'paid' => 'paid', 'part_paid' => 'part_paid', default => 'unpaid',
             }));
         $lines = match ($filters['sort'] ?? 'newest') {
@@ -302,8 +377,7 @@ class LedgerController extends Controller
     private function formData(Project $project): array
     {
         $tree = new PhaseTree($project->phases()->get());
-        $suggestions = ExpenseRequest::query()->select('item_description')->selectRaw('count(*) as uses')
-            ->groupBy('item_description')->orderByDesc('uses')->limit(400)->pluck('item_description');
+        $suggestions = Lookup::ofType('material_item')->orderBy('label')->get(['label', 'parent_code'])->groupBy('parent_code')->map(fn ($items) => $items->pluck('label')->values());
 
         return [
             'project' => $project,
@@ -357,8 +431,7 @@ class LedgerController extends Controller
 
     private function authorizeWorkers(Request $request, Project $project): void
     {
-        $user = $request->user();
-        abort_unless($user->hasRole('admin') || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($project->id)->exists()), 403);
+        $this->authorize('manage-workers', $project);
     }
 
     private function owned(Project $project, ExpenseRequest $line): void

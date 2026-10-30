@@ -4,8 +4,7 @@
 @include('partials.ledger.styles')
 @php
   $money = \App\Support\Money::class;
-  $user = auth()->user();
-  $canEdit = $user->hasRole('admin') || ($user->hasRole('project_manager') && $user->assignedProjects()->whereKey($project->id)->exists());
+  $canEdit = auth()->user()->can('manage-workers', $project);
 @endphp
 <div class="lg-head">
   <div><h2>Workers</h2><p>{{ $project->name }} · fundis and subcontractors. Register a worker once (with the contract amount, if there is one), then pick them when recording a labour payment.</p></div>

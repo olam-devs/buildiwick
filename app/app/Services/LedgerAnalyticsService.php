@@ -45,7 +45,7 @@ class LedgerAnalyticsService
     public function projectsFor(User $user): Collection
     {
         return Project::query()
-            ->when($user->role?->name === 'project_manager', fn ($query) => $query->whereHas('assignedUsers', fn ($users) => $users->whereKey($user->id)))
+            ->when(! $user->seesAllProjects(), fn ($query) => $query->whereHas('assignedUsers', fn ($users) => $users->whereKey($user->id)))
             ->orderBy('name')->get();
     }
 
@@ -115,6 +115,7 @@ class LedgerAnalyticsService
             $byCategory[$code] = [
                 'label' => $label, 'color' => self::CATEGORY_COLORS[$code], 'recorded' => self::money($amount),
                 'paid' => self::money($this->sum($group, 'ledger_paid_c')), 'budget' => self::money($categoryBudget),
+                'to_confirm' => self::money($this->sum($group, 'ledger_open_c')), 'to_confirm_count' => $group->filter(fn ($line) => $line->ledger_open_c > 0)->count(),
                 'count' => $group->count(), 'share' => self::pct($amount, $recorded) ?? '0.00', 'used' => self::pct($amount, $categoryBudget),
             ];
         }
@@ -132,6 +133,7 @@ class LedgerAnalyticsService
             'phases' => $this->phaseRows($tree, $lines, $budgets),
             'monthly' => $this->monthly($lines, $from, $to),
             'top_items' => $this->topItems($lines),
+            'top_by_category' => collect(self::CATEGORIES)->mapWithKeys(fn ($label, $code) => [$code => $this->topItems($lines->where('main_category', $code))])->all(),
             'recent' => $all->sortByDesc(fn ($line) => [$line->requested_at?->format('Y-m-d'), $line->id])->take(8)->values(),
             'lines' => $all,
         ];

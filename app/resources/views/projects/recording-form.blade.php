@@ -15,7 +15,17 @@
     <div class="field"><label for="status">Status <span class="req">*</span></label><select id="status" name="status" required>@foreach($statuses as $status)<option value="{{ $status->code }}" @selected(old('status', $project?->status ?? 'active') === $status->code)>{{ $status->label }}</option>@endforeach</select></div>
     <div class="field" style="grid-column:span 2"><label for="location">Location <span class="req">*</span></label><input id="location" name="location" value="{{ old('location', $project?->location) }}" maxlength="150" required placeholder="Oysterbay, Dar es Salaam"></div>
     <div class="field" style="grid-column:1/-1"><label>Project Manager(s)</label>
-      <div class="lg-cat-pick">@forelse($managers as $manager)<label><input type="checkbox" name="project_manager_ids[]" value="{{ $manager->id }}" @checked(in_array($manager->id, old('project_manager_ids', $assigned)))>{{ $manager->name }}</label>@empty<span class="form-context">No active Project Manager accounts yet. Add them under User Management.</span>@endforelse</div></div>
+      @if($managers->isEmpty())<span class="form-context">No active Project Manager accounts yet. Add them under User Management.</span>
+      @else<div class="lg-people" id="pmPicker">
+        @if($managers->count() > 6)<input type="search" class="lg-people-search" placeholder="Search managers…">@endif
+        <div class="list">@foreach($managers as $manager)<label data-search="{{ strtolower($manager->name.' '.$manager->email) }}"><input type="checkbox" name="project_manager_ids[]" value="{{ $manager->id }}" @checked(in_array($manager->id, old('project_manager_ids', $assigned)))>{{ $manager->name }}<small>{{ $manager->email }}</small></label>@endforeach</div>
+        <div class="foot"><span data-count></span> selected</div>
+      </div>
+      <script>(() => { const box = document.getElementById('pmPicker'), rows = [...box.querySelectorAll('label')], q = box.querySelector('input[type=search]');
+        const count = () => box.querySelector('[data-count]').textContent = rows.filter(r => r.querySelector('input').checked).length;
+        box.addEventListener('change', count); count();
+        if (q) q.addEventListener('input', () => rows.forEach(r => r.hidden = !r.dataset.search.includes(q.value.trim().toLowerCase()))); })();</script>
+      @endif</div>
     <div class="field" style="grid-column:1/-1"><label for="notes">Notes</label><input id="notes" name="notes" value="{{ old('notes', $project?->notes) }}" maxlength="2000"></div>
   </div>
   @unless($project)
