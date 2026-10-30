@@ -56,7 +56,8 @@ class AuthController extends Controller
             return match ($role) {
                 'admin' => 'ledger.index',
                 'director' => 'director.index',
-                'accounts', 'accountant', 'project_manager' => 'ledger.index',
+                'accounts', 'accountant' => 'ledger.to-confirm',
+                'project_manager' => 'ledger.index',
                 default => null,
             };
         }

@@ -17,6 +17,7 @@ use Carbon\Carbon;
 use Database\Seeders\LookupSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
@@ -48,7 +49,7 @@ class RecordingModeTest extends TestCase
         $pm = $this->user('project_manager', $project);
 
         $this->actingAs($pm)->get('/')->assertRedirect(route('ledger.index'));
-        $this->actingAs($this->user('accounts'))->get('/')->assertRedirect(route('ledger.index'));
+        $this->actingAs($this->user('accounts'))->get('/')->assertRedirect(route('ledger.to-confirm'));
         $this->actingAs($this->user('director'))->get('/')->assertRedirect(route('director.index'));
         foreach (['estimator_qs', 'site_operator'] as $role) {
             $this->post('/logout');
@@ -63,7 +64,7 @@ class RecordingModeTest extends TestCase
         $this->actingAs($director)->get(route('director.projects.show', $project))->assertRedirect(route('ledger.overview', $project));
         $page = $this->actingAs($director)->get(route('director.index'))->assertOk()->assertSee('Company Dashboard');
         $page->assertDontSee('Receivable')->assertDontSee('Invoice')->assertDontSee('Estimator');
-        $this->actingAs($pm)->get(route('ledger.overview', $project))->assertOk()
+        $this->actingAs($pm)->get(route('ledger.expenses', $project))->assertOk()
             ->assertSee('>Expenditure</a>', false)->assertSee('>Record Expense</a>', false)->assertSee('>Phases &amp; Budget</a>', false)->assertSee('>Workers</a>', false)
             ->assertDontSee('Warnings &amp; KPIs', false);
         $this->actingAs($director)->get(route('admin.users.create'))->assertOk()->assertDontSee('estimator_qs')->assertDontSee('site_operator');
@@ -81,7 +82,7 @@ class RecordingModeTest extends TestCase
         $line = ExpenseRequest::query()->sole();
         $this->assertSame('TST-A-TXN-0001', $line->request_code);
         $this->assertSame(['approved', 'unpaid', '920000.00'], [$line->status, $line->payment_status, $line->total_amount]);
-        $this->actingAs($pm)->get(route('ledger.to-confirm'))->assertForbidden();
+        $this->actingAs($pm)->get(route('ledger.to-confirm'))->assertRedirect(route('ledger.index'));
 
         $this->actingAs($accounts)->get(route('ledger.to-confirm'))->assertOk()->assertSee($project->name)->assertSee('920,000.00')
             ->assertSee(route('ledger.expenses', [$project, 'status' => 'to_confirm', 'sort' => 'oldest']));
@@ -93,12 +94,17 @@ class RecordingModeTest extends TestCase
         $this->assertDatabaseHas('project_edit_logs', ['document_id' => $line->id, 'action' => 'ledger_amount_confirmed']);
         $this->actingAs($pm)->get(route('ledger.expenses.edit', [$project, $line]))->assertForbidden();
 
-        $this->actingAs($accounts)->post(route('ledger.expenses.store', $project), $this->line($phases[1], ['item_description' => 'Office water', 'status' => 'paid', 'payment_method' => 'mobile_money', 'payment_date' => '2026-10-30']))
+        $this->actingAs($accounts)->post(route('ledger.expenses.store', $project), $this->line($phases[1]))->assertForbidden();
+        $director = $this->user('director');
+        $this->actingAs($director)->post(route('ledger.expenses.store', $project), $this->line($phases[1], ['item_description' => 'Office water', 'status' => 'to_confirm']))
             ->assertSessionHasNoErrors();
+        $this->assertSame('paid', ExpenseRequest::where('item_description', 'Office water')->sole()->payment_status, 'Director entries are confirmed as they are recorded.');
+        $this->actingAs($director)->get(route('ledger.expenses', [$project, 'category' => 'materials']))->assertOk()->assertSee('1,820,000.00');
         $register = $this->actingAs($pm)->get(route('ledger.expenses', [$project, 'category' => 'materials']))->assertOk();
-        $register->assertSee('TST-A-TXN-0001')->assertSee('TST-A-TXN-0002')->assertSee('1,820,000.00');
+        $register->assertSee('TST-A-TXN-0001')->assertSee('TST-A-TXN-0002')->assertDontSee('1,820,000.00');
         $this->actingAs($pm)->get(route('ledger.expenses', [$project, 'status' => 'to_confirm']))->assertOk()->assertDontSee('Floor tiles');
-        $this->actingAs($pm)->get(route('ledger.expenses.export', $project))->assertOk()->assertDownload();
+        $this->actingAs($pm)->get(route('ledger.expenses.export', $project))->assertForbidden();
+        $this->actingAs($director)->get(route('ledger.expenses.export', $project))->assertOk()->assertDownload();
     }
 
     public function test_pms_only_work_on_their_projects_and_their_own_unpaid_lines(): void
@@ -325,7 +331,7 @@ class RecordingModeTest extends TestCase
         $this->assertSame([$project->id], $limited->assignedProjects()->pluck('projects.id')->all());
 
         $this->actingAs($limited)->get(route('ledger.overview', $other))->assertForbidden();
-        $this->actingAs($limited)->get(route('ledger.to-confirm'))->assertForbidden();
+        $this->actingAs($limited)->get(route('ledger.to-confirm'))->assertRedirect(route('ledger.index'));
         $this->actingAs($limited)->post(route('ledger.expenses.store', $project), $this->line($phases[0]))->assertSessionHasNoErrors();
         $line = ExpenseRequest::query()->sole();
         $this->actingAs($limited)->post(route('ledger.expenses.deny', [$project, $line]), ['reason' => 'No'])->assertForbidden();
@@ -334,9 +340,94 @@ class RecordingModeTest extends TestCase
             'name' => 'Limited Accountant', 'email' => 'limited@buildiwick.test', 'role_id' => $accountsRole, 'is_active' => '1',
             'permissions' => ['record_expenses', 'mark_paid'], 'all_projects' => '1',
         ])->assertRedirect()->assertSessionHasNoErrors();
-        $this->actingAs($limited->fresh())->get(route('ledger.overview', $other))->assertOk();
+        $this->actingAs($limited->fresh())->get(route('ledger.expenses', $other))->assertOk();
         $this->assertTrue($this->user('accounts')->seesAllProjects());
         $this->assertFalse($this->user('project_manager')->seesAllProjects());
+    }
+
+    public function test_staff_accountant_only_confirms_and_sees_no_project_totals(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+        $accounts = $this->user('accounts');
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0]));
+        $line = ExpenseRequest::query()->sole();
+
+        $this->actingAs($accounts)->get(route('ledger.overview', $project))->assertRedirect(route('ledger.expenses', $project));
+        $this->actingAs($accounts)->get(route('ledger.expenses.create', $project))->assertForbidden();
+        $this->actingAs($accounts)->get(route('ledger.structure', $project))->assertForbidden();
+        $this->actingAs($accounts)->get(route('ledger.workers', $project))->assertForbidden();
+        $this->actingAs($accounts)->get(route('ledger.export'))->assertForbidden();
+        $this->actingAs($accounts)->get(route('ledger.index'))->assertOk()->assertSee($project->name)->assertSee('920,000.00')->assertDontSee('Total recorded');
+        $this->actingAs($accounts)->get(route('ledger.expenses', [$project, 'status' => 'to_confirm']))->assertOk()
+            ->assertSee('✓ Confirm')->assertSee('Deny')->assertDontSee('Spend by phase')->assertDontSee('>Overview</a>', false);
+        $this->actingAs($accounts)->post(route('ledger.expenses.confirm', [$project, $line]), ['amount' => '920000', 'payment_date' => '2026-10-30', 'payment_method' => 'cash'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('paid', $line->fresh()->payment_status);
+
+        $this->actingAs($pm)->get(route('ledger.overview', $project))->assertRedirect(route('ledger.expenses', $project));
+        $this->actingAs($pm)->get(route('ledger.structure', $project))->assertOk()->assertDontSee('Recorded spend');
+        $this->actingAs($this->user('director'))->get(route('ledger.structure', $project))->assertOk()->assertSee('Recorded spend');
+    }
+
+    public function test_director_corrects_or_deletes_an_auto_confirmed_line(): void
+    {
+        [$project, $phases] = $this->project();
+        $director = $this->user('director');
+        $this->actingAs($director)->post(route('ledger.expenses.store', $project), [
+            'expense_date' => '2026-10-28', 'payment_method' => 'mobile_money',
+            'rows' => [['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Cement', 'quantity' => '10', 'unit' => 'bag', 'unit_cost' => '18000']],
+        ])->assertSessionHasNoErrors();
+        $line = ExpenseRequest::query()->sole();
+        $payment = $line->payments()->sole();
+        $this->assertSame(['180000.00', 'mobile_money', '2026-10-28'], [(string) $payment->amount, $payment->payment_method, $payment->payment_date->toDateString()]);
+
+        $this->actingAs($director)->get(route('ledger.expenses.edit', [$project, $line]))->assertOk();
+        $this->actingAs($director)->put(route('ledger.expenses.update', [$project, $line]), $this->line($phases[0], ['item_description' => 'Cement', 'quantity' => '12', 'unit' => 'bag', 'unit_cost' => '18000']))
+            ->assertSessionHasNoErrors();
+        $line->refresh();
+        $this->assertSame(['216000.00', 'paid', '216000.00'], [(string) $line->total_amount, $line->payment_status, (string) $line->payments()->sole()->amount]);
+        $this->assertDatabaseHas('project_edit_logs', ['document_id' => $line->id, 'action' => 'ledger_paid_line_corrected']);
+
+        $this->actingAs($director)->delete(route('ledger.expenses.destroy', [$project, $line]))->assertRedirect();
+        $this->assertSame([0, 0], [ExpenseRequest::count(), ExpensePayment::count()]);
+    }
+
+    public function test_project_kpis_shared_with_the_team_show_on_their_pages(): void
+    {
+        [$project] = $this->project();
+        $pm = $this->user('project_manager', $project);
+        $director = $this->user('director');
+        foreach (['Keep spend low' => '1', 'Director only' => '0'] as $note => $visible) {
+            $this->actingAs($director)->post(route('director.projects.kpis.store', $project), ['metric' => 'spend', 'period' => 'this_quarter', 'target_value' => '5000000', 'notes' => $note, 'visible_to_team' => $visible])
+                ->assertSessionHasNoErrors();
+        }
+        $this->actingAs($pm)->get(route('ledger.structure', $project))->assertOk()->assertSee('Targets for this project')->assertSee('Keep spend low')->assertDontSee('Director only');
+        $this->actingAs($this->user('accounts'))->get(route('ledger.expenses', $project))->assertOk()->assertSee('Keep spend low');
+
+        $shared = DirectorKpiTarget::where('notes', 'Keep spend low')->sole();
+        $this->actingAs($pm)->post(route('director.kpis.visibility', $shared))->assertForbidden();
+        $this->actingAs($director)->post(route('director.kpis.visibility', $shared))->assertRedirect();
+        $this->actingAs($pm)->get(route('ledger.structure', $project))->assertOk()->assertDontSee('Keep spend low');
+    }
+
+    public function test_excel_workbooks_and_project_dates(): void
+    {
+        [$project, $phases] = $this->project();
+        $director = $this->user('director');
+        $details = ['project_code' => $project->project_code, 'name' => $project->name, 'status' => 'active', 'location' => 'Dar es Salaam', 'planned_start_date' => '2026-03-01'];
+        $this->actingAs($director)->put(route('admin.projects.update', $project), $details + ['expected_completion_date' => '2026-02-01'])->assertSessionHasErrors('expected_completion_date');
+        $this->actingAs($director)->put(route('admin.projects.update', $project), $details + ['expected_completion_date' => '2026-12-20'])->assertSessionHasNoErrors();
+        $this->assertSame(['2026-03-01', '2026-12-20'], [$project->fresh()->planned_start_date->toDateString(), $project->fresh()->expected_completion_date->toDateString()]);
+        $this->actingAs($director)->post(route('ledger.expenses.store', $project), $this->line($phases[0]));
+
+        $file = $this->actingAs($director)->get(route('ledger.expenses.export', $project))->assertOk()->assertDownload()->baseResponse->getFile()->getPathname();
+        $book = IOFactory::load($file);
+        $this->assertSame(['Summary', 'Expenditure'], $book->getSheetNames());
+        $this->assertSame('01 Mar 2026 – 20 Dec 2026', $book->getSheet(0)->getCell('B7')->getValue());
+        $all = $this->actingAs($director)->get(route('ledger.export', ['range' => 'this_year']))->assertOk()->baseResponse->getFile()->getPathname();
+        $this->assertSame(['Projects', 'By Category', 'Monthly', 'All Expenditure'], IOFactory::load($all)->getSheetNames());
+        $this->actingAs($this->user('project_manager', $project))->get(route('ledger.export'))->assertForbidden();
     }
 
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array

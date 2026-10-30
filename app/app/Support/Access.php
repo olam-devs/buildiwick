@@ -16,12 +16,14 @@ class Access
         'manage_workers' => ['label' => 'Manage workers', 'hint' => 'Register workers and their contracts'],
         'manage_phases_budget' => ['label' => 'Edit phases & budget', 'hint' => 'Create phases and subphases and set budgets'],
         'export' => ['label' => 'Download Excel', 'hint' => 'Export the expenditure register'],
+        'view_analytics' => ['label' => 'See totals & analytics', 'hint' => 'Project overview, totals, charts and budget use. Sensitive: off for staff by default'],
     ];
 
     public const ROLE_DEFAULTS = [
-        'project_manager' => ['record_expenses', 'manage_workers', 'export'],
-        'accounts' => ['record_expenses', 'mark_paid', 'deny_expenses', 'edit_any_line', 'export'],
-        'accountant' => ['record_expenses', 'mark_paid', 'deny_expenses', 'edit_any_line', 'export'],
+        'project_manager' => ['record_expenses', 'manage_workers'],
+        // A staff accountant only checks and confirms what PMs enter; the Director covers everything else.
+        'accounts' => ['mark_paid', 'deny_expenses'],
+        'accountant' => ['mark_paid', 'deny_expenses'],
     ];
 
     /** Roles that see every project unless the Director limits them. */

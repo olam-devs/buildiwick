@@ -7,7 +7,7 @@
 @endphp
 @if($workspaceProject ?? null)
   <div class="project-workspace-card"><div class="label">Project</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
-  <a class="navitem {{ $nav('ledger.overview') }}" href="{{ route('ledger.overview', $workspaceProject) }}">Overview</a>
+  @can('view-analytics', $workspaceProject)<a class="navitem {{ $nav('ledger.overview') }}" href="{{ route('ledger.overview', $workspaceProject) }}">Overview</a>@endcan
   @php($confirmView = request()->routeIs('ledger.expenses') && request('status') === 'to_confirm')
   <a class="navitem {{ request()->routeIs('ledger.expenses') && ! $confirmView ? 'active' : '' }}" href="{{ route('ledger.expenses', $workspaceProject) }}">Expenditure</a>
   @can('confirm-payments', $workspaceProject)
@@ -17,8 +17,8 @@
   @can('record-expense', $workspaceProject)
     <a class="navitem {{ $nav('ledger.expenses.create') }}" href="{{ route('ledger.expenses.create', $workspaceProject) }}">Record Expense</a>
   @endcan
-  <a class="navitem {{ $nav('ledger.structure') }}" href="{{ route('ledger.structure', $workspaceProject) }}">Phases &amp; Budget</a>
-  <a class="navitem {{ $nav('ledger.workers') }}" href="{{ route('ledger.workers', $workspaceProject) }}">Workers</a>
+  @can('view-budget', $workspaceProject)<a class="navitem {{ $nav('ledger.structure') }}" href="{{ route('ledger.structure', $workspaceProject) }}">Phases &amp; Budget</a>@endcan
+  @can('view-workers', $workspaceProject)<a class="navitem {{ $nav('ledger.workers') }}" href="{{ route('ledger.workers', $workspaceProject) }}">Workers</a>@endcan
   @if($isDirector)
     <a class="navitem {{ $nav('director.projects.warnings') }}" href="{{ route('director.projects.warnings', $workspaceProject) }}">Warnings &amp; KPIs</a>
     <a class="navitem {{ $nav('admin.projects.*') }}" href="{{ route('admin.projects.show', $workspaceProject) }}">Project Settings</a>
@@ -29,10 +29,10 @@
   @if($isDirector)
     <a class="navitem {{ $nav('director.index') }}" href="{{ route('director.index') }}">Dashboard</a>
   @endif
-  <a class="navitem {{ $nav('ledger.index') }}" href="{{ route('ledger.index') }}">Projects</a>
   @if($canConfirm)
     <a class="navitem {{ $nav('ledger.to-confirm') }}" href="{{ route('ledger.to-confirm') }}">To Confirm</a>
   @endif
+  <a class="navitem {{ $nav('ledger.index') }}" href="{{ route('ledger.index') }}">Projects</a>
   @if($isDirector)
     <div class="label">Company Targets</div>
     <a class="navitem {{ $nav('director.kpis.*') }}" href="{{ route('director.kpis.index') }}">Company KPI Targets</a>

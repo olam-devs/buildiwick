@@ -94,6 +94,25 @@
   .lg-pill.denied{background:var(--danger-soft);color:#b42318}
   .lg-actions-col{flex-direction:column;align-items:flex-start;gap:3px}
   /* Phones and small tablets: tables marked lg-cards-sm become stacked cards with labels. */
+  .lg-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:8px}
+  .lg-kpi{border:1px solid var(--line);border-left:4px solid var(--line-strong);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+  .lg-kpi.good{border-left-color:var(--good)}.lg-kpi.warn{border-left-color:var(--warn)}.lg-kpi.bad{border-left-color:var(--danger)}
+  .lg-kpi .t{font-weight:600;font-size:13px}.lg-kpi .v{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}.lg-kpi .v small{font-weight:500;color:var(--ink-dim);font-size:11.5px}
+  .lg-kpi .sub{font-size:11.5px;color:var(--ink-dim)}
+  /* Row actions: clear, separate buttons that are easy to hit on a phone */
+  .lg-btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .lg-btns form{display:contents}
+  .lg-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:32px;padding:5px 11px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap}
+  .lg-btn:hover{border-color:var(--primary);color:var(--primary-dark)}
+  .lg-btn.ok{background:var(--good);border-color:var(--good);color:#fff}.lg-btn.ok:hover{filter:brightness(.95);color:#fff}
+  .lg-btn.warn{color:#9a5b00;border-color:#f0c27a;background:var(--warn-soft)}
+  .lg-btn.bad{color:var(--danger);border-color:#f2b8ae;background:var(--surface)}.lg-btn.bad:hover{background:var(--danger-soft);color:var(--danger)}
+  @media(max-width:760px){
+    .lg-cards-sm tbody tr td.lg-btn-cell{display:block;padding-top:8px;border-top:1px solid var(--line)!important;margin-top:4px}
+    .lg-cards-sm tbody tr td.lg-btn-cell::before{content:none}
+    .lg-btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr))}
+    .lg-btn{min-height:40px;font-size:13.5px}
+  }
   @media(max-width:760px){
     .lg-head{flex-direction:column;align-items:stretch}.lg-head h2{font-size:19px}
     .lg-actions{width:100%}.lg-actions .btn{flex:1;justify-content:center}.lg-search{min-width:0;flex:1 1 100%}

@@ -118,6 +118,12 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-workers', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('manage_workers') && $user->canAccessProject($project));
         Gate::define('manage-project-structure', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('manage_phases_budget') && $user->canAccessProject($project));
         Gate::define('export-ledger', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('export') && $user->canAccessProject($project));
+        // Totals and analytics are sensitive: only users with "See totals & analytics" (and the Director).
+        Gate::define('view-analytics', fn (User $user, ?Project $project = null) => $ledgerUser($user) && $user->permits('view_analytics') && (! $project || $user->canAccessProject($project)));
+        Gate::define('view-budget', fn (User $user, Project $project) => $ledgerUser($user) && $user->canAccessProject($project)
+            && ($user->permits('view_analytics') || $user->permits('manage_phases_budget') || $user->permits('record_expenses')));
+        Gate::define('view-workers', fn (User $user, Project $project) => $ledgerUser($user) && $user->canAccessProject($project)
+            && ($user->permits('manage_workers') || $user->permits('view_analytics')));
 
         // @feature('client_billing') ... @endfeature hides a switched-off rollout area in views.
         Blade::if('feature', fn (string $feature) => Features::on($feature));

@@ -70,7 +70,7 @@ class ProjectSetupController extends Controller
             $this->authorize('create', Project::class);
             $data = $this->recordingData($request, null);
             $project = DB::transaction(function () use ($data, $request, $phases): Project {
-                $project = Project::create(collect($data)->only(['project_code', 'name', 'status', 'location', 'notes'])->all() + ['created_by' => $request->user()->id]);
+                $project = Project::create(collect($data)->only(['project_code', 'name', 'status', 'location', 'planned_start_date', 'expected_completion_date', 'notes'])->all() + ['created_by' => $request->user()->id]);
                 $project->assignedUsers()->sync(array_filter($data['project_manager_ids'] ?? []));
                 if ($request->boolean('standard_stages')) {
                     foreach (self::TRACKER_STAGES as $stage) {
@@ -123,7 +123,7 @@ class ProjectSetupController extends Controller
         if (Features::recording()) {
             $this->authorize('update', $project);
             $data = $this->recordingData($request, $project);
-            $project->update(collect($data)->only(['project_code', 'name', 'status', 'location', 'notes'])->all());
+            $project->update(collect($data)->only(['project_code', 'name', 'status', 'location', 'planned_start_date', 'expected_completion_date', 'notes'])->all());
             $managers = User::query()->whereHas('role', fn ($query) => $query->where('name', 'project_manager'))->pluck('id');
             $project->assignedUsers()->detach($managers->diff($data['project_manager_ids'] ?? [])->all());
             $project->assignedUsers()->syncWithoutDetaching(array_filter($data['project_manager_ids'] ?? []));
@@ -155,7 +155,7 @@ class ProjectSetupController extends Controller
         ];
     }
 
-    /** Recording mode needs only what the tracker records for a project: ID, name, status and location. */
+    /** Recording mode needs what the tracker records for a project (ID, name, status, location) plus its planned start and end dates. */
     private function recordingData(Request $request, ?Project $project): array
     {
         return $request->validate([
@@ -163,10 +163,13 @@ class ProjectSetupController extends Controller
             'name' => ['required', 'string', 'max:150'],
             'status' => ['required', Rule::exists('lookups', 'code')->where('type', 'project_status')],
             'location' => ['required', 'string', 'max:150'],
+            'planned_start_date' => ['nullable', 'date'],
+            'expected_completion_date' => ['nullable', 'date', 'after_or_equal:planned_start_date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'project_manager_ids' => ['nullable', 'array'],
             'project_manager_ids.*' => ['integer', Rule::exists('users', 'id')->where('is_active', true)],
-        ], ['project_code.regex' => 'Use capital letters, numbers and dashes, e.g. BWG-OYS-RES-2026-001.']);
+        ], ['project_code.regex' => 'Use capital letters, numbers and dashes, e.g. BWG-OYS-RES-2026-001.',
+            'expected_completion_date.after_or_equal' => 'The end date cannot be before the start date.']);
     }
 
     private function formData(?Project $project): array

@@ -2,6 +2,30 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — Staff Roles Without Totals, Director Auto-Confirm, Team KPIs, Excel Workbooks, Project Dates
+
+- **Totals and analytics are now a permission**, "See totals & analytics" (`view_analytics`). It is off for staff by default; the Director always has it. Without it:
+  - a project opens on Expenditure (no Overview);
+  - there are no total cards, footer totals or spend-by-phase tables;
+  - the projects list shows only what is waiting to be confirmed on each project;
+  - Phases & Budget shows the budget amounts but not the spend.
+- **The Accountant role is a staff accountant.**
+  - Defaults are now only Confirm payments and Deny expenses: no recording, no workers, no budget page and no Excel.
+  - They land on To Confirm after signing in.
+  - The Director does everything the old Accounts role did.
+- **PM defaults** are Record expenses and Manage workers. Excel is off by default, because the register adds up to totals. The Director can tick any of these back on per person.
+- **The Director's entries are confirmed as they are recorded.** A line with an amount is saved as paid; the method defaults to cash and the date to the expense date. The Director can still edit or delete such a line: the payment is re-recorded for the corrected amount (`ledger_paid_line_corrected` in the edit log) or removed with the line.
+- **Clear row buttons.** Expenditure rows show separate ✓ Confirm, Edit, Deny and Delete buttons. On phones they are full-width tap targets.
+- **Team KPIs.** When adding a project KPI target, the Director can tick "Show to this project's PMs and Accountants". Shared targets appear on that project's Phases & Budget and Expenditure pages. The Warnings & KPIs list has a show/hide toggle per target (`director_kpi_targets.visible_to_team`).
+- **Project start and end dates** (`planned_start_date`, `expected_completion_date`) on the project form, Project Setup list, project headers and Excel.
+- **Excel workbooks** (`LedgerWorkbookService`):
+  - **Project export:** a Summary sheet (cards, by category, by phase), only for users who may see totals, plus the Expenditure register. The register has a project header block, filters, frozen headers, colour-coded category and status, and a SUBTOTAL row that follows the Excel filter.
+  - **"Download Excel" for all projects** on the projects list and the Director dashboard (current period): Projects, By Category, Monthly and All Expenditure sheets.
+  - The all-projects export raises PHP memory to 512 MB for that request only, because the host default is 128 MB.
+- **Lighter pages for staff.** The staff projects list uses two aggregate queries. The Expenditure page skips the per-phase calculation when it isn't shown.
+- **Note — "Office running costs, staff, tools & overheads" (BWG-OFC-OVH-2026-001)** is the tracker's company office sheet: salaries, PAYE/SDL, stationery, subscriptions and municipal fees, about TSh 182M over 320 lines. It was imported as a project, so it counts in company "project" spend and in the projects lists. Treating it separately is open for the owners to decide.
+- Full suite: 185 tests.
+
 ## 2026-10-30 — User Access Control, Multi-Item Recording, Deny, Interactive Analytics
 
 - **Per-user access (User Management).** When creating or editing a user, the Director ticks what they can do and which projects they open:

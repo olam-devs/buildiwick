@@ -8,6 +8,7 @@
   <div class="field"><label for="to">To (custom)</label><input type="date" id="to" name="to" value="{{ old('to') }}"></div>
   <div class="field"><label for="target_value">Target (TSh, or % for budget used) <span class="req">*</span></label><input id="target_value" name="target_value" type="number" min="0" step="0.01" value="{{ old('target_value') }}" required></div>
   <div class="field"><label for="notes">Notes</label><input id="notes" name="notes" maxlength="1000" value="{{ old('notes') }}"></div>
+  @isset($phases)<label class="kpi-team"><input type="checkbox" name="visible_to_team" value="1" @checked(old('visible_to_team'))> Show to this project's PMs and Accountants</label>@endisset
   <button class="btn btn-primary" type="submit">Save Target</button>
 </form>
-<style>.kpi-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;align-items:end}.kpi-form .field{margin:0}</style>
+<style>.kpi-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;align-items:end}.kpi-form .field{margin:0}.kpi-team{display:flex;gap:8px;align-items:center;font-size:12.5px;align-self:center}.kpi-team input{width:16px;height:16px;accent-color:var(--primary)}</style>
