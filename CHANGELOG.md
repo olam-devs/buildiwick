@@ -2,6 +2,23 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — Confirmed Spend Matches the Tracker, Company Overheads, Tracker Subcategories
+
+- **Headline spend is confirmed spend.** Every total, chart, budget-used figure, KPI and Excel export now counts only what has been confirmed as paid.
+  - Lines still "to confirm" are shown separately as **Awaiting confirmation** and count as spend only once confirmed.
+  - This is how the client's tracker works: its "Material log – to confirm" rows are not in its totals.
+  - The imported figures now equal the tracker: TSh 2,556,820,007 in total, every sheet and all 1,152 stage × category cells. The only differences are 1–2 cent floating-point leftovers in the tracker's own summary formulas (Jangwani, Kimara residence).
+  - About TSh 880M across 1,447 lines awaits confirmation. The Accountant confirms what was really paid and denies log lines that duplicate a paid line.
+- **Company overheads** (`projects.is_company_overheads`). The tracker's "Office running costs, staff, tools & overheads" ledger is now a Director-only Company Overheads area (sidebar → Company Overheads).
+  - It is left out of project lists, project totals, top projects, warnings, company KPIs and the all-projects export.
+  - The Director dashboard shows it on its own card.
+  - PMs and Accountants can't open it, even if assigned.
+  - Project Setup has a tick box to mark any ledger as company overheads.
+  - "Offc recurrent" lines inside real project sheets stay project expenses, as decided by the owners.
+- **Tracker subcategories added**: Hardware and Roofing Materials (Materials), plus Statutory & Tax, Staff Salaries, Office Rent, Software & Subscriptions, Vehicle & Travel and Design & Printing (Preliminaries & Overheads). The 362 imported lines that held them as plain text are now linked, so the filters find them.
+- **Payment method and receipt number are optional** when confirming, in bulk or one by one, and when the Director records. A payment with no method is stored as "Other". Bulk confirm always pays the full open amount; a part payment uses the line's own Confirm button.
+- Full suite: 187 tests.
+
 ## 2026-10-30 — Bulk Confirm / Deny / Delete
 
 - **Expenditure rows can be ticked**, one by one or with "select all on page", and handled together from a bar at the bottom of the screen (`ledger.expenses.bulk`):
