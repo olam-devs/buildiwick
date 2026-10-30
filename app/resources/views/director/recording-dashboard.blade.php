@@ -41,7 +41,7 @@
   <div class="lg-card accent"><div class="k">Confirmed spend</div><div class="v" id="cRecorded">TSh {{ $money::format($t['recorded']) }}</div><div class="s" id="cRecordedSub">{{ $change($t['recorded'], $previous['recorded']) }}</div></div>
   <a class="lg-card warn" href="{{ route('ledger.to-confirm') }}"><div class="k">Awaiting confirmation</div><div class="v">TSh {{ $money::format($t['to_confirm']) }}</div><div class="s">{{ number_format($t['to_confirm_count']) }} lines in this period, not counted as spend yet</div></a>
   @if($overheads)<a class="lg-card" href="{{ route('ledger.overheads') }}"><div class="k">Company overheads</div><div class="v">TSh {{ $money::format($overheads['recorded']) }}</div><div class="s">Office, staff &amp; statutory · not in project totals</div></a>@endif
-  <a class="lg-card {{ $attention->isNotEmpty() ? 'danger' : '' }}" href="#attention"><div class="k">Projects needing attention</div><div class="v">{{ $attention->count() }}</div><div class="s">of {{ $t['active_projects'] }} active projects</div></a>
+  <a class="lg-card {{ $attention->isNotEmpty() ? 'danger' : '' }}" href="{{ route('director.attention') }}"><div class="k">Projects needing attention</div><div class="v">{{ $attention->count() }}</div><div class="s">of {{ $t['active_projects'] }} active projects</div></a>
 </div>
 
 <div class="lg-grid">
@@ -54,12 +54,12 @@
   <section class="lg-panel span-6"><h3>Top projects by spend</h3><p class="hint" id="topHint">This period</p>
     <div class="lg-bars lg-chart" id="topProjects"></div>
   </section>
-  <section class="lg-panel span-6" id="attention"><h3>Needs attention</h3><p class="hint">From your warning rules (Default Warning Rules, or a project's own limits)</p>
+  <section class="lg-panel span-6" id="attention"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3>Needs attention</h3>@if($attention->isNotEmpty())<a class="lg-link" href="{{ route('director.attention') }}">View all {{ $attention->count() }} →</a>@endif</div>
+    <p class="hint">From your warning rules (Default Warning Rules, or a project's own limits). Underlined items open the lines to act on.</p>
     @forelse($attention->take(8) as $row)
-      <div style="padding:9px 0;border-top:1px solid var(--line)"><a href="{{ route('director.projects.warnings', $row['project']) }}" style="font-weight:600;color:var(--ink);text-decoration:none">{{ $row['project']->name }}</a> <span class="badge warn">{{ count($row['warnings']) }}</span>
-        <ul style="margin:4px 0 0;padding-left:18px;color:var(--ink-soft);font-size:12px">@foreach(array_slice($row['warnings'], 0, 3) as $warning)<li>{{ $warning['message'] }}</li>@endforeach</ul></div>
+      @include('director.partials.attention-row', ['row' => $row, 'limit' => 3])
     @empty<p class="hint">No warnings. Every project is within your limits.</p>@endforelse
-    @if($attention->count() > 8)<p class="hint">{{ $attention->count() - 8 }} more projects have warnings.</p>@endif
+    @if($attention->count() > 8)<p class="hint"><a class="lg-link" href="{{ route('director.attention') }}">{{ $attention->count() - 8 }} more projects have warnings: view the full list →</a></p>@endif
   </section>
 
   <section class="lg-panel span-12"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Company KPI targets</h3><a class="lg-link" href="{{ route('director.kpis.index') }}">Manage targets →</a></div>

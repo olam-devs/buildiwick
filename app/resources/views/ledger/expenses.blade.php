@@ -40,6 +40,7 @@
   @if($workers->isNotEmpty())<div class="field"><label for="worker">Worker</label><select id="worker" name="worker"><option value="">Any</option>@foreach($workers as $id => $name)<option value="{{ $id }}" @selected((string) ($filters['worker'] ?? '') === (string) $id)>{{ $name }}</option>@endforeach</select></div>@endif
   <div class="field" style="min-width:135px"><label for="from">From</label><input type="date" id="from" name="from" value="{{ $filters['from'] ?? '' }}"></div>
   <div class="field" style="min-width:135px"><label for="to">To</label><input type="date" id="to" name="to" value="{{ $filters['to'] ?? '' }}"></div>
+  @if($canConfirm || $canDeny)<div class="field" style="min-width:150px"><label for="check">Check</label><select id="check" name="check"><option value="">Everything</option><option value="duplicates" @selected(($filters['check'] ?? '') === 'duplicates')>Possible duplicates</option></select></div>@endif
   <div class="field" style="min-width:130px"><label for="sort">Sort</label><select id="sort" name="sort"><option value="newest">Newest first</option><option value="oldest" @selected(($filters['sort'] ?? '') === 'oldest')>Oldest first</option><option value="amount" @selected(($filters['sort'] ?? '') === 'amount')>Largest amount</option></select></div>
   @if(array_filter($filters))<a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Clear filters</a>@endif
 </form>
@@ -61,10 +62,10 @@
     @forelse($lines as $line)
       @php($status = $line->ledger_status ?? $line->payment_status)
       <tr title="Recorded by {{ $line->requestedBy?->name ?? '—' }}">
-        @if($bulk)<td class="lg-check" data-label="Select"><input type="checkbox" class="rowCheck" value="{{ $line->id }}" aria-label="Select {{ $line->request_code }}"></td>@endif
+        @if($bulk)<td class="lg-check" data-label="Select"><input type="checkbox" class="rowCheck" value="{{ $line->id }}" aria-label="Select {{ $line->request_code }}" data-code="{{ $line->request_code }}" data-item="{{ \Illuminate\Support\Str::limit($line->item_description, 60) }}" data-open="{{ $status === 'paid' ? '0' : $line->approved_outstanding_amount }}" data-receipt="{{ $line->invoice_receipt_no }}"></td>@endif
         <td data-label="ID / Date" style="white-space:nowrap"><span class="code">{{ $line->request_code }}</span><span class="muted">{{ $line->requested_at?->format('d M Y') }}</span></td>
         <td data-label="Category" style="min-width:140px"><span class="lg-cat"><i style="background:{{ $colors[$line->main_category] ?? '#999' }}"></i>{{ $categories[$line->main_category] ?? $line->main_category }}</span>@if($line->subcategory)<span class="muted">{{ $subcategories[$line->subcategory] ?? $line->subcategory }}</span>@endif</td>
-        <td data-label="Item" style="min-width:200px"><b style="font-weight:600">{{ $line->item_description }}</b>@if($line->labourAgreement)<span class="muted">Worker: {{ $line->labourAgreement->fundi_subcontractor }}</span>@endif @if($line->notes)<span class="muted" title="{{ $line->notes }}">{{ \Illuminate\Support\Str::limit(\Illuminate\Support\Str::after($line->notes, 'Evidence: '), 48) }}</span>@endif</td>
+        <td data-label="Item" style="min-width:200px"><b style="font-weight:600">{{ $line->item_description }}</b>@if($line->labourAgreement)<span class="muted">Worker: {{ $line->labourAgreement->fundi_subcontractor }}</span>@endif @if($line->duplicate_note && ($canConfirm || $canDeny))<span class="lg-dup">⚠ Possible duplicate: {{ $line->duplicate_note }}</span>@endif @if($line->notes)<span class="muted" title="{{ $line->notes }}">{{ \Illuminate\Support\Str::limit(\Illuminate\Support\Str::after($line->notes, 'Evidence: '), 48) }}</span>@endif</td>
         <td data-label="Phase" style="min-width:110px">{{ $tree->path($line->project_phase_id) }}</td>
         <td data-label="Qty" class="amt">{{ $line->quantity !== null ? rtrim(rtrim($line->quantity, '0'), '.') : '—' }}<span class="muted">{{ $units[$line->unit] ?? $line->unit }}</span></td>
         <td data-label="Unit cost" class="amt">{{ $line->unit_cost !== null ? $money::format($line->unit_cost) : '—' }}</td>
@@ -121,14 +122,20 @@
 </div>
 <form method="POST" action="{{ route('ledger.expenses.bulk', $project) }}" id="bulkForm">@csrf<input type="hidden" name="action" id="bulkAction"></form>
 @if($canConfirm)
-<dialog class="lg-dialog" id="bulkConfirmDialog"><div>
-  <h3>Confirm <span data-bulk-count></span> line(s)</h3>
-  <p class="form-context" style="margin:0">Each selected line is confirmed as paid in full for what is still open on it. For a part payment, use that line's own ✓ Confirm button. Lines already paid are skipped.</p>
-  <div class="row2"><div class="field"><label for="bulk_payment_date">Payment date <span class="req">*</span></label><input type="date" id="bulk_payment_date" name="payment_date" form="bulkForm" value="{{ now()->toDateString() }}" max="{{ now()->toDateString() }}" required></div>
-  <div class="field"><label for="bulk_payment_method">Method</label><select id="bulk_payment_method" name="payment_method" form="bulkForm"><option value="">Not recorded</option>@foreach($methods as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</select></div></div>
-  <div class="row2"><div class="field"><label for="bulk_receipt">Receipt no. (optional)</label><input id="bulk_receipt" name="invoice_receipt_no" form="bulkForm" maxlength="255"></div>
-  <div class="field"><label for="bulk_reference">Reference (optional)</label><input id="bulk_reference" name="transaction_reference" form="bulkForm" maxlength="255"></div></div>
-  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn btn-primary" type="button" data-bulk-submit="confirm">Confirm selected</button></div>
+<dialog class="lg-dialog wide" id="bulkConfirmDialog"><div>
+  <h3>Confirm <span id="bulkPayCount"></span> line(s)</h3>
+  <p class="form-context" style="margin:0">Check each line before confirming: change <b>Pay now</b> for a part payment, and set the <b>method</b> and <b>receipt no.</b> per line. <span id="bulkSkipped"></span></p>
+  <div class="bulk-defaults">
+    <div class="field"><label for="bulk_payment_date">Payment date <span class="req">*</span></label><input type="date" id="bulk_payment_date" name="payment_date" form="bulkForm" value="{{ now()->toDateString() }}" max="{{ now()->toDateString() }}" required></div>
+    <div class="field"><label for="bulkMethodAll">Method for all lines</label><div style="display:flex;gap:6px"><select id="bulkMethodAll"><option value="">Not recorded</option>@foreach($methods as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</select><button type="button" class="lg-btn" id="bulkMethodApply">Apply to all</button></div></div>
+  </div>
+  <div class="bulk-table-wrap"><table class="lg-table lg-cards-sm bulk-table">
+    <thead><tr><th>Line</th><th class="amt">Open (TSh)</th><th class="amt">Pay now (TSh)</th><th>Method</th><th>Receipt no.</th><th>Reference</th></tr></thead>
+    <tbody id="bulkPayRows"></tbody>
+    <tfoot><tr><td colspan="2">Total paid now</td><td class="amt"><b id="bulkPayTotal">0.00</b></td><td colspan="3"><span id="bulkNoMethod" class="muted" style="display:inline;color:#9a5b00"></span></td></tr></tfoot>
+  </table></div>
+  <template id="bulkMethodOptions"><option value="">Not recorded</option>@foreach($methods as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</template>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn btn-primary" type="button" data-bulk-submit="confirm">Confirm payments</button></div>
 </div></dialog>
 @endif
 @if($canDeny)
@@ -155,7 +162,44 @@
   if (all) all.addEventListener('change', () => { boxes.forEach(b => b.checked = all.checked); sync(); });
   document.getElementById('bulkAll').addEventListener('click', () => { boxes.forEach(b => b.checked = true); sync(); });
   document.getElementById('bulkClear').addEventListener('click', () => { boxes.forEach(b => b.checked = false); sync(); });
+  // Bulk confirm: one editable row per selected line that still has something open.
+  const fmt = v => Number(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const payTotals = () => {
+    const tbody = document.getElementById('bulkPayRows');
+    if (!tbody) return;
+    let total = 0, noMethod = 0;
+    tbody.querySelectorAll('tr').forEach(tr => { total += Number(tr.querySelector('[data-pay]').value || 0); if (!tr.querySelector('select').value) noMethod++; });
+    document.getElementById('bulkPayTotal').textContent = fmt(total);
+    document.getElementById('bulkNoMethod').textContent = noMethod ? noMethod + ' line(s) have no method yet; they will be saved as "Other".' : '';
+  };
+  const buildPayRows = () => {
+    const tbody = document.getElementById('bulkPayRows'), options = document.getElementById('bulkMethodOptions').innerHTML;
+    const open = chosen().filter(b => Number(b.dataset.open) > 0), skipped = chosen().length - open.length;
+    tbody.innerHTML = open.map(b => `<tr>
+      <td data-label="Line"><span class="code">${esc(b.dataset.code)}</span><span class="muted">${esc(b.dataset.item)}</span></td>
+      <td data-label="Open" class="amt">${fmt(b.dataset.open)}</td>
+      <td data-label="Pay now" class="amt"><input form="bulkForm" type="number" step="0.01" min="0.01" max="${b.dataset.open}" name="rows[${b.value}][amount]" value="${b.dataset.open}" data-pay required></td>
+      <td data-label="Method"><select form="bulkForm" name="rows[${b.value}][payment_method]">${options}</select></td>
+      <td data-label="Receipt no."><input form="bulkForm" name="rows[${b.value}][invoice_receipt_no]" value="${esc(b.dataset.receipt)}" maxlength="255"></td>
+      <td data-label="Reference"><input form="bulkForm" name="rows[${b.value}][transaction_reference]" maxlength="255"></td></tr>`).join('');
+    document.getElementById('bulkPayCount').textContent = open.length;
+    document.getElementById('bulkSkipped').textContent = skipped ? skipped + ' selected line(s) are already paid and are left out.' : '';
+    tbody.querySelectorAll('input, select').forEach(el => el.addEventListener('input', payTotals));
+    payTotals();
+  };
+  document.getElementById('bulkMethodApply')?.addEventListener('click', () => {
+    const value = document.getElementById('bulkMethodAll').value;
+    document.querySelectorAll('#bulkPayRows select').forEach(s => s.value = value);
+    payTotals();
+  });
   const send = action => {
+    if (action === 'confirm') {
+      const bad = [...document.querySelectorAll('#bulkPayRows [data-pay]')].find(i => !i.checkValidity());
+      if (bad) { bad.reportValidity(); return; }
+    } else {
+      document.querySelectorAll('#bulkPayRows').forEach(t => t.innerHTML = '');
+    }
     form.querySelectorAll('input[name="ids[]"]').forEach(i => i.remove());
     chosen().forEach(b => { const i = document.createElement('input'); i.type = 'hidden'; i.name = 'ids[]'; i.value = b.value; form.append(i); });
     document.getElementById('bulkAction').value = action;
@@ -163,7 +207,7 @@
   };
   document.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => {
     const action = b.dataset.bulk;
-    if (action === 'confirm') { document.getElementById('bulkConfirmDialog').showModal(); return; }
+    if (action === 'confirm') { buildPayRows(); document.getElementById('bulkConfirmDialog').showModal(); return; }
     if (action === 'deny') { document.getElementById('bulkDenyDialog').showModal(); document.getElementById('bulk_reason').focus(); return; }
     if (window.confirm('Delete ' + chosen().length + ' selected line(s)? Lines that cannot be deleted are skipped.')) send('delete');
   }));

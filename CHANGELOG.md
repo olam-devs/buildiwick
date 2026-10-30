@@ -2,6 +2,26 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — Bulk Confirm per Line, Duplicate Check, Needs Attention List, Buildiwick Logo
+
+- **Bulk confirm is a table of the selected lines.** Each row has:
+  - **Pay now**, which can be less than what is open, making it a part payment;
+  - **Method**, with "Apply to all" to set every row at once;
+  - **Receipt no.** and **Reference**.
+
+  The total updates as you type. Lines with no method are flagged and saved as "Other". Already-paid lines are left out, and paying more than what is open is refused.
+- **Possible duplicates are flagged inside Expenditure** (`LedgerAnalyticsService::duplicateNotes`), for Accounts and the Director. A line is flagged when:
+  - it has the same date, amount and description as another line; or
+  - it awaits confirmation and has the same amount as a paid line of the same project within 14 days.
+
+  A note under the item names the other line. The **Check → Possible duplicates** filter lists only flagged lines, so they can be reviewed and denied in bulk without the Excel file.
+- **Needs attention.**
+  - Warnings about lines waiting to be confirmed now link to that project's Expenditure filtered to "To confirm", oldest first. Other warnings stay plain information.
+  - The dashboard panel has "View all N →", and the projects-needing-attention card opens the full list (`director.attention`).
+  - The full list has search and filter chips by warning type.
+- **Buildiwick logo** (`public/images/buildiwick-mark*.png`, favicons, apple-touch icon) appears in the sidebar, sign-in page, phone menu bar and browser tab. Every Excel export now opens with a white title band that carries the logo (`ExcelExportService::brandBand`). The interface accent colour is unchanged.
+- Full suite: 190 tests.
+
 ## 2026-10-30 — Confirmed Spend Matches the Tracker, Company Overheads, Tracker Subcategories
 
 - **Headline spend is confirmed spend.** Every total, chart, budget-used figure, KPI and Excel export now counts only what has been confirmed as paid.

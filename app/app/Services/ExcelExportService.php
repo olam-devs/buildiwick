@@ -10,7 +10,9 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -22,6 +24,26 @@ class ExcelExportService
      * @param  array<int, int>  $moneyColumns  Zero-based column indexes.
      * @param  array<int, int>  $dateColumns  Zero-based column indexes.
      */
+    /**
+     * The title band every Buildiwick workbook starts with: the logo at the left of row 1, the title in
+     * the logo's blue beside it, and a blue rule underneath.
+     */
+    public static function brandBand(Worksheet $sheet, string $range): void
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'font' => ['bold' => true, 'size' => 15, 'color' => ['rgb' => '0B4F7A']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFFFFF']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER, 'indent' => 6],
+            'borders' => ['bottom' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '0081C3']]],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(40);
+        $logo = public_path('images/buildiwick-mark-160.png');
+        if (is_file($logo)) {
+            (new Drawing)->setName('Buildiwick')->setDescription('Buildiwick logo')->setPath($logo)
+                ->setHeight(30)->setCoordinates('A1')->setOffsetX(8)->setOffsetY(7)->setWorksheet($sheet);
+        }
+    }
+
     public function download(
         string $filename,
         string $title,
@@ -45,12 +67,7 @@ class ExcelExportService
         $lastColumn = $sheet->getCell([$columnCount, 1])->getColumn();
         $sheet->mergeCells("A1:{$lastColumn}1");
         $sheet->setCellValue('A1', $title);
-        $sheet->getStyle("A1:{$lastColumn}1")->applyFromArray([
-            'font' => ['bold' => true, 'size' => 16, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F6FB2']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
-        ]);
-        $sheet->getRowDimension(1)->setRowHeight(28);
+        self::brandBand($sheet, "A1:{$lastColumn}1");
 
         $metaText = implode('  |  ', array_filter($metadata));
         $metaText = $metaText ? $metaText.'  |  Exported '.now()->format('d M Y H:i') : 'Exported '.now()->format('d M Y H:i');

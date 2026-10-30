@@ -302,7 +302,12 @@ class LedgerController extends Controller
             'payment_method' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
             'transaction_reference' => ['nullable', 'string', 'max:255'],
             'invoice_receipt_no' => ['nullable', 'string', 'max:255'],
-        ], ['ids.required' => 'Tick at least one line first.', 'reason.required_if' => 'Say why the selected lines are denied.']);
+            'rows' => ['nullable', 'array'],
+            'rows.*.amount' => ['nullable', 'numeric', 'gt:0', 'max:999999999999.99'],
+            'rows.*.payment_method' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
+            'rows.*.invoice_receipt_no' => ['nullable', 'string', 'max:255'],
+            'rows.*.transaction_reference' => ['nullable', 'string', 'max:255'],
+        ], ['ids.required' => 'Tick at least one line first.', 'rows.*.amount.gt' => 'Each amount to pay must be more than zero.', 'reason.required_if' => 'Say why the selected lines are denied.']);
         $user = $request->user();
         abort_unless(match ($validated['action']) {
             'confirm' => $user->can('confirm-payments', $project),
@@ -335,16 +340,26 @@ class LedgerController extends Controller
         return back()->with('success', $message);
     }
 
-    /** Bulk confirm pays what is still open on the line, as recorded. */
+    /**
+     * Bulk confirm: each line pays what was entered on its row (a part payment when less than what
+     * is open), with its own method, receipt no. and reference; without a row it pays everything open.
+     */
     private function confirmWhole(ExpenseRequest $line, array $validated, User $user, ExpenseLedgerService $ledger, string &$amount): void
     {
         $open = (string) $line->approved_outstanding_amount;
         if ($line->status !== 'approved' || Money::compare($open, '0') <= 0) {
             throw ValidationException::withMessages(['line' => 'Nothing to confirm.']);
         }
-        $ledger->confirm($line, ['amount' => $open, 'payment_date' => $validated['payment_date'], 'payment_method' => $validated['payment_method'] ?? null,
-            'transaction_reference' => $validated['transaction_reference'] ?? null, 'invoice_receipt_no' => ($validated['invoice_receipt_no'] ?? null) ?: null], $user);
-        $amount = Money::sum([$amount, $open]);
+        $row = $validated['rows'][$line->id] ?? [];
+        $pay = ($row['amount'] ?? null) !== null && $row['amount'] !== '' ? Money::decimal($row['amount'])->toScale(2)->__toString() : $open;
+        if (Money::compare($pay, $open) > 0) {
+            throw ValidationException::withMessages(['line' => 'More than what is open.']);
+        }
+        $ledger->confirm($line, ['amount' => $pay, 'payment_date' => $validated['payment_date'],
+            'payment_method' => ($row['payment_method'] ?? null) ?: ($validated['payment_method'] ?? null),
+            'transaction_reference' => ($row['transaction_reference'] ?? null) ?: ($validated['transaction_reference'] ?? null),
+            'invoice_receipt_no' => ($row['invoice_receipt_no'] ?? null) ?: (($validated['invoice_receipt_no'] ?? null) ?: null)], $user);
+        $amount = Money::sum([$amount, $pay]);
     }
 
     public function confirm(Request $request, Project $project, ExpenseRequest $line, ExpenseLedgerService $ledger)
@@ -470,6 +485,7 @@ class LedgerController extends Controller
             'to' => ['nullable', 'date'],
             'q' => ['nullable', 'string', 'max:100'],
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'amount'])],
+            'check' => ['nullable', Rule::in(['duplicates'])],
         ]);
         $tree = new PhaseTree($project->phases()->get());
         $phaseIds = ! empty($filters['phase']) ? $tree->withDescendants((int) $filters['phase']) : null;
@@ -493,6 +509,14 @@ class LedgerController extends Controller
             'amount' => $lines->sortByDesc(fn ($line) => (float) $line->total_amount),
             default => $lines->sortByDesc(fn ($line) => [$line->requested_at?->format('Y-m-d'), $line->id]),
         };
+
+        if (! $denied) {
+            $notes = $analytics->duplicateNotes($project);
+            $lines->each(fn ($line) => $line->setAttribute('duplicate_note', $notes[$line->id] ?? null));
+            if (($filters['check'] ?? null) === 'duplicates') {
+                $lines = $lines->filter(fn ($line) => isset($notes[$line->id]));
+            }
+        }
 
         return [LedgerAnalyticsService::normalize($lines->values()), $filters, $tree];
     }

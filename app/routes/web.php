@@ -65,6 +65,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::post('/ledger/projects/{project}/workers', [LedgerController::class, 'storeWorker'])->name('ledger.workers.store');
     Route::put('/ledger/projects/{project}/workers/{worker}', [LedgerController::class, 'updateWorker'])->name('ledger.workers.update');
     Route::get('/director', [DirectorController::class, 'index'])->name('director.index');
+    Route::get('/director/attention', [DirectorController::class, 'attention'])->name('director.attention');
     Route::get('/director/exports/projects.xlsx', [DirectorController::class, 'exportPortfolio'])->middleware('feature:client_billing')->name('director.portfolio.export');
     Route::get('/director/exports/summary.xlsx', [DirectorController::class, 'exportSummary'])->middleware('feature:client_billing')->name('director.summary.export');
     Route::get('/director/exports/transactions.xlsx', [DirectorController::class, 'exportTransactions'])->middleware('feature:client_billing')->name('director.transactions.export');
