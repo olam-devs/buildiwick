@@ -107,7 +107,7 @@ class LookupSeeder extends Seeder
         ]);
 
         $this->seedType('project_status', [
-            ['active', 'Active'], ['planning', 'Planning'], ['on_hold', 'On Hold'], ['completed', 'Completed'],
+            ['active', 'Active'], ['planning', 'Planning'], ['on_hold', 'On Hold'], ['completed', 'Completed'], ['near_closure', 'Near closure'], ['overheads', 'Overheads'],
         ]);
 
         $this->seedType('project_phase_status', [

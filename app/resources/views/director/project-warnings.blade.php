@@ -19,7 +19,7 @@
 @can('manage-director-strategy')
 <section class="panel form-section">
   <h3>Add a target for this project</h3>
-  @include('director.partials.kpi-form', ['action' => route('director.projects.kpis.store', $project)])
+  @include('director.partials.kpi-form', ['action' => route('director.projects.kpis.store', $project), 'phases' => $phases])
 </section>
 @endcan
 

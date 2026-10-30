@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Project;
 use App\Models\ProjectWarningRule;
 use App\Models\User;
+use App\Support\Features;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -25,8 +26,24 @@ class ProjectWarningService
         'receivables_outstanding' => ['label' => 'Unpaid client invoices above', 'unit' => 'TSh', 'default' => 50000000, 'active' => false],
     ];
 
+    /** Recording mode: spending-only rules. Budget checks also run per phase × category automatically. */
+    public const RECORDING_RULES = [
+        'budget_used_pct' => ['label' => 'Spend above this share of a budget', 'unit' => '%', 'default' => 85, 'active' => true],
+        'to_confirm_days' => ['label' => 'Line waiting for Accounts to confirm for more than', 'unit' => 'days', 'default' => 14, 'active' => true],
+        'no_activity_days' => ['label' => 'Active project with no expense recorded for more than', 'unit' => 'days', 'default' => 21, 'active' => true],
+        'phase_late_days' => ['label' => 'Phase past its planned finish by more than', 'unit' => 'days', 'default' => 14, 'active' => true],
+    ];
+
+    /** @return array<string, array<string, mixed>> rules for the current rollout mode */
+    public static function definitions(): array
+    {
+        return Features::recording() ? self::RECORDING_RULES : self::RULES;
+    }
+
     /** @var Collection<int, ProjectWarningRule>|null */
     private ?Collection $rows = null;
+
+    public function __construct(private readonly LedgerAnalyticsService $ledger) {}
 
     /**
      * Effective rules for a project (or the company defaults when $projectId is null).
@@ -37,7 +54,7 @@ class ProjectWarningService
     {
         $rows = $this->rows ??= ProjectWarningRule::query()->get();
         $rules = [];
-        foreach (self::RULES as $code => $definition) {
+        foreach (self::definitions() as $code => $definition) {
             $default = $rows->first(fn ($row) => $row->project_id === null && $row->rule === $code);
             $override = $projectId ? $rows->first(fn ($row) => (int) $row->project_id === $projectId && $row->rule === $code) : null;
             $chosen = $override ?? $default;
@@ -56,7 +73,7 @@ class ProjectWarningService
      */
     public function save(?Project $project, array $values, User $actor): void
     {
-        foreach (self::RULES as $code => $definition) {
+        foreach (self::definitions() as $code => $definition) {
             if (! array_key_exists($code, $values)) {
                 continue;
             }
@@ -104,6 +121,71 @@ class ProjectWarningService
             };
             if ($message) {
                 $warnings[] = ['rule' => $code, 'label' => self::RULES[$code]['label'], 'message' => $message];
+            }
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * Recording-mode warnings from a LedgerAnalyticsService::project() report.
+     *
+     * @return array<int, array{rule: string, label: string, message: string}>
+     */
+    public function evaluateLedger(array $report, ?CarbonImmutable $today = null): array
+    {
+        $today ??= CarbonImmutable::today();
+        $project = $report['project'];
+        $rules = $this->rules($project->id);
+        $warnings = [];
+        $add = function (string $rule, string $message) use (&$warnings): void {
+            $warnings[] = ['rule' => $rule, 'label' => self::RECORDING_RULES[$rule]['label'], 'message' => $message];
+        };
+
+        if ($rules['budget_used_pct']['active']) {
+            $limit = $rules['budget_used_pct']['threshold'];
+            if ($report['totals']['used'] !== null && Money::compare($report['totals']['used'], $limit) > 0) {
+                $add('budget_used_pct', 'Whole project: '.Money::format($report['totals']['used']).'% of the budget is spent (TSh '.Money::format($report['totals']['recorded']).' of '.Money::format($report['totals']['budget']).').');
+            }
+            $hits = collect();
+            foreach ($report['phases'] as $row) {
+                foreach ($row['categories'] as $code => $category) {
+                    // Only where the Director set a budget, so a subphase budget is not repeated on its parent.
+                    if ($category['own_budget'] !== null && Money::compare($category['budget'], '0') > 0) {
+                        $used = LedgerAnalyticsService::pct(LedgerAnalyticsService::cents($category['recorded']), LedgerAnalyticsService::cents($category['budget']));
+                        if (Money::compare($used, $limit) > 0) {
+                            $hits->push(['used' => (float) $used, 'message' => $row['path'].' › '.LedgerAnalyticsService::CATEGORIES[$code].': '.Money::format($used).'% of budget (TSh '.Money::format($category['recorded']).' of '.Money::format($category['budget']).').']);
+                        }
+                    }
+                }
+            }
+            foreach ($hits->sortByDesc('used')->take(6) as $hit) {
+                $add('budget_used_pct', $hit['message']);
+            }
+            if ($hits->count() > 6) {
+                $add('budget_used_pct', ($hits->count() - 6).' more phase/category budgets are above the limit.');
+            }
+        }
+        if ($rules['to_confirm_days']['active']) {
+            $days = (int) round((float) $rules['to_confirm_days']['threshold']);
+            $cutoff = $today->subDays($days)->format('Y-m-d');
+            $old = ($report['lines'] ?? $this->ledger->lines($project))->filter(fn ($line) => $line->ledger_open_c > 0
+                && $line->requested_at && $line->requested_at->format('Y-m-d') < $cutoff);
+            if ($old->isNotEmpty()) {
+                $add('to_confirm_days', $old->count().' line(s) recorded more than '.$days.' days ago are still not confirmed by Accounts (TSh '.Money::format(LedgerAnalyticsService::money((int) $old->sum('ledger_open_c'))).').');
+            }
+        }
+        if ($rules['no_activity_days']['active'] && $project->status === 'active') {
+            $days = (int) round((float) $rules['no_activity_days']['threshold']);
+            $last = $report['totals']['last_entry'];
+            if (! $last || CarbonImmutable::parse($last)->lt($today->subDays($days))) {
+                $add('no_activity_days', $last ? 'No expense recorded since '.CarbonImmutable::parse($last)->format('d M Y').'.' : 'No expense has been recorded yet.');
+            }
+        }
+        if ($rules['phase_late_days']['active']) {
+            $late = $this->latePhases($project->loadMissing('phases'), $today, (int) round((float) $rules['phase_late_days']['threshold']));
+            if ($late) {
+                $add('phase_late_days', $late);
             }
         }
 

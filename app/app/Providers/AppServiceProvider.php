@@ -13,7 +13,9 @@ use App\Models\Project;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Models\User;
+use App\Support\Features;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -102,6 +104,21 @@ class AppServiceProvider extends ServiceProvider
                 'drawerAgreements' => LabourAgreement::whereIn('project_id', $projectIds)->get(['id', 'project_id', 'fundi_subcontractor', 'scope_of_work']),
             ]);
         });
+
+        // Recording-mode ledger: Director (admin bypass) and Accounts see every project; a PM sees and
+        // records only on projects they are assigned to, and may correct only their own unpaid lines.
+        $ledgerRole = fn (User $user) => $user->role?->name;
+        Gate::define('view-ledger', fn (User $user, Project $project) => in_array($ledgerRole($user), ['accounts', 'accountant'], true)
+            || ($ledgerRole($user) === 'project_manager' && $user->assignedProjects()->whereKey($project->id)->exists()));
+        Gate::define('record-expense', fn (User $user, Project $project) => in_array($ledgerRole($user), ['accounts', 'accountant'], true)
+            || ($ledgerRole($user) === 'project_manager' && $user->assignedProjects()->whereKey($project->id)->exists()));
+        Gate::define('edit-ledger-line', fn (User $user, ExpenseRequest $line) => in_array($ledgerRole($user), ['accounts', 'accountant'], true)
+            || ($ledgerRole($user) === 'project_manager' && (int) $line->requested_by === (int) $user->id
+                && $user->assignedProjects()->whereKey($line->project_id)->exists()));
+        Gate::define('manage-project-structure', fn (User $user, Project $project) => $ledgerRole($user) === 'director');
+
+        // @feature('client_billing') ... @endfeature hides a switched-off rollout area in views.
+        Blade::if('feature', fn (string $feature) => Features::on($feature));
 
         View::composer('layouts.app', function ($view) {
             $project = request()->route('project');

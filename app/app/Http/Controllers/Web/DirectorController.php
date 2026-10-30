@@ -13,8 +13,10 @@ use App\Services\AccountantReportingService;
 use App\Services\DirectorAnalyticsService;
 use App\Services\DirectorKpiService;
 use App\Services\ExcelExportService;
+use App\Services\LedgerAnalyticsService;
 use App\Services\ProjectManagerBudgetService;
 use App\Services\ProjectWarningService;
+use App\Support\Features;
 use App\Support\Money;
 use App\Support\ReviewPeriod;
 use Carbon\CarbonImmutable;
@@ -65,6 +67,9 @@ class DirectorController extends Controller
     public function index(Request $request, DirectorAnalyticsService $analytics, ProjectWarningService $warnings, DirectorKpiService $kpis)
     {
         $this->authorize('view-director-analytics');
+        if (Features::recording()) {
+            return $this->recordingDashboard($request, app(LedgerAnalyticsService::class), $warnings, $kpis);
+        }
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', 'in:all,active,planning,on_hold,completed'],
@@ -115,6 +120,9 @@ class DirectorController extends Controller
     public function project(Request $request, Project $project, DirectorAnalyticsService $analytics, ProjectWarningService $warnings)
     {
         $this->authorize('view-director-analytics');
+        if (Features::recording()) {
+            return redirect()->route('ledger.overview', $project);
+        }
         $snapshotInput = $request->validate(['as_of' => ['nullable', 'date', 'before_or_equal:today']]);
         $range = $this->dateRange($request);
         $row = $analytics->project($project, $range['from'], $range['to']);
@@ -258,6 +266,23 @@ class DirectorController extends Controller
             'Date', 'Reference', 'Project', 'Type', 'Description', 'Phase', 'Category',
             'Money In', 'Money Out', 'Running Balance', 'Recorded By',
         ], $rows, [$range['from']->format('d M Y').' to '.$range['to']->format('d M Y')], [7, 8, 9], [0]);
+    }
+
+    /** Recording-mode company dashboard: spending only, compared with the previous period. */
+    private function recordingDashboard(Request $request, LedgerAnalyticsService $ledger, ProjectWarningService $warnings, DirectorKpiService $kpis)
+    {
+        $range = $this->dateRange($request);
+        $previousRange = ReviewPeriod::previous($range);
+        $projects = Project::query()->orderBy('name')->get();
+        $portfolio = $ledger->portfolio($projects, $range['from'], $range['to']);
+        $previous = $ledger->portfolio($projects, $previousRange['from'], $previousRange['to'])['totals'];
+        $attention = $projects->map(fn (Project $project) => ['project' => $project, 'warnings' => $warnings->evaluateLedger($ledger->project($project))])
+            ->filter(fn ($row) => $row['warnings'])->values();
+        $today = CarbonImmutable::today();
+        $companyKpis = $kpis->evaluate(DirectorKpiTarget::query()->whereNull('project_id')
+            ->whereDate('period_start', '<=', $today)->whereDate('period_end', '>=', $today)->orderBy('metric')->get());
+
+        return view('director.recording-dashboard', compact('portfolio', 'previous', 'range', 'previousRange', 'attention', 'companyKpis'));
     }
 
     private function dateRange(Request $request): array

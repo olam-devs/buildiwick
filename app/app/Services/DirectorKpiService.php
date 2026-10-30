@@ -3,7 +3,10 @@
 namespace App\Services;
 
 use App\Models\DirectorKpiTarget;
+use App\Models\Project;
+use App\Support\Features;
 use App\Support\Money;
+use App\Support\PhaseTree;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -26,6 +29,23 @@ class DirectorKpiService
         'budget_used_pct' => ['label' => 'Budget used, % paid of budget (ceiling)', 'unit' => 'percent', 'direction' => 'at_most', 'basis' => 'current'],
     ];
 
+    /**
+     * Recording mode measures only spending (no client billing). Every target can be narrowed to one
+     * project, one phase (with its subphases) and one main category.
+     */
+    public const RECORDING_METRICS = [
+        'spend' => ['label' => 'Recorded spend (ceiling)', 'unit' => 'money', 'direction' => 'at_most', 'basis' => 'period'],
+        'paid_out' => ['label' => 'Money paid out (ceiling)', 'unit' => 'money', 'direction' => 'at_most', 'basis' => 'period'],
+        'to_confirm' => ['label' => 'Amount still to confirm (ceiling)', 'unit' => 'money', 'direction' => 'at_most', 'basis' => 'current'],
+        'budget_used_pct' => ['label' => 'Budget used, % of budget (ceiling)', 'unit' => 'percent', 'direction' => 'at_most', 'basis' => 'current'],
+    ];
+
+    /** @return array<string, array<string, string>> the measures for the current rollout mode */
+    public static function definitions(): array
+    {
+        return Features::recording() ? self::RECORDING_METRICS : self::METRICS;
+    }
+
     public const PERIODS = [
         'this_month' => 'This month',
         'next_month' => 'Next month',
@@ -44,7 +64,10 @@ class DirectorKpiService
     /** @var array<string, array> */
     private array $reports = [];
 
-    public function __construct(private readonly DirectorAnalyticsService $analytics) {}
+    public function __construct(
+        private readonly DirectorAnalyticsService $analytics,
+        private readonly LedgerAnalyticsService $ledger,
+    ) {}
 
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
     public static function periodDates(string $period, ?string $from = null, ?string $to = null, ?CarbonImmutable $today = null): array
@@ -73,7 +96,7 @@ class DirectorKpiService
         $today ??= CarbonImmutable::today();
 
         return $targets->map(function (DirectorKpiTarget $target) use ($today) {
-            $definition = self::METRICS[$target->metric] ?? null;
+            $definition = self::definitions()[$target->metric] ?? null;
             $start = CarbonImmutable::parse($target->period_start);
             $end = CarbonImmutable::parse($target->period_end);
             $base = ['target' => $target, 'definition' => $definition, 'actual' => null, 'progress' => null, 'status' => 'upcoming'];
@@ -85,8 +108,9 @@ class DirectorKpiService
             }
 
             $measuredTo = $end->isAfter($today) ? $today : $end;
-            $report = $this->report($start, $measuredTo);
-            $actual = $this->actual($target->metric, $report, $target->project_id);
+            $actual = Features::recording()
+                ? $this->ledgerActual($target, $start, $measuredTo)
+                : $this->actual($target->metric, $this->report($start, $measuredTo), $target->project_id);
             if ($actual === null) {
                 return $base;
             }
@@ -140,6 +164,45 @@ class DirectorKpiService
             'net_cash_flow' => Money::difference($summary['received_period'], $summary['expenses_period']),
             'overdue_receivables' => $summary['overdue_receivables'],
             'budget_used_pct' => $this->companyBudgetUsed($report['projects']),
+            default => null,
+        };
+    }
+
+    /** Recording-mode actual for a target's project / phase / category scope. */
+    private function ledgerActual(DirectorKpiTarget $target, CarbonImmutable $from, CarbonImmutable $to): ?string
+    {
+        $projects = $target->project_id ? Project::query()->whereKey($target->project_id)->get() : Project::all();
+        $spend = '0.00';
+        $paid = '0.00';
+        $outstanding = '0.00';
+        $budget = '0.00';
+        $allSpend = '0.00';
+        foreach ($projects as $project) {
+            $ids = null;
+            if ($target->project_phase_id) {
+                $ids = (new PhaseTree($project->phases()->get()))->withDescendants((int) $target->project_phase_id);
+            }
+            $lines = $this->ledger->lines($project)
+                ->when($ids, fn ($rows) => $rows->whereIn('project_phase_id', $ids))
+                ->when($target->main_category, fn ($rows) => $rows->where('main_category', $target->main_category));
+            $period = $lines->filter(fn ($line) => $line->requested_at && $line->requested_at->between($from->startOfDay(), $to->endOfDay()));
+            $spend = Money::sum([$spend, ...$period->pluck('total_amount')]);
+            $paid = Money::sum([$paid, ...$period->flatMap(fn ($line) => $line->payments->filter(fn ($payment) => $payment->payment_date->between($from->startOfDay(), $to->endOfDay()))->pluck('amount'))]);
+            $outstanding = Money::sum([$outstanding, LedgerAnalyticsService::money((int) $lines->sum('ledger_open_c'))]);
+            $allSpend = Money::sum([$allSpend, ...$lines->pluck('total_amount')]);
+            foreach ($this->ledger->budgets($project) as $key => $amount) {
+                [$phaseId, $category] = explode('|', $key);
+                if ((! $ids || in_array((int) $phaseId, $ids, true)) && (! $target->main_category || $target->main_category === $category)) {
+                    $budget = Money::sum([$budget, $amount]);
+                }
+            }
+        }
+
+        return match ($target->metric) {
+            'spend' => $spend,
+            'paid_out' => $paid,
+            'to_confirm' => $outstanding,
+            'budget_used_pct' => Money::compare($budget, '0') === 0 ? null : Money::percentage($allSpend, $budget),
             default => null,
         };
     }
