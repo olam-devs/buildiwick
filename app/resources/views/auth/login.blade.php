@@ -10,26 +10,29 @@
 <title>Sign in &middot; Buildiwick</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+@include('partials.theme')
+@include('partials.password-toggle')
 <style>
-  :root{ --bg:#F4F5F6; --surface:#FFFFFF; --ink:#1F272E; --ink-dim:#8D99A6; --primary:#2490EF; --primary-dark:#1B75C4; --line:#E1E5E8; --line-strong:#D1D8DD; --danger:#E6533C; --danger-soft:#FBE9E6; }
   *{box-sizing:border-box;}
   body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px;}
   .card{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:32px 28px;box-shadow:0 1px 3px rgba(16,24,32,.06);}
   .brand{display:flex;align-items:center;gap:9px;margin-bottom:22px;}
   .brand .mark{width:28px;height:28px;border-radius:7px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
   .brand span{font-weight:700;font-size:17px;}
+  .login-theme{position:fixed;top:14px;right:14px;width:210px}
   .brand .logo{height:34px;width:auto;display:block;}
   h1{font-size:21px;margin:0 0 20px;font-weight:700;letter-spacing:-0.01em;}
   label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-dim);margin-bottom:6px;}
   input{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);margin-bottom:16px;}
   input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(36,144,239,.15);}
-  button{width:100%;font-family:inherit;font-size:14.5px;font-weight:700;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:11px;cursor:pointer;}
-  button:hover{background:var(--primary-dark);}
-  .err{background:var(--danger-soft);color:#a3392a;border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:16px;}
+  button[type=submit]{width:100%;font-family:inherit;font-size:14.5px;font-weight:700;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:11px;cursor:pointer;}
+  button[type=submit]:hover{background:var(--primary-dark);}
+  .err{background:var(--danger-soft);color:var(--danger-ink);border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:16px;}
   .hint{font-size:11.5px;color:var(--ink-dim);margin-top:18px;line-height:1.7;}
 </style>
 </head>
 <body>
+  <div class="theme-switch login-theme" role="group" aria-label="Theme"><button type="button" data-theme="light">☀ Light</button><button type="button" data-theme="dark">☾ Dark</button><button type="button" data-theme="auto">Auto</button></div>
   <div class="card">
     <div class="brand"><img src="{{ asset('images/buildiwick-mark.png') }}" alt="Buildiwick logo" class="logo"><span>Buildiwick</span></div>
     <h1>Sign in</h1>
@@ -53,5 +56,6 @@
     </div>
     @endif
   </div>
+@include('partials.page-loader')
 </body>
 </html>

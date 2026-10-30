@@ -24,4 +24,4 @@
   @endforeach
   </tbody></table></div>
 </section>
-<style>.change-good{color:#1c7a4f;font-weight:600}.change-bad{color:#b42318;font-weight:600}.change-flat{color:var(--ink-dim)}</style>
+<style>.change-good{color:var(--good-ink);font-weight:600}.change-bad{color:var(--danger-ink);font-weight:600}.change-flat{color:var(--ink-dim)}</style>

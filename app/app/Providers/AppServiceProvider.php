@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\Web\DirectorController;
 use App\Models\ClientInvoice;
 use App\Models\EstimateEntry;
 use App\Models\ExpenseRequest;
@@ -124,6 +125,22 @@ class AppServiceProvider extends ServiceProvider
             && ($user->permits('view_analytics') || $user->permits('manage_phases_budget') || $user->permits('record_expenses')));
         Gate::define('view-workers', fn (User $user, Project $project) => $ledgerUser($user) && $user->canAccessProject($project)
             && ($user->permits('manage_workers') || $user->permits('view_analytics')));
+
+        // After any change in recording mode, rebuild the Director's cached figures once the response has
+        // been sent (Laravel's terminate phase), so the dashboard is ready the next time it opens.
+        $this->app->terminating(function (): void {
+            $request = request();
+            // Only where the server has already sent the response (PHP-FPM / LiteSpeed), so saving never waits for it.
+            $sentEarly = function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
+            if (! $sentEarly || ! Features::recording() || $request->isMethodSafe() || ! auth()->check() || app()->runningUnitTests()) {
+                return;
+            }
+            try {
+                DirectorController::warmFigures();
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        });
 
         // @feature('client_billing') ... @endfeature hides a switched-off rollout area in views.
         Blade::if('feature', fn (string $feature) => Features::on($feature));

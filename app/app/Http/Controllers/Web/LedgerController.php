@@ -18,6 +18,7 @@ use App\Services\PhaseStructureService;
 use App\Support\Money;
 use App\Support\PhaseTree;
 use App\Support\ReviewPeriod;
+use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -44,7 +45,8 @@ class LedgerController extends Controller
         if (! $user->can('view-analytics')) {
             return view('ledger.index-team', ['rows' => $this->teamRows($projects->values()), 'filters' => $filters]);
         }
-        $portfolio = $analytics->portfolio($projects->values());
+        $projects = $projects->values();
+        $portfolio = $analytics->remember('portfolio:list:'.md5($projects->pluck('id')->join(',')), fn () => $analytics->portfolio($projects));
 
         return view('ledger.index', compact('portfolio', 'filters'));
     }
@@ -88,18 +90,20 @@ class LedgerController extends Controller
         if (! $request->user()->can('confirm-payments')) {
             return redirect()->route('ledger.index');
         }
-        $projects = $analytics->projectsFor($request->user(), withOverheads: true);
-        $lines = ExpenseRequest::query()->whereIn('project_id', $projects->pluck('id'))->where('status', 'approved')->with('payments')
-            ->get(['id', 'project_id', 'total_amount', 'approved_amount', 'commercial_total', 'status', 'requested_at']);
-        $lines = LedgerAnalyticsService::normalize($lines)->filter(fn ($line) => $line->ledger_open_c > 0);
-        $rows = $lines->groupBy('project_id')->map(fn ($group, $projectId) => [
-            'project' => $projects->firstWhere('id', $projectId),
-            'count' => $group->count(),
-            'amount' => LedgerAnalyticsService::money((int) $group->sum('ledger_open_c')),
-            'oldest' => $group->min('requested_at'),
-        ])->sortByDesc(fn ($row) => (int) round((float) $row['amount'] * 100))->values();
+        $projects = $analytics->projectsFor($request->user(), withOverheads: true)->keyBy('id');
+        // Open = line total minus what has been paid; under TSh 1 counts as settled (as everywhere in the ledger).
+        $paid = DB::table('expense_payments')->selectRaw('expense_request_id, sum(amount) as paid')->groupBy('expense_request_id');
+        $open = 'COALESCE(expense_requests.total_amount, expense_requests.approved_amount, expense_requests.commercial_total, 0) - COALESCE(paid.paid, 0)';
+        $rows = DB::table('expense_requests')->leftJoinSub($paid, 'paid', 'paid.expense_request_id', '=', 'expense_requests.id')
+            ->whereIn('expense_requests.project_id', $projects->keys())->where('expense_requests.status', 'approved')
+            ->whereRaw("$open >= 1")
+            ->selectRaw("expense_requests.project_id, count(*) as lines, sum($open) as amount, min(expense_requests.requested_at) as oldest")
+            ->groupBy('expense_requests.project_id')->get()
+            ->map(fn ($row) => ['project' => $projects[$row->project_id], 'count' => (int) $row->lines,
+                'amount' => number_format((float) $row->amount, 2, '.', ''), 'oldest' => $row->oldest ? CarbonImmutable::parse($row->oldest) : null])
+            ->sortByDesc(fn ($row) => (float) $row['amount'])->values();
 
-        return view('ledger.to-confirm', ['rows' => $rows, 'total' => LedgerAnalyticsService::money((int) $lines->sum('ledger_open_c')), 'count' => $lines->count()]);
+        return view('ledger.to-confirm', ['rows' => $rows, 'total' => number_format((float) $rows->sum(fn ($row) => (float) $row['amount']), 2, '.', ''), 'count' => $rows->sum('count')]);
     }
 
     public function overview(Request $request, Project $project, LedgerAnalyticsService $analytics)

@@ -2,6 +2,23 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — Dark Mode, Show Password, Profile Menu, Loading Screen, Faster Dashboards
+
+- **Light / Dark / Auto theme** (`partials/theme.blade.php`). All colours are tokens with light and dark values. Auto follows the device; a choice is remembered per browser (`localStorage` "bw-theme") and applied before the page paints. Chart SVG colours follow the theme through CSS. The switch is in the profile menu and on the sign-in page.
+- **Show / Hide button in every password field** (sign-in, create and edit user) (`partials/password-toggle.blade.php`).
+- **Profile menu at the top right.** It shows the avatar, name, role and email, the theme switch and **Sign out**; on phones it sits in the top bar. The user card and Sign out were removed from the sidebar.
+- **Loading screen with the Buildiwick logo** (`partials/page-loader.blade.php`): a pulsing mark, bouncing dots and a moving top bar.
+  - It shows when a link or form takes more than 150 ms.
+  - It never shows for Excel downloads, new tabs or same-page links.
+  - It respects reduced-motion settings.
+- **Faster heavy pages.** Portfolio totals and Needs Attention are cached per data version (`LedgerAnalyticsService::remember()`).
+  - The version is a fingerprint of the row counts and last change of every ledger table, plus today's date, so cached figures are never stale.
+  - One cache entry per key is overwritten on change, so the cache stays small. Values are stored as plain data, because Laravel 13's cache does not rebuild objects.
+  - To Confirm uses one aggregate query.
+  - After any save, the Director's default figures are rebuilt once the response has been sent, where the server supports it (PHP-FPM / LiteSpeed).
+  - Locally, warm pages load in 0.2–0.4 s; the Director dashboard took 6.2 s before.
+- Full suite: 191 tests.
+
 ## 2026-10-30 — Bulk Confirm per Line, Duplicate Check, Needs Attention List, Buildiwick Logo
 
 - **Bulk confirm is a table of the selected lines.** Each row has:

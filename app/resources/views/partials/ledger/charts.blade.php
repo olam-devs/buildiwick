@@ -1,6 +1,6 @@
 {{-- Interactive charts (no library): hover/tap tooltips and a page-wide category filter. --}}
 <style>
-  .lg-tip{position:fixed;z-index:80;pointer-events:none;background:#1F272E;color:#fff;font-size:12px;padding:7px 9px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.18);max-width:260px;line-height:1.45;opacity:0;transition:opacity .08s}
+  .lg-tip{position:fixed;z-index:80;pointer-events:none;background:var(--tip);border:1px solid var(--line-strong);color:#fff;font-size:12px;padding:7px 9px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.18);max-width:260px;line-height:1.45;opacity:0;transition:opacity .08s}
   .lg-tip.on{opacity:1}.lg-tip b{font-variant-numeric:tabular-nums}
   .lg-chart svg [data-tip]{cursor:pointer;transition:opacity .12s}
   .lg-chart svg:hover [data-tip]{opacity:.55}.lg-chart svg [data-tip]:hover{opacity:1}
