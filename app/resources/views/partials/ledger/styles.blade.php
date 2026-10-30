@@ -99,6 +99,10 @@
   .lg-kpi.good{border-left-color:var(--good)}.lg-kpi.warn{border-left-color:var(--warn)}.lg-kpi.bad{border-left-color:var(--danger)}
   .lg-kpi .t{font-weight:600;font-size:13px}.lg-kpi .v{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}.lg-kpi .v small{font-weight:500;color:var(--ink-dim);font-size:11.5px}
   .lg-kpi .sub{font-size:11.5px;color:var(--ink-dim)}
+  .lg-check{width:34px}.lg-check input{width:18px;height:18px;accent-color:var(--primary);cursor:pointer}
+  tr.lg-selected td{background:var(--primary-soft)!important}
+  .lg-bulkbar{position:sticky;bottom:12px;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border-radius:12px;background:#1F272E;color:#fff;box-shadow:0 8px 24px rgba(16,24,32,.25)}
+  .lg-bulkbar .grow{flex:1}.lg-bulkbar .lg-btn:not(.ok):not(.warn):not(.bad){background:transparent;color:#fff;border-color:#5D6A73}
   /* Row actions: clear, separate buttons that are easy to hit on a phone */
   .lg-btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .lg-btns form{display:contents}
@@ -110,6 +114,8 @@
   @media(max-width:760px){
     .lg-cards-sm tbody tr td.lg-btn-cell{display:block;padding-top:8px;border-top:1px solid var(--line)!important;margin-top:4px}
     .lg-cards-sm tbody tr td.lg-btn-cell::before{content:none}
+    .lg-cards-sm tbody tr td.lg-check{justify-content:flex-start;gap:10px}
+    .lg-bulkbar{bottom:8px}.lg-bulkbar .grow{display:none}.lg-bulkbar .lg-btn{flex:1 1 auto}
     .lg-btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr))}
     .lg-btn{min-height:40px;font-size:13.5px}
   }

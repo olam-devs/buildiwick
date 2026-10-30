@@ -9,6 +9,7 @@ use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectEditLog;
 use App\Models\ProjectPhase;
+use App\Models\User;
 use App\Services\ExpenseLedgerService;
 use App\Services\LedgerAnalyticsService;
 use App\Services\LedgerWorkbookService;
@@ -17,11 +18,13 @@ use App\Services\PhaseStructureService;
 use App\Support\Money;
 use App\Support\PhaseTree;
 use App\Support\ReviewPeriod;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Recording-mode project workspace shared by Director, PM and Accounts: projects list, overview
@@ -268,6 +271,67 @@ class LedgerController extends Controller
         $ledger->restore($line, $request->user());
 
         return back()->with('success', $line->request_code.' restored.');
+    }
+
+    /**
+     * Confirm, deny or delete many selected lines at once. Each line goes through the same service
+     * call (and permission check) as its single-line button; lines that can't take the action are
+     * skipped and named in the message instead of failing the whole batch.
+     */
+    public function bulk(Request $request, Project $project, ExpenseLedgerService $ledger)
+    {
+        $this->authorize('view-ledger', $project);
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['confirm', 'deny', 'delete'])],
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['integer'],
+            'reason' => ['nullable', 'required_if:action,deny', 'string', 'max:1000'],
+            'payment_date' => ['nullable', 'required_if:action,confirm', 'date', 'before_or_equal:today'],
+            'payment_method' => ['nullable', 'required_if:action,confirm', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
+            'transaction_reference' => ['nullable', 'string', 'max:255'],
+        ], ['ids.required' => 'Tick at least one line first.', 'reason.required_if' => 'Say why the selected lines are denied.']);
+        $user = $request->user();
+        abort_unless(match ($validated['action']) {
+            'confirm' => $user->can('confirm-payments', $project),
+            'deny' => $user->can('deny-expense', $project),
+            'delete' => $user->hasRole('admin') || $user->permits('edit_any_line') || $user->permits('record_expenses'),
+        }, 403);
+
+        $lines = ExpenseRequest::query()->where('project_id', $project->id)->whereIn('id', $validated['ids'])->with('payments')->orderBy('requested_at')->orderBy('id')->get();
+        $done = 0;
+        $skipped = [];
+        $amount = '0.00';
+        foreach ($lines as $line) {
+            try {
+                match ($validated['action']) {
+                    'confirm' => $this->confirmWhole($line, $validated, $user, $ledger, $amount),
+                    'deny' => $ledger->deny($line, $validated['reason'], $user),
+                    'delete' => $ledger->delete($line, $user),
+                };
+                $done++;
+            } catch (ValidationException|AuthorizationException) {
+                $skipped[] = $line->request_code;
+            }
+        }
+        $verb = ['confirm' => 'confirmed', 'deny' => 'denied', 'delete' => 'deleted'][$validated['action']];
+        $message = $done.' line(s) '.$verb.($validated['action'] === 'confirm' && $done ? ' · TSh '.Money::format($amount).' paid' : '').'.';
+        if ($skipped) {
+            $message .= ' Skipped '.count($skipped).' that cannot be '.$verb.' (already paid, denied, or not yours): '.implode(', ', array_slice($skipped, 0, 10)).(count($skipped) > 10 ? '…' : '').'.';
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /** Bulk confirm pays what is still open on the line, as recorded. */
+    private function confirmWhole(ExpenseRequest $line, array $validated, User $user, ExpenseLedgerService $ledger, string &$amount): void
+    {
+        $open = (string) $line->approved_outstanding_amount;
+        if ($line->status !== 'approved' || Money::compare($open, '0') <= 0) {
+            throw ValidationException::withMessages(['line' => 'Nothing to confirm.']);
+        }
+        $ledger->confirm($line, ['amount' => $open, 'payment_date' => $validated['payment_date'], 'payment_method' => $validated['payment_method'],
+            'transaction_reference' => $validated['transaction_reference'] ?? null], $user);
+        $amount = Money::sum([$amount, $open]);
     }
 
     public function confirm(Request $request, Project $project, ExpenseRequest $line, ExpenseLedgerService $ledger)
