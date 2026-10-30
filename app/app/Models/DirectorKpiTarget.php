@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** A Director's target for one measure over one period, for the whole company (no project) or a single project. */
 class DirectorKpiTarget extends Model
 {
-    protected $fillable = ['metric', 'project_id', 'period_start', 'period_end', 'target_value', 'notes', 'created_by'];
+    protected $fillable = ['metric', 'project_id', 'project_phase_id', 'main_category', 'period_start', 'period_end', 'target_value', 'notes', 'created_by'];
 
     protected function casts(): array
     {
@@ -18,6 +18,11 @@ class DirectorKpiTarget extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function phase(): BelongsTo
+    {
+        return $this->belongsTo(ProjectPhase::class, 'project_phase_id');
     }
 
     public function createdBy(): BelongsTo

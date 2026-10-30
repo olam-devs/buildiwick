@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Support\Features;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -48,9 +49,19 @@ class AuthController extends Controller
         return redirect('/login');
     }
 
-    private function roleLandingRedirect(Request $request)
+    /** Where a role starts; recording mode sends PM and Accounts to the project ledger and has no estimator/site screens. */
+    public static function landingRoute(?string $role): ?string
     {
-        $route = match (Auth::user()->role?->name) {
+        if (Features::recording()) {
+            return match ($role) {
+                'admin' => 'ledger.index',
+                'director' => 'director.index',
+                'accounts', 'accountant', 'project_manager' => 'ledger.index',
+                default => null,
+            };
+        }
+
+        return match ($role) {
             'admin' => 'dashboard.index',
             'director' => 'director.index',
             'accounts', 'accountant' => 'accountant.index',
@@ -59,13 +70,20 @@ class AuthController extends Controller
             'site_operator' => 'site.index',
             default => null,
         };
+    }
+
+    private function roleLandingRedirect(Request $request)
+    {
+        $route = self::landingRoute(Auth::user()->role?->name);
 
         if ($route === null) {
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            return redirect()->route('login')->withErrors(['email' => 'This account has no assigned application role.']);
+            return redirect()->route('login')->withErrors(['email' => Features::recording()
+                ? 'This role is not used in the current phase of the system. Ask the Director for access.'
+                : 'This account has no assigned application role.']);
         }
 
         return redirect()->route($route);

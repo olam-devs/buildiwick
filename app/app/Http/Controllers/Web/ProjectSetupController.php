@@ -11,9 +11,13 @@ use App\Models\Project;
 use App\Models\ProjectDocument;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\PhaseStructureService;
 use App\Services\ProjectRegistrationService;
+use App\Support\Features;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProjectSetupController extends Controller
@@ -28,9 +32,20 @@ class ProjectSetupController extends Controller
         'external_works' => 'External Works',
     ];
 
+    /** The tracker's standard stages, offered as starting phases for a new project in recording mode. */
+    public const TRACKER_STAGES = [
+        'Preliminaries', 'Substructure (Foundation)', 'Superstructure', 'Walling',
+        'Roofing', 'Finishing', 'External Works', 'Other / General',
+    ];
+
     public function index(Request $request)
     {
         $this->authorize('manageSetup', Project::class);
+        if (Features::recording()) {
+            $projects = Project::with('assignedUsers.role')->withCount('phases')->orderBy('name')->get();
+
+            return view('projects.recording-index', compact('projects'));
+        }
 
         $projects = Project::with(['client', 'activePhase', 'assignedUsers.role'])
             ->orderBy('name')
@@ -42,13 +57,33 @@ class ProjectSetupController extends Controller
     public function create()
     {
         $this->authorize('create', Project::class);
+        if (Features::recording()) {
+            return view('projects.recording-form', $this->recordingFormData(null));
+        }
 
         return view('projects.form', $this->formData(null));
     }
 
-    public function store(StoreProjectSetupRequest $request, ProjectRegistrationService $registration)
+    public function store(Request $request, ProjectRegistrationService $registration, PhaseStructureService $phases)
     {
-        $project = $registration->create($request->validated(), $request->user());
+        if (Features::recording()) {
+            $this->authorize('create', Project::class);
+            $data = $this->recordingData($request, null);
+            $project = DB::transaction(function () use ($data, $request, $phases): Project {
+                $project = Project::create(collect($data)->only(['project_code', 'name', 'status', 'location', 'notes'])->all() + ['created_by' => $request->user()->id]);
+                $project->assignedUsers()->sync(array_filter($data['project_manager_ids'] ?? []));
+                if ($request->boolean('standard_stages')) {
+                    foreach (self::TRACKER_STAGES as $stage) {
+                        $phases->create($project, $stage, null, $request->user());
+                    }
+                }
+
+                return $project;
+            });
+
+            return redirect()->route('ledger.structure', $project)->with('success', 'Project '.$project->project_code.' created. Set up its phases and budget below.');
+        }
+        $project = $registration->create(app(StoreProjectSetupRequest::class)->validated(), $request->user());
 
         return redirect()->route('admin.projects.show', $project)->with('success', 'Project '.$project->project_code.' registered.');
     }
@@ -57,6 +92,9 @@ class ProjectSetupController extends Controller
     {
         $this->authorize('manageSetup', Project::class);
         $this->authorize('view', $project);
+        if (Features::recording()) {
+            return view('projects.recording-form', $this->recordingFormData($project));
+        }
 
         $project->load([
             'client',
@@ -72,14 +110,27 @@ class ProjectSetupController extends Controller
     public function edit(Project $project)
     {
         $this->authorize('update', $project);
+        if (Features::recording()) {
+            return view('projects.recording-form', $this->recordingFormData($project));
+        }
         $project->load(['client', 'phases', 'assignedUsers.role', 'contractDocuments']);
 
         return view('projects.form', $this->formData($project));
     }
 
-    public function update(UpdateProjectSetupRequest $request, Project $project, ProjectRegistrationService $registration)
+    public function update(Request $request, Project $project, ProjectRegistrationService $registration)
     {
-        $project = $registration->update($project, $request->validated(), $request->user());
+        if (Features::recording()) {
+            $this->authorize('update', $project);
+            $data = $this->recordingData($request, $project);
+            $project->update(collect($data)->only(['project_code', 'name', 'status', 'location', 'notes'])->all());
+            $managers = User::query()->whereHas('role', fn ($query) => $query->where('name', 'project_manager'))->pluck('id');
+            $project->assignedUsers()->detach($managers->diff($data['project_manager_ids'] ?? [])->all());
+            $project->assignedUsers()->syncWithoutDetaching(array_filter($data['project_manager_ids'] ?? []));
+
+            return redirect()->route('admin.projects.show', $project)->with('success', 'Project settings saved.');
+        }
+        $project = $registration->update($project, app(UpdateProjectSetupRequest::class)->validated(), $request->user());
 
         return redirect()->route('admin.projects.show', $project)->with('success', 'Project setup updated.');
     }
@@ -91,6 +142,31 @@ class ProjectSetupController extends Controller
         abort_unless(Storage::disk('local')->exists($document->file_path), 404);
 
         return Storage::disk('local')->download($document->file_path, $document->file_name);
+    }
+
+    private function recordingFormData(?Project $project): array
+    {
+        return [
+            'project' => $project,
+            'statuses' => Lookup::ofType('project_status')->get(),
+            'managers' => User::query()->where('is_active', true)->whereHas('role', fn ($query) => $query->where('name', 'project_manager'))->orderBy('name')->get(),
+            'assigned' => $project ? $project->assignedUsers()->pluck('users.id')->all() : [],
+            'stages' => self::TRACKER_STAGES,
+        ];
+    }
+
+    /** Recording mode needs only what the tracker records for a project: ID, name, status and location. */
+    private function recordingData(Request $request, ?Project $project): array
+    {
+        return $request->validate([
+            'project_code' => ['required', 'string', 'max:50', 'regex:/^[A-Z0-9][A-Z0-9-]*$/', Rule::unique('projects', 'project_code')->ignore($project?->id)],
+            'name' => ['required', 'string', 'max:150'],
+            'status' => ['required', Rule::exists('lookups', 'code')->where('type', 'project_status')],
+            'location' => ['required', 'string', 'max:150'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'project_manager_ids' => ['nullable', 'array'],
+            'project_manager_ids.*' => ['integer', Rule::exists('users', 'id')->where('is_active', true)],
+        ], ['project_code.regex' => 'Use capital letters, numbers and dashes, e.g. BWG-OYS-RES-2026-001.']);
     }
 
     private function formData(?Project $project): array

@@ -8,7 +8,7 @@
   $bar = $row['progress'] === null ? 0 : min(100, (float) $row['progress']);
 @endphp
 <tr>
-  <td>{{ $definition['label'] ?? $target->metric }}@if($target->notes)<small class="kpi-note">{{ $target->notes }}</small>@endif</td>
+  <td>{{ $definition['label'] ?? $target->metric }}@if($target->phase || $target->main_category)<small class="kpi-note">{{ collect([$target->phase?->stage_label, \App\Services\LedgerAnalyticsService::CATEGORIES[$target->main_category] ?? null])->filter()->join(' › ') }}</small>@endif @if($target->notes)<small class="kpi-note">{{ $target->notes }}</small>@endif</td>
   @if($showProject ?? false)<td>{{ $target->project?->name ?? 'Whole company' }}</td>@endif
   <td>{{ $target->period_start->format('d M Y') }} – {{ $target->period_end->format('d M Y') }}</td>
   <td class="amt">{{ $show((string) $target->target_value) }}</td>

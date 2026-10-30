@@ -13,7 +13,7 @@ class ProjectPhase extends Model
     use HasFactory;
 
     protected $fillable = [
-        'project_id', 'stage_code', 'phase_name', 'phase_order', 'planned_start_date', 'planned_completion_date',
+        'project_id', 'parent_id', 'stage_code', 'phase_name', 'phase_order', 'planned_start_date', 'planned_completion_date',
         'actual_start_date', 'actual_completion_date', 'physical_progress_percentage',
         'status', 'started_at', 'completed_at', 'notes', 'created_by',
     ];
@@ -40,6 +40,17 @@ class ProjectPhase extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** Phases form a tree (phase › subphase › sub-subphase); top-level phases have no parent. */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(ProjectPhase::class, 'parent_id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(ProjectPhase::class, 'parent_id')->orderBy('phase_order');
     }
 
     public function estimateEntries(): HasMany

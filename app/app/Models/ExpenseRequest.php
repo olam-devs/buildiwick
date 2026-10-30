@@ -139,6 +139,11 @@ class ExpenseRequest extends Model
         return Attribute::get(function (): string {
             $paid = $this->paid_to_date;
 
+            // Imported tracker adjustment lines are negative; they are settled once the matching negative amount is recorded.
+            if (Money::compare($this->approved_payable_amount, '0') < 0) {
+                return Money::compare($paid, $this->approved_payable_amount) === 0 ? 'paid' : 'unpaid';
+            }
+
             if (Money::compare($paid, '0') <= 0) {
                 return 'unpaid';
             }

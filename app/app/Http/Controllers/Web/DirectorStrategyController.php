@@ -7,7 +7,10 @@ use App\Models\DirectorKpiTarget;
 use App\Models\Project;
 use App\Services\DirectorAnalyticsService;
 use App\Services\DirectorKpiService;
+use App\Services\LedgerAnalyticsService;
 use App\Services\ProjectWarningService;
+use App\Support\Features;
+use App\Support\PhaseTree;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -46,17 +49,19 @@ class DirectorStrategyController extends Controller
     }
 
     /** One project's warnings, KPI targets and warning limits, inside its workspace. */
-    public function project(Project $project, DirectorAnalyticsService $analytics, ProjectWarningService $warnings, DirectorKpiService $kpis)
+    public function project(Project $project, DirectorAnalyticsService $analytics, ProjectWarningService $warnings, DirectorKpiService $kpis, LedgerAnalyticsService $ledger)
     {
         $this->authorize('view-director-analytics');
         $today = CarbonImmutable::today();
-        $row = $analytics->project($project, $today->startOfYear(), $today);
-        $projectWarnings = $warnings->evaluate($row);
+        $projectWarnings = Features::recording()
+            ? $warnings->evaluateLedger($ledger->project($project))
+            : $warnings->evaluate($analytics->project($project, $today->startOfYear(), $today));
+        $phases = (new PhaseTree($project->phases()->get()))->flatten();
         $rules = $warnings->rules($project->id);
-        $groups = $this->grouped($kpis, DirectorKpiTarget::query()->where('project_id', $project->id)->with('createdBy')
+        $groups = $this->grouped($kpis, DirectorKpiTarget::query()->where('project_id', $project->id)->with(['createdBy', 'phase'])
             ->orderByDesc('period_start')->orderBy('metric')->get());
 
-        return view('director.project-warnings', compact('project', 'projectWarnings', 'rules', 'groups'));
+        return view('director.project-warnings', compact('project', 'projectWarnings', 'rules', 'groups', 'phases'));
     }
 
     public function storeProjectKpi(Request $request, Project $project)
@@ -89,7 +94,9 @@ class DirectorStrategyController extends Controller
     {
         $this->authorize('manage-director-strategy');
         $validated = $request->validate([
-            'metric' => ['required', Rule::in(array_keys(DirectorKpiService::METRICS))],
+            'metric' => ['required', Rule::in(array_keys(DirectorKpiService::definitions()))],
+            'project_phase_id' => ['nullable', 'integer', Rule::exists('project_phases', 'id')->where('project_id', $project?->id ?? 0)],
+            'main_category' => ['nullable', Rule::in(array_keys(LedgerAnalyticsService::CATEGORIES))],
             'period' => ['required', Rule::in(array_keys(DirectorKpiService::PERIODS))],
             'from' => ['required_if:period,custom', 'nullable', 'date'],
             'to' => ['required_if:period,custom', 'nullable', 'date', 'after_or_equal:from'],
@@ -100,6 +107,8 @@ class DirectorStrategyController extends Controller
         DirectorKpiTarget::create([
             'metric' => $validated['metric'],
             'project_id' => $project?->id,
+            'project_phase_id' => $project ? ($validated['project_phase_id'] ?? null) : null,
+            'main_category' => $validated['main_category'] ?? null,
             'period_start' => $start,
             'period_end' => $end,
             'target_value' => $validated['target_value'],
@@ -114,7 +123,7 @@ class DirectorStrategyController extends Controller
     {
         $this->authorize('manage-director-strategy');
         $rules = [];
-        foreach (array_keys(ProjectWarningService::RULES) as $code) {
+        foreach (array_keys(ProjectWarningService::definitions()) as $code) {
             $rules["rules.$code.threshold"] = ['required', 'numeric', 'min:0', 'max:99999999999999.99'];
             $rules["rules.$code.active"] = ['nullable', 'boolean'];
         }

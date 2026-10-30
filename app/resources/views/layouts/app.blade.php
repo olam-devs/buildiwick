@@ -199,6 +199,9 @@
     </div>
     @endauth
     <nav class="navgroup">
+    @if(\App\Support\Features::recording() && auth()->check() && (auth()->user()->hasRole('admin') || in_array(auth()->user()->role?->name, ['project_manager', 'accounts', 'accountant'], true)))
+      @include('partials.recording-nav')
+    @else
       @if($workspaceProject ?? null)
       <div class="project-workspace-card"><div class="label">Project Workspace</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
       @if(auth()->user()->hasRole('director'))
@@ -278,6 +281,7 @@
         <a class="navitem {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">User Management</a>
       @endif
       @endif
+    @endif
     </nav>
     @auth
     <div style="margin-top:auto;">

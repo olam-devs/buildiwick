@@ -7,6 +7,7 @@ use App\Http\Requests\StoreAdminUserRequest;
 use App\Http\Requests\UpdateAdminUserRequest;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\Features;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Arr;
 use Illuminate\View\View;
@@ -60,6 +61,8 @@ class AdminUserController extends Controller
 
     private function roles()
     {
-        return Role::where('name', '!=', 'admin')->orderBy('name')->get();
+        return Role::where('name', '!=', 'admin')
+            ->when(Features::recording(), fn ($query) => $query->whereNotIn('name', ['estimator_qs', 'site_operator']))
+            ->orderBy('name')->get();
     }
 }

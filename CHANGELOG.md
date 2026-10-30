@@ -2,6 +2,58 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — Recording Mode (Phase 1 rollout) and Tracker Import
+
+**The client starts by only recording what happens, with no approvals. Director, PM and Accounts use one clean, per-project workspace. The live tracker workbook (36 projects, 5,805 lines) can be imported unchanged.**
+
+- **Rollout switch.** `config/buildiwick.php` reads `BUILDIWICK_MODE`, which defaults to `recording`; tests run with `full` via `phpunit.xml`. Recording mode switches off four areas:
+  - client billing (invoices, receipts, receivables, cash balance, estimated client value);
+  - estimates and the Estimator role;
+  - the Site Operator role;
+  - the request/approval workflow.
+
+  Their routes carry `feature:*` middleware and return 404. Estimator and Site Operator accounts can't sign in, and User Management doesn't offer those roles. The code stays in place, so later phases can switch areas back on.
+- **Per-project workspace** (`LedgerController`, `/ledger/...`), for Director, PM and Accounts:
+  - **Projects** list.
+  - **Overview** with modern charts: spend cards, category donut, monthly stacked columns, phase-vs-budget bars, top items, latest entries.
+  - **Expenditure** register: the tracker's columns, category chips, phase (including subphases), status, subcategory, worker, date and search filters, totals, a Spend-by-phase matrix and Excel export.
+  - **Record Expense**: category first, then phase / subphase, item name (suggested from past entries), optional subcategory (any, option A), qty, unit, unit cost or total, receipt no., and worker for labour.
+  - **Phases & Budget** and **Workers**.
+  - **To Confirm** queue for Accounts and the Director.
+
+  Charts are inline SVG partials, with no JS chart dependency.
+- **Recording without approvals.** `ExpenseLedgerService` stores each line as an approved `ExpenseRequest` (approval stage `recorded`), coded like the tracker (`OYS-RES-TXN-0956`), so existing payables, KPIs and warnings read it.
+  - The PM logs lines as **To confirm** and can't mark them paid.
+  - Accounts (or the Director) **Confirm**: optionally correct the amount (logged), then record the amount paid, date and method through `ExpensePaymentRecorder`. Accounts and the Director can also record a line directly as paid.
+  - A PM sees only assigned projects and edits only their own unpaid lines. Accounts and the Director can edit any unpaid line.
+- **Phase tree.** `project_phases.parent_id` gives phase › subphase › sub-subphase (max 3 levels, `PhaseTree`), freely named by the Director (`PhaseStructureService`). The unique (project, phase_order) index is replaced by a plain index, because order is now per parent. Phases holding expenses or budgets can't be deleted.
+- **Budget.** The Director sets one amount per phase node × main category (`PhaseBudgetService`). It's stored as an approved `InternalBudget` with one "Budget allowance" line, and changes go to `project_edit_logs`. Figures roll up the tree.
+- **Workers.** The PM registers fundis and subcontractors (`labour_agreements`) with an optional contract amount. Labour lines link a worker, and the page shows recorded, paid, balance and % of contract.
+- **KPIs and warnings for recording mode.**
+  - KPI measures: recorded spend, money paid out, amount still to confirm, budget used %. A target can be narrowed to a project, phase (including subphases) and/or category (`director_kpi_targets.project_phase_id` / `main_category`).
+  - Warning rules: spend above a share of budget (whole project and every phase × category with its own budget), lines unconfirmed for more than N days, an active project with no entries for N days, and late phases.
+  - Client-billing measures and rules are not offered.
+- **Director dashboard (recording):** period chips with comparison to the previous period, monthly chart, category donut, top projects, **Needs attention** (warnings) and the all-projects table. `director.projects.show` redirects to the ledger overview.
+- **Project Setup (recording)** needs only the tracker's fields: Project ID, name, status (adds **Near closure** and **Overheads**) and location, plus optional PMs. A new project can start with the tracker's 8 standard stages. No client, contract or estimator is required.
+- **Tracker import.** `php artisan app:import-tracker <xlsx> [--fresh] [--dry-run] [--as=director-email]` imports every project sheet unchanged:
+  - Project ID, name, status and location from row 2;
+  - the 8 stages become phases;
+  - each line keeps its ID, date, category, subcategory, description, qty, unit, unit cost and stage;
+  - "Expense" lines are paid (amount paid, or the line total when blank); "Material log – to confirm" lines stay unpaid;
+  - negative "difference/discount" lines keep their negative paid amount;
+  - labour lines naming a fundi create and link a worker;
+  - each project's import is an `OnboardingImport`.
+
+  `--fresh` deletes all existing projects first. On v514 the dry run and the import both give 5,805 lines, TSh 3,437,181,114.51 recorded and TSh 2,556,820,007.17 paid, matching the workbook. Two lines where paid exceeded the total by 1 cent had their total raised by 0.01. A remainder under TSh 1 counts as settled (tracker rounding).
+- **Speed.** `LedgerAnalyticsService` converts each line to integer cents once (exact fixed-point) and totals in cents. On the full import the company dashboard went from 10–14 s to about 3 s, and project pages load in under 0.6 s (local dev server).
+- Tests: new `RecordingModeTest` (8 tests / 134 assertions). Full suite: 177 tests / 1,948 assertions.
+
+### Decisions
+
+- Phase 1 is recording only: no client billing anywhere, and only the Director, PM and Accounts roles. Switched-off areas are disabled at the route level (`feature:*`), not deleted.
+- A recorded line is an approved `ExpenseRequest`. "Paid" is always an `ExpensePayment`, so the ledger and every report share one source.
+- Imported tracker data is kept exactly as recorded, including odd units such as "75" typed in the Unit column and negative adjustment lines.
+
 ## 2026-10-27 — Director Sidebar: Company vs Project Scope
 
 - Company-level pages now sit only in the Director's main sidebar, under **Company Targets**: **Company KPI Targets** (company-wide targets only, with no project picker) and **Default Warning Rules**. The duplicate dashboard header buttons are gone.
