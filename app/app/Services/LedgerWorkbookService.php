@@ -282,12 +282,7 @@ class LedgerWorkbookService
     {
         $sheet->mergeCells("A1:{$last}1");
         $sheet->setCellValue('A1', $subtitle ? $title.'  ·  '.$subtitle : $title);
-        $sheet->getStyle("A1:{$last}1")->applyFromArray([
-            'font' => ['bold' => true, 'size' => 15, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1F6FB2']],
-            'alignment' => ['vertical' => Alignment::VERTICAL_CENTER, 'indent' => 1],
-        ]);
-        $sheet->getRowDimension(1)->setRowHeight(30);
+        ExcelExportService::brandBand($sheet, "A1:{$last}1");
     }
 
     /**

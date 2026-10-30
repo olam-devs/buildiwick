@@ -84,7 +84,13 @@
   .lg-seg input{display:none}
   dialog.lg-dialog{border:0;border-radius:14px;padding:0;max-width:440px;width:92vw;box-shadow:0 20px 50px rgba(0,0,0,.2)}
   dialog.lg-dialog::backdrop{background:rgba(20,30,40,.35)}
-  .lg-dialog form{padding:18px 20px;display:grid;gap:10px}
+  .lg-dialog form,.lg-dialog > div{padding:18px 20px;display:grid;gap:10px}
+  dialog.lg-dialog.wide{max-width:980px;width:96vw}
+  .bulk-defaults{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.bulk-defaults .field{margin:0}
+  .bulk-table-wrap{max-height:55vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+  .bulk-table input,.bulk-table select{width:100%;min-width:110px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:12.5px}
+  .bulk-table input[data-pay]{text-align:right;min-width:120px}
+  .bulk-table td{vertical-align:middle}
   .lg-dialog h3{margin:0}
   .lg-pager{display:flex;gap:6px;justify-content:flex-end;margin-top:10px;font-size:12px;align-items:center}
   .lg-search{padding:8px 11px;border:1px solid var(--line);border-radius:8px;min-width:240px;font:inherit;font-size:13px;background:var(--surface)}
@@ -99,6 +105,12 @@
   .lg-kpi.good{border-left-color:var(--good)}.lg-kpi.warn{border-left-color:var(--warn)}.lg-kpi.bad{border-left-color:var(--danger)}
   .lg-kpi .t{font-weight:600;font-size:13px}.lg-kpi .v{font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}.lg-kpi .v small{font-weight:500;color:var(--ink-dim);font-size:11.5px}
   .lg-kpi .sub{font-size:11.5px;color:var(--ink-dim)}
+  .att-row{padding:9px 0;border-top:1px solid var(--line)}.att-row:first-child{border-top:0}
+  .att-project{font-weight:600;color:var(--ink);text-decoration:none}
+  .att-row ul{margin:4px 0 0;padding-left:18px;color:var(--ink-soft);font-size:12px}.att-row li{margin:2px 0}
+  .att-row li a{color:var(--primary-dark)}
+  button.lg-chip{font-family:inherit;cursor:pointer}
+  .lg-dup{display:block;margin-top:3px;font-size:11.5px;font-weight:600;color:#9a5b00}
   .lg-check{width:34px}.lg-check input{width:18px;height:18px;accent-color:var(--primary);cursor:pointer}
   tr.lg-selected td{background:var(--primary-soft)!important}
   .lg-bulkbar{position:sticky;bottom:12px;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border-radius:12px;background:#1F272E;color:#fff;box-shadow:0 8px 24px rgba(16,24,32,.25)}

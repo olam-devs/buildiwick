@@ -21,6 +21,7 @@ use App\Support\Money;
 use App\Support\ReviewPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class DirectorController extends Controller
 {
@@ -278,13 +279,28 @@ class DirectorController extends Controller
         $overheadLedgers = Project::query()->where('is_company_overheads', true)->orderBy('name')->get();
         $overheads = $overheadLedgers->isEmpty() ? null : $ledger->portfolio($overheadLedgers, $range['from'], $range['to'])['totals'];
         $previous = $ledger->portfolio($projects, $previousRange['from'], $previousRange['to'])['totals'];
-        $attention = $projects->map(fn (Project $project) => ['project' => $project, 'warnings' => $warnings->evaluateLedger($ledger->project($project))])
-            ->filter(fn ($row) => $row['warnings'])->values();
+        $attention = $this->attentionRows($projects, $ledger, $warnings);
         $today = CarbonImmutable::today();
         $companyKpis = $kpis->evaluate(DirectorKpiTarget::query()->whereNull('project_id')
             ->whereDate('period_start', '<=', $today)->whereDate('period_end', '>=', $today)->orderBy('metric')->get());
 
         return view('director.recording-dashboard', compact('portfolio', 'previous', 'range', 'previousRange', 'attention', 'companyKpis', 'overheads'));
+    }
+
+    /** Every project with warnings, all of them (the dashboard shows the first few). */
+    public function attention(ProjectWarningService $warnings)
+    {
+        $this->authorize('view-director-analytics');
+        $projects = Project::query()->where('is_company_overheads', false)->orderBy('name')->get();
+
+        return view('director.attention', ['attention' => $this->attentionRows($projects, app(LedgerAnalyticsService::class), $warnings)]);
+    }
+
+    /** @return Collection<int, array{project: Project, warnings: array<int, array{rule: string, label: string, message: string}>}> */
+    private function attentionRows(Collection $projects, LedgerAnalyticsService $ledger, ProjectWarningService $warnings): Collection
+    {
+        return $projects->map(fn (Project $project) => ['project' => $project, 'warnings' => $warnings->evaluateLedger($ledger->project($project))])
+            ->filter(fn ($row) => $row['warnings'])->values();
     }
 
     private function dateRange(Request $request): array

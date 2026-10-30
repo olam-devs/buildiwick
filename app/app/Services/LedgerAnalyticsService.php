@@ -10,6 +10,7 @@ use App\Support\Money;
 use App\Support\PhaseTree;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Recording-mode figures, computed the way the client's tracker does: spend ("recorded" in these
@@ -265,6 +266,39 @@ class LedgerAnalyticsService
     }
 
     /** @return Collection<int, array{name: string, total: string, count: int}> */
+    /**
+     * Lines that may be entered twice, with why: (a) the same date, amount and description as another
+     * line, or (b) a line still awaiting confirmation with the same amount as a paid line of the same
+     * project within 14 days (a procurement-log delivery and its payment). These are leads to check,
+     * not proof: two real purchases can share a price.
+     *
+     * @return array<int, string> line id => note
+     */
+    public function duplicateNotes(Project $project): array
+    {
+        $lines = $this->lines($project)->filter(fn ($line) => $line->requested_at !== null && $line->ledger_total_c > 0);
+        $notes = [];
+        $same = $lines->groupBy(fn ($line) => $line->requested_at->toDateString().'|'.$line->ledger_total_c.'|'.mb_strtolower(trim((string) $line->item_description)));
+        foreach ($same as $group) {
+            if ($group->count() < 2) {
+                continue;
+            }
+            foreach ($group as $line) {
+                $others = $group->where('id', '!=', $line->id)->pluck('request_code')->join(', ');
+                $notes[$line->id] = 'Same date, amount and description as '.$others;
+            }
+        }
+        $paid = $lines->filter(fn ($line) => $line->ledger_open_c <= 0)->groupBy('ledger_total_c');
+        foreach ($lines->filter(fn ($line) => $line->ledger_open_c > 0) as $line) {
+            $match = collect($paid[$line->ledger_total_c] ?? [])->first(fn ($candidate) => abs($candidate->requested_at->diffInDays($line->requested_at)) <= 14);
+            if ($match) {
+                $notes[$line->id] ??= 'Same amount as paid line '.$match->request_code.' ('.$match->requested_at->format('d M').': '.Str::limit((string) $match->item_description, 40).')';
+            }
+        }
+
+        return $notes;
+    }
+
     public function topItems(Collection $lines, int $limit = 8): Collection
     {
         $groups = [];

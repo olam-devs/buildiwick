@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon-32.png') }}">
+<link rel="apple-touch-icon" href="{{ asset('images/apple-touch-icon.png') }}">
+<meta name="theme-color" content="#0081C3">
 <title>@yield('title', 'Buildiwick')</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
@@ -46,6 +50,8 @@
   .brand{display:flex;align-items:center;gap:9px;padding:6px 8px 14px;border-bottom:1px solid var(--line);margin-bottom:2px;}
   .brand .mark{width:26px;height:26px;border-radius:6px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none;}
   .brand span{font-weight:700;font-size:14.5px;letter-spacing:-0.01em;}
+  .brand .mark-img{height:22px;width:auto;display:block;flex:none;}
+  .mobile-bar .logo{height:20px;width:auto;flex:none;}
 
   .whoami{display:flex;align-items:center;gap:9px;padding:8px;border-radius:8px;background:var(--surface-2);margin-bottom:4px;}
   .whoami .avatar{width:28px;height:28px;border-radius:50%;background:var(--primary-soft);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11.5px;flex:none;}
@@ -198,7 +204,7 @@
 <body>
 <div class="shell">
   <aside class="sidebar">
-    <div class="brand"><span class="mark">B</span><span>Buildiwick</span></div>
+    <div class="brand"><img class="mark-img" src="{{ asset('images/buildiwick-mark-160.png') }}" alt="Buildiwick logo"><span>Buildiwick</span></div>
     @auth
     <div class="whoami">
       <div class="avatar">{{ strtoupper(substr(auth()->user()->name,0,1)) }}</div>
@@ -305,7 +311,7 @@
   <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Minimize sidebar" aria-expanded="true" title="Minimize sidebar">&#x2039;</button>
   <div class="nav-scrim" onclick="document.body.classList.remove('nav-open')"></div>
   <main class="main @yield('mainClass')">
-    <div class="mobile-bar"><button type="button" aria-label="Open menu" onclick="document.body.classList.add('nav-open')">&#9776;</button><span class="title">@yield('title', 'Buildiwick')</span></div>
+    <div class="mobile-bar"><button type="button" aria-label="Open menu" onclick="document.body.classList.add('nav-open')">&#9776;</button><img class="logo" src="{{ asset('images/buildiwick-mark-160.png') }}" alt="Buildiwick"><span class="title">@yield('title', 'Buildiwick')</span></div>
     @if (session('success'))<div class="flash">{{ session('success') }}</div>@endif
     @yield('content')
   </main>

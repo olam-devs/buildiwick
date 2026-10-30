@@ -491,6 +491,57 @@ class RecordingModeTest extends TestCase
             ->assertSee('Company overheads')->assertSee('4,000,000.00')->assertSee('920,000.00')->assertDontSee('4,920,000.00');
     }
 
+    public function test_bulk_confirm_takes_amount_method_and_receipt_per_line(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+        $accounts = $this->user('accounts');
+        foreach (['Cement', 'Sand'] as $item) {
+            $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => $item]));
+        }
+        [$cement, $sand] = ExpenseRequest::query()->orderBy('id')->get()->all();
+
+        $this->actingAs($accounts)->post(route('ledger.expenses.bulk', $project), ['action' => 'confirm', 'ids' => [$cement->id, $sand->id], 'payment_date' => '2026-10-30', 'rows' => [
+            $cement->id => ['amount' => '500000', 'payment_method' => 'mobile_money', 'invoice_receipt_no' => 'R-77', 'transaction_reference' => 'MP123'],
+            $sand->id => ['amount' => '920000'],
+        ]])->assertSessionHas('success', '2 line(s) confirmed · TSh 1,420,000.00 paid.');
+        $part = $cement->fresh()->payments()->sole();
+        $this->assertSame(['500000.00', 'mobile_money', 'R-77', 'MP123'], [(string) $part->amount, $part->payment_method, $part->invoice_receipt_no, $part->transaction_reference]);
+        $this->assertSame('part_paid', $cement->fresh()->payment_status);
+        $this->assertSame(['paid', 'other'], [$sand->fresh()->payment_status, $sand->fresh()->payments()->sole()->payment_method]);
+
+        $this->actingAs($accounts)->post(route('ledger.expenses.bulk', $project), ['action' => 'confirm', 'ids' => [$cement->id], 'payment_date' => '2026-10-30',
+            'rows' => [$cement->id => ['amount' => '999999']]])->assertSessionHas('success', fn ($message) => str_starts_with($message, '0 line(s) confirmed.'));
+        $this->assertSame(1, $cement->fresh()->payments()->count(), 'Paying more than what is open is refused.');
+    }
+
+    public function test_possible_duplicates_are_flagged_in_expenditure(): void
+    {
+        [$project, $phases] = $this->project();
+        $director = $this->user('director');
+        $pm = $this->user('project_manager', $project);
+        $this->actingAs($director)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'Cement paid', 'expense_date' => '2026-10-20']));
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'Cement from log', 'expense_date' => '2026-10-25']));
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[1], ['item_description' => 'Unrelated', 'unit_cost' => '1000']));
+
+        $page = $this->actingAs($this->user('accounts'))->get(route('ledger.expenses', [$project, 'check' => 'duplicates']))->assertOk();
+        $page->assertSee('Cement from log')->assertSee('Possible duplicate: Same amount as paid line TST-A-TXN-0001')->assertDontSee('Unrelated</b>', false)->assertDontSee('Cement paid</b>', false);
+        $this->actingAs($pm)->get(route('ledger.expenses', $project))->assertOk()->assertDontSee('Possible duplicate');
+    }
+
+    public function test_needs_attention_links_lines_to_confirm_and_lists_every_project(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+        $director = $this->user('director');
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['expense_date' => '2026-09-01']));
+        $link = route('ledger.expenses', [$project, 'status' => 'to_confirm', 'sort' => 'oldest']);
+
+        $this->actingAs($director)->get(route('director.index'))->assertOk()->assertSee('View all 1')->assertSee($link);
+        $this->actingAs($director)->get(route('director.attention'))->assertOk()->assertSee($project->name)->assertSee($link)->assertSee('Awaiting confirmation (1)');
+        $this->actingAs($pm)->get(route('director.attention'))->assertForbidden();
+    }
+
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
     {
         $project = Project::create(['project_code' => $code, 'name' => 'Project '.$code, 'status' => 'active', 'location' => 'Dar es Salaam']);
