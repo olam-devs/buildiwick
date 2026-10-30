@@ -32,15 +32,15 @@
 <style>
   .rb-head{display:grid;grid-template-columns:150px 1fr 1fr;gap:12px;align-items:end}
   .rb-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:1180px}
-  .rb-table th{background:#27333D;color:#fff;font-size:11px;font-weight:600;text-align:left;padding:8px 6px;white-space:nowrap}
+  .rb-table th{background:var(--head);color:var(--head-ink);font-size:11px;font-weight:600;text-align:left;padding:8px 6px;white-space:nowrap}
   .rb-table td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
-  .rb-table input,.rb-table select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:12.5px;background:#fff}
+  .rb-table input,.rb-table select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:12.5px;background:var(--input-bg);color:var(--ink)}
   .rb-table input:focus,.rb-table select:focus{outline:2px solid var(--primary-soft);border-color:var(--primary)}
   .rb-table .num{text-align:right}
   .rb-table td.idx{color:var(--ink-dim);font-weight:600;padding-top:13px;width:26px}
-  .rb-table tr.labour td{background:#F3FBF6}.rb-table tr.logistics td{background:#FFFAF0}.rb-table tr.prelims td{background:#F7F4FE}
+  .rb-table tr.labour td{background:var(--row-labour)}.rb-table tr.logistics td{background:var(--row-logistics)}.rb-table tr.prelims td{background:var(--row-prelims)}
   .rb-cat{border-left:4px solid var(--line)!important}
-  .rb-remove{background:none;border:0;color:#b42318;font-size:16px;cursor:pointer;padding:6px}
+  .rb-remove{background:none;border:0;color:var(--danger-ink);font-size:16px;cursor:pointer;padding:6px}
   .rb-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
   .rb-total{font-size:16px;font-weight:700}
   @media(max-width:900px){.rb-head{grid-template-columns:1fr}}

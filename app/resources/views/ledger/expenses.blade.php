@@ -132,7 +132,7 @@
   <div class="bulk-table-wrap"><table class="lg-table lg-cards-sm bulk-table">
     <thead><tr><th>Line</th><th class="amt">Open (TSh)</th><th class="amt">Pay now (TSh)</th><th>Method</th><th>Receipt no.</th><th>Reference</th></tr></thead>
     <tbody id="bulkPayRows"></tbody>
-    <tfoot><tr><td colspan="2">Total paid now</td><td class="amt"><b id="bulkPayTotal">0.00</b></td><td colspan="3"><span id="bulkNoMethod" class="muted" style="display:inline;color:#9a5b00"></span></td></tr></tfoot>
+    <tfoot><tr><td colspan="2">Total paid now</td><td class="amt"><b id="bulkPayTotal">0.00</b></td><td colspan="3"><span id="bulkNoMethod" class="muted" style="display:inline;color:var(--warn-ink)"></span></td></tr></tfoot>
   </table></div>
   <template id="bulkMethodOptions"><option value="">Not recorded</option>@foreach($methods as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</template>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn btn-primary" type="button" data-bulk-submit="confirm">Confirm payments</button></div>
@@ -203,6 +203,7 @@
     form.querySelectorAll('input[name="ids[]"]').forEach(i => i.remove());
     chosen().forEach(b => { const i = document.createElement('input'); i.type = 'hidden'; i.name = 'ids[]'; i.value = b.value; form.append(i); });
     document.getElementById('bulkAction').value = action;
+    if (window.bwLoading) { window.bwLoading(); }
     form.submit();
   };
   document.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => {

@@ -542,6 +542,22 @@ class RecordingModeTest extends TestCase
         $this->actingAs($pm)->get(route('director.attention'))->assertForbidden();
     }
 
+    public function test_cached_dashboard_figures_follow_every_change(): void
+    {
+        config(['cache.default' => 'array']);
+        [$project, $phases] = $this->project();
+        $director = $this->user('director');
+        $this->actingAs($director)->post(route('ledger.expenses.store', $project), $this->line($phases[0]));
+        $this->actingAs($director)->get(route('director.index', ['range' => 'this_year']))->assertOk()->assertSee('920,000.00')
+            ->assertSee('Sign out')->assertSee('id="bwLoader"', false)->assertSee('data-theme="dark"', false);
+
+        $this->actingAs($director)->post(route('ledger.expenses.store', $project), $this->line($phases[1], ['item_description' => 'Sand', 'unit_cost' => '1000']));
+        $this->actingAs($director)->get(route('director.index', ['range' => 'this_year']))->assertOk()->assertSee('960,000.00');
+        $line = ExpenseRequest::where('item_description', 'Sand')->sole();
+        $this->actingAs($director)->delete(route('ledger.expenses.destroy', [$project, $line]))->assertRedirect();
+        $this->actingAs($director)->get(route('director.index', ['range' => 'this_year']))->assertOk()->assertSee('920,000.00')->assertDontSee('960,000.00');
+    }
+
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
     {
         $project = Project::create(['project_code' => $code, 'name' => 'Project '.$code, 'status' => 'active', 'location' => 'Dar es Salaam']);

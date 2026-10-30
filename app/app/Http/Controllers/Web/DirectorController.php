@@ -274,17 +274,48 @@ class DirectorController extends Controller
     {
         $range = $this->dateRange($request);
         $previousRange = ReviewPeriod::previous($range);
-        $projects = Project::query()->where('is_company_overheads', false)->orderBy('name')->get();
-        $portfolio = $ledger->portfolio($projects, $range['from'], $range['to']);
-        $overheadLedgers = Project::query()->where('is_company_overheads', true)->orderBy('name')->get();
-        $overheads = $overheadLedgers->isEmpty() ? null : $ledger->portfolio($overheadLedgers, $range['from'], $range['to'])['totals'];
-        $previous = $ledger->portfolio($projects, $previousRange['from'], $previousRange['to'])['totals'];
-        $attention = $this->attentionRows($projects, $ledger, $warnings);
+        [$portfolio, $previous, $overheads, $attention] = self::dashboardFigures($range, $ledger, $warnings);
         $today = CarbonImmutable::today();
         $companyKpis = $kpis->evaluate(DirectorKpiTarget::query()->whereNull('project_id')
             ->whereDate('period_start', '<=', $today)->whereDate('period_end', '>=', $today)->orderBy('metric')->get());
 
         return view('director.recording-dashboard', compact('portfolio', 'previous', 'range', 'previousRange', 'attention', 'companyKpis', 'overheads'));
+    }
+
+    /**
+     * The Director dashboard's heavy figures, cached per data version (see LedgerAnalyticsService::remember).
+     *
+     * @return array{0: array, 1: array, 2: ?array, 3: Collection}
+     */
+    public static function dashboardFigures(array $range, LedgerAnalyticsService $ledger, ProjectWarningService $warnings): array
+    {
+        $previousRange = ReviewPeriod::previous($range);
+        $projects = Project::query()->where('is_company_overheads', false)->orderBy('name')->get();
+        $span = fn (array $r) => $r['from']->toDateString().'_'.$r['to']->toDateString();
+        $portfolio = $ledger->remember('portfolio:projects:'.$span($range), fn () => $ledger->portfolio($projects, $range['from'], $range['to']));
+        $overheadLedgers = Project::query()->where('is_company_overheads', true)->orderBy('name')->get();
+        $overheads = $overheadLedgers->isEmpty() ? null : $ledger->remember('portfolio:overheads:'.$span($range), fn () => $ledger->portfolio($overheadLedgers, $range['from'], $range['to'])['totals']);
+        $previous = $ledger->remember('portfolio:projects:'.$span($previousRange), fn () => $ledger->portfolio($projects, $previousRange['from'], $previousRange['to']))['totals'];
+
+        return [$portfolio, $previous, $overheads, self::attentionFigures($projects, $ledger, $warnings)];
+    }
+
+    /**
+     * Rebuilds the cached Director figures for the default views (this year, the projects list) after a
+     * change, once the response has been sent, so the next dashboard visit does not wait for them.
+     */
+    public static function warmFigures(): void
+    {
+        $ledger = app(LedgerAnalyticsService::class);
+        self::dashboardFigures(ReviewPeriod::resolve('this_year'), $ledger, app(ProjectWarningService::class));
+        $projects = Project::query()->where('is_company_overheads', false)->orderBy('name')->get();
+        $ledger->remember('portfolio:list:'.md5($projects->pluck('id')->join(',')), fn () => $ledger->portfolio($projects));
+    }
+
+    private static function attentionFigures(Collection $projects, LedgerAnalyticsService $ledger, ProjectWarningService $warnings): Collection
+    {
+        return $ledger->remember('attention', fn () => $projects->map(fn (Project $project) => ['project' => $project, 'warnings' => $warnings->evaluateLedger($ledger->project($project))])
+            ->filter(fn ($row) => $row['warnings'])->values());
     }
 
     /** Every project with warnings, all of them (the dashboard shows the first few). */
@@ -293,14 +324,7 @@ class DirectorController extends Controller
         $this->authorize('view-director-analytics');
         $projects = Project::query()->where('is_company_overheads', false)->orderBy('name')->get();
 
-        return view('director.attention', ['attention' => $this->attentionRows($projects, app(LedgerAnalyticsService::class), $warnings)]);
-    }
-
-    /** @return Collection<int, array{project: Project, warnings: array<int, array{rule: string, label: string, message: string}>}> */
-    private function attentionRows(Collection $projects, LedgerAnalyticsService $ledger, ProjectWarningService $warnings): Collection
-    {
-        return $projects->map(fn (Project $project) => ['project' => $project, 'warnings' => $warnings->evaluateLedger($ledger->project($project))])
-            ->filter(fn ($row) => $row['warnings'])->values();
+        return view('director.attention', ['attention' => self::attentionFigures($projects, app(LedgerAnalyticsService::class), $warnings)]);
     }
 
     private function dateRange(Request $request): array

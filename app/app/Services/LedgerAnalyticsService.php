@@ -10,6 +10,8 @@ use App\Support\Money;
 use App\Support\PhaseTree;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -45,6 +47,103 @@ class LedgerAnalyticsService
     private array $budgetCache = [];
 
     /** Projects the user may open in the ledger. */
+    /** Tables whose rows every ledger figure depends on. */
+    private const VERSION_TABLES = ['expense_requests', 'expense_payments', 'internal_budgets', 'internal_budget_entries', 'project_phases', 'projects', 'project_warning_rules', 'labour_agreements'];
+
+    private ?string $version = null;
+
+    /**
+     * A fingerprint of everything the ledger figures are computed from (row counts and last change of
+     * each table, plus today's date for age-based warnings). Any recorded, confirmed, denied, edited or
+     * deleted line gives a new fingerprint, so cached figures are never out of date.
+     */
+    public function dataVersion(): string
+    {
+        if ($this->version !== null) {
+            return $this->version;
+        }
+        $parts = [CarbonImmutable::today()->toDateString()];
+        foreach (self::VERSION_TABLES as $table) {
+            $row = DB::table($table)->selectRaw('count(*) as c, max(updated_at) as u')->first();
+            $parts[] = $table.':'.$row->c.':'.$row->u;
+        }
+
+        return $this->version = md5(implode('|', $parts));
+    }
+
+    /**
+     * Heavy figures (portfolio, warnings) computed once per data version. One cache entry per key holds
+     * the version it was built from and is overwritten when the data changes, so the cache stays small.
+     */
+    public function remember(string $key, \Closure $callback): mixed
+    {
+        $cacheKey = 'ledger-figures:'.$key;
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && ($cached['version'] ?? null) === $this->dataVersion()) {
+            $projects = Project::query()->whereIn('id', $cached['projects'] ?? [])->get()->keyBy('id');
+
+            return $this->unpack($cached['value'], $projects);
+        }
+        $value = $callback();
+        $ids = [];
+        Cache::put($cacheKey, ['version' => $this->dataVersion(), 'value' => $this->pack($value, $ids), 'projects' => array_values(array_unique($ids))], now()->addHours(12));
+
+        return $value;
+    }
+
+    /**
+     * Cached figures are stored as plain data (the cache does not rebuild PHP objects): projects become
+     * their id, collections arrays and dates ISO strings; unpack() turns them back.
+     *
+     * @param  array<int, int>  $ids  collects the project ids found
+     */
+    private function pack(mixed $value, array &$ids): mixed
+    {
+        if ($value instanceof Project) {
+            $ids[] = $value->id;
+
+            return ['__project' => $value->id];
+        }
+        if ($value instanceof Collection) {
+            return ['__collection' => $this->pack($value->all(), $ids)];
+        }
+        if ($value instanceof \DateTimeInterface) {
+            return ['__date' => $value->format(DATE_ATOM)];
+        }
+        if (is_array($value)) {
+            $packed = [];
+            foreach ($value as $key => $item) {
+                $packed[$key] = $this->pack($item, $ids);
+            }
+
+            return $packed;
+        }
+        if (is_object($value)) {
+            throw new \LogicException('Ledger figures cannot cache a '.get_class($value).'.');
+        }
+
+        return $value;
+    }
+
+    /** @param  Collection<int, Project>  $projects */
+    private function unpack(mixed $value, Collection $projects): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+        if (array_key_exists('__project', $value)) {
+            return $projects[$value['__project']] ?? null;
+        }
+        if (array_key_exists('__collection', $value)) {
+            return collect(array_map(fn ($item) => $this->unpack($item, $projects), $value['__collection']));
+        }
+        if (array_key_exists('__date', $value)) {
+            return CarbonImmutable::parse($value['__date']);
+        }
+
+        return array_map(fn ($item) => $this->unpack($item, $projects), $value);
+    }
+
     public function projectsFor(User $user, bool $withOverheads = false): Collection
     {
         return Project::query()

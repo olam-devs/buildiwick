@@ -42,7 +42,7 @@
         </td>
         @foreach(array_keys($categories) as $code)
           <td class="amt">@php($cat = $row['categories'][$code])@if(count($row['ids']) === 1 || $cat['own_budget'] !== null)@if($canEdit)<input form="budgetForm" type="number" step="0.01" min="0" name="budget[{{ $phase->id }}][{{ $code }}]" value="{{ $cat['own_budget'] !== null ? (float) $cat['own_budget'] : '' }}" placeholder="—" style="width:104px;text-align:right;padding:5px 7px;border:1px solid var(--line);border-radius:6px">@else{{ $cat['own_budget'] !== null ? $money::format($cat['own_budget']) : '—' }}@endif
-            @if(count($row['ids']) > 1)<span class="muted" style="color:#9a6400">set before subphases — clear it and budget the subphases</span>@endif
+            @if(count($row['ids']) > 1)<span class="muted" style="color:var(--warn-ink)">set before subphases — clear it and budget the subphases</span>@endif
             @else<span title="Total of its subphases">{{ (float) $cat['budget'] ? $money::format($cat['budget']) : '—' }}</span>@endif
             @if($showSpend && (float) $row['categories'][$code]['recorded'])<span class="muted">spent {{ $money::format($row['categories'][$code]['recorded']) }}</span>@endif</td>
         @endforeach

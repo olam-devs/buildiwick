@@ -8,18 +8,11 @@
 <link rel="apple-touch-icon" href="{{ asset('images/apple-touch-icon.png') }}">
 <meta name="theme-color" content="#0081C3">
 <title>@yield('title', 'Buildiwick')</title>
+@include('partials.theme')
+@include('partials.password-toggle')
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>
-  :root{
-    --bg:#F4F5F6; --surface:#FFFFFF; --surface-2:#F8F9FA;
-    --ink:#1F272E; --ink-dim:#8D99A6; --ink-soft:#495764;
-    --primary:#2490EF; --primary-dark:#1B75C4; --primary-soft:#EAF4FE;
-    --line:#E1E5E8; --line-strong:#D1D8DD;
-    --good:#2FA36E; --good-soft:#E5F6EE;
-    --warn:#F5A623; --warn-soft:#FEF3E0;
-    --danger:#E6533C; --danger-soft:#FBE9E6;
-  }
   *{box-sizing:border-box;}
   html,body{height:100%;}
   [hidden]{display:none!important;}
@@ -39,10 +32,10 @@
     .shell{grid-template-columns:1fr;} .sidebar-toggle{display:none;}
     .sidebar{position:fixed;inset:0 auto 0 0;width:270px;z-index:60;transform:translateX(-105%);transition:transform .2s ease;box-shadow:4px 0 24px rgba(16,24,32,.18);overflow-y:auto;}
     body.nav-open .sidebar{transform:none;}
-    .nav-scrim{display:none;position:fixed;inset:0;background:rgba(20,30,40,.35);z-index:55;}
+    .nav-scrim{display:none;position:fixed;inset:0;background:var(--scrim);z-index:55;}
     body.nav-open .nav-scrim{display:block;}
     .mobile-bar{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:40;margin:0 0 14px;border-radius:10px;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 14px;}
-    .mobile-bar button{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;}
+    .mobile-bar > button{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;}
     .mobile-bar .title{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   }
 
@@ -53,6 +46,21 @@
   .brand .mark-img{height:22px;width:auto;display:block;flex:none;}
   .mobile-bar .logo{height:20px;width:auto;flex:none;}
 
+  .topbar{display:flex;justify-content:flex-end;margin:-10px 0 8px;min-height:36px}
+  .profile{position:relative}
+  .profile summary{list-style:none;display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border:1px solid var(--line);border-radius:99px;background:var(--surface);cursor:pointer;user-select:none}
+  .profile summary::-webkit-details-marker{display:none}
+  .profile summary:hover{border-color:var(--primary)}
+  .profile .avatar{width:28px;height:28px;border-radius:50%;background:#0081C3;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11.5px;flex:none}
+  .profile .avatar.lg{width:38px;height:38px;font-size:14px}
+  .profile-name{font-size:12.5px;font-weight:600;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .profile .caret{font-size:10px;color:var(--ink-dim)}
+  .profile-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:70;width:270px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:12px;display:grid;gap:10px}
+  .profile-who{display:flex;gap:10px;align-items:center}.profile-who b{display:block;font-size:13px}.profile-who small{display:block;color:var(--ink-dim);font-size:11.5px;word-break:break-all}
+  .profile-label{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim)}
+  .profile-signout{width:100%;justify-content:center}
+  .mobile-bar .profile{margin-left:auto}.mobile-bar .profile-name,.mobile-bar .caret{display:none}.mobile-bar .profile summary{padding:2px;border:0;background:transparent}
+  @media (max-width:860px){.topbar{display:none}}
   .whoami{display:flex;align-items:center;gap:9px;padding:8px;border-radius:8px;background:var(--surface-2);margin-bottom:4px;}
   .whoami .avatar{width:28px;height:28px;border-radius:50%;background:var(--primary-soft);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11.5px;flex:none;}
   .whoami .who{min-width:0;}
@@ -94,13 +102,13 @@
   .entry-actions a,.entry-actions button{display:block;border:0;background:none;padding:2px 0;color:var(--primary-dark);font:inherit;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;}
   .entry-actions form{margin:0;}
   .status-pill{display:inline-flex;align-items:center;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:600;text-transform:capitalize;white-space:nowrap;}
-  .approval-pending_approval{background:var(--warn-soft);color:#96660f;}
-  .approval-pending_director_approval{background:#e9e7ff;color:#5342a6;}
-  .approval-approved{background:var(--good-soft);color:#1c7a4f;}
-  .approval-rejected,.approval-cancelled{background:var(--danger-soft);color:#a3392a;}
+  .approval-pending_approval{background:var(--warn-soft);color:var(--warn-ink);}
+  .approval-pending_director_approval{background:var(--violet-soft);color:var(--violet-ink);}
+  .approval-approved{background:var(--good-soft);color:var(--good-ink);}
+  .approval-rejected,.approval-cancelled{background:var(--danger-soft);color:var(--danger-ink);}
   .payment-unpaid{background:var(--surface-2);color:var(--ink-soft);}
-  .payment-part_paid{background:var(--warn-soft);color:#96660f;}
-  .payment-paid{background:var(--good-soft);color:#1c7a4f;}
+  .payment-part_paid{background:var(--warn-soft);color:var(--warn-ink);}
+  .payment-paid{background:var(--good-soft);color:var(--good-ink);}
   .request-actions{display:flex;gap:8px;margin:16px 0 32px;}
   .request-actions form{margin:0;}
   .request-submit-note{line-height:1.8;color:var(--ink-soft);}
@@ -163,13 +171,13 @@
   .dot-status.danger{color:var(--danger);}
 
   .badge{display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;}
-  .badge.warn{background:var(--warn-soft);color:#96660f;}
-  .badge.good{background:var(--good-soft);color:#1c7a4f;}
+  .badge.warn{background:var(--warn-soft);color:var(--warn-ink);}
+  .badge.good{background:var(--good-soft);color:var(--good-ink);}
 
   footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-dim);}
 
-  .flash{background:var(--good-soft);color:#1c7a4f;border:1px solid #b9e6cf;border-radius:8px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:18px;}
-  .flash.error{background:var(--danger-soft);color:#a3392a;border-color:#f2c4bc;}
+  .flash{background:var(--good-soft);color:var(--good-ink);border:1px solid #b9e6cf;border-radius:8px;padding:11px 15px;font-size:13px;font-weight:500;margin-bottom:18px;}
+  .flash.error{background:var(--danger-soft);color:var(--danger-ink);border-color:var(--danger-line);}
 
   .drawer-overlay{position:fixed;inset:0;background:rgba(20,28,36,.42);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:40;}
   .drawer-overlay.open{opacity:1;pointer-events:auto;}
@@ -205,15 +213,6 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="brand"><img class="mark-img" src="{{ asset('images/buildiwick-mark-160.png') }}" alt="Buildiwick logo"><span>Buildiwick</span></div>
-    @auth
-    <div class="whoami">
-      <div class="avatar">{{ strtoupper(substr(auth()->user()->name,0,1)) }}</div>
-      <div class="who">
-        <div class="name">{{ auth()->user()->name }}</div>
-        <div class="role">{{ str_replace('_',' ', auth()->user()->role?->name) }}</div>
-      </div>
-    </div>
-    @endauth
     <nav class="navgroup">
     @if(\App\Support\Features::recording() && auth()->check() && (auth()->user()->hasRole('admin') || in_array(auth()->user()->role?->name, ['project_manager', 'accounts', 'accountant'], true)))
       @include('partials.recording-nav')
@@ -299,19 +298,12 @@
       @endif
     @endif
     </nav>
-    @auth
-    <div style="margin-top:auto;">
-      <form method="POST" action="{{ url('/logout') }}">
-        @csrf
-        <button type="submit" class="btn btn-ghost" style="width:100%;justify-content:center;">Sign out</button>
-      </form>
-    </div>
-    @endauth
   </aside>
   <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Minimize sidebar" aria-expanded="true" title="Minimize sidebar">&#x2039;</button>
   <div class="nav-scrim" onclick="document.body.classList.remove('nav-open')"></div>
   <main class="main @yield('mainClass')">
-    <div class="mobile-bar"><button type="button" aria-label="Open menu" onclick="document.body.classList.add('nav-open')">&#9776;</button><img class="logo" src="{{ asset('images/buildiwick-mark-160.png') }}" alt="Buildiwick"><span class="title">@yield('title', 'Buildiwick')</span></div>
+    <div class="mobile-bar"><button type="button" aria-label="Open menu" onclick="document.body.classList.add('nav-open')">&#9776;</button><img class="logo" src="{{ asset('images/buildiwick-mark-160.png') }}" alt="Buildiwick"><span class="title">@yield('title', 'Buildiwick')</span>@auth @include('partials.profile-menu') @endauth</div>
+    @auth<div class="topbar">@include('partials.profile-menu')</div>@endauth
     @if (session('success'))<div class="flash">{{ session('success') }}</div>@endif
     @yield('content')
   </main>
@@ -337,6 +329,11 @@
     localStorage.setItem('buildiwick-sidebar-collapsed', collapsed ? '1' : '0');
   });
 })();
+</script>
+@include('partials.page-loader')
+<script>
+  // Close the account menu when clicking elsewhere.
+  document.addEventListener('click', function (e) { document.querySelectorAll('details.profile[open]').forEach(function (d) { if (!d.contains(e.target)) { d.removeAttribute('open'); } }); });
 </script>
 </body>
 </html>

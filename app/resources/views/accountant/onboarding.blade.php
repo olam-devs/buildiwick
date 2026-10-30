@@ -56,5 +56,5 @@
   @endforelse
   </tbody></table></div>
 </section>
-<style>.onboarding-checklist{list-style:none;padding:0;margin:0 0 10px;display:flex;gap:18px;flex-wrap:wrap}.onboarding-form{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.onboarding-form .field{margin:0;min-width:240px}.cell-note{display:block;color:var(--ink-dim);font-size:11px;margin-top:3px}.link-button{background:none;border:0;color:#b42318;cursor:pointer;padding:0;margin-left:8px}</style>
+<style>.onboarding-checklist{list-style:none;padding:0;margin:0 0 10px;display:flex;gap:18px;flex-wrap:wrap}.onboarding-form{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.onboarding-form .field{margin:0;min-width:240px}.cell-note{display:block;color:var(--ink-dim);font-size:11px;margin-top:3px}.link-button{background:none;border:0;color:var(--danger-ink);cursor:pointer;padding:0;margin-left:8px}</style>
 @endsection
