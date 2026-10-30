@@ -12,6 +12,7 @@ use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -36,7 +37,7 @@ class ExpenseLedgerService
 
     public static function canMarkPaid(User $user): bool
     {
-        return $user->hasRole('accounts') || $user->hasRole('accountant') || $user->hasRole('admin');
+        return $user->permits('mark_paid');
     }
 
     /**
@@ -108,6 +109,8 @@ class ExpenseLedgerService
                 ], $actor);
             }
 
+            $this->rememberMaterial($request->item_description, $request->main_category);
+
             return $request->fresh(['payments', 'phase']);
         });
     }
@@ -167,6 +170,7 @@ class ExpenseLedgerService
         if (! self::canMarkPaid($actor)) {
             throw ValidationException::withMessages(['line' => 'Only Accounts or the Director can confirm payments.']);
         }
+        Gate::forUser($actor)->authorize('confirm-payments', $line->project);
 
         return $this->database->transaction(function () use ($line, $data, $actor): ExpenseRequest {
             $locked = ExpenseRequest::query()->whereKey($line->id)->lockForUpdate()->firstOrFail();
@@ -194,6 +198,48 @@ class ExpenseLedgerService
         });
     }
 
+    /** Accounts or the Director reject a line that should not count; it leaves every total but stays visible as Denied. */
+    public function deny(ExpenseRequest $line, string $reason, User $actor): ExpenseRequest
+    {
+        Gate::forUser($actor)->authorize('deny-expense', $line->project);
+        if (trim($reason) === '') {
+            throw ValidationException::withMessages(['reason' => 'Say why the expense is denied.']);
+        }
+
+        return $this->database->transaction(function () use ($line, $reason, $actor): ExpenseRequest {
+            $locked = ExpenseRequest::query()->whereKey($line->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'approved') {
+                throw ValidationException::withMessages(['line' => 'This line is already denied.']);
+            }
+            if ($locked->payments()->exists()) {
+                throw ValidationException::withMessages(['line' => 'A line with a recorded payment cannot be denied.']);
+            }
+            $locked->update(['status' => 'rejected']);
+            $locked->approvals()->create(['approval_stage' => 'recorded', 'decision' => 'rejected', 'decided_by' => $actor->id, 'decided_at' => now(), 'notes' => $reason]);
+            $this->log($locked, 'ledger_line_denied', $actor, ['status' => 'approved'], ['status' => 'rejected', 'reason' => $reason]);
+
+            return $locked->fresh();
+        });
+    }
+
+    public function restore(ExpenseRequest $line, User $actor): ExpenseRequest
+    {
+        Gate::forUser($actor)->authorize('deny-expense', $line->project);
+
+        return $this->database->transaction(function () use ($line, $actor): ExpenseRequest {
+            $locked = ExpenseRequest::query()->whereKey($line->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'rejected') {
+                throw ValidationException::withMessages(['line' => 'Only a denied line can be restored.']);
+            }
+            $locked->update(['status' => 'approved']);
+            $locked->approvals()->create(['approval_stage' => 'recorded', 'decision' => 'approved', 'approved_amount' => $locked->total_amount,
+                'approved_total' => $locked->total_amount, 'decided_by' => $actor->id, 'decided_at' => now(), 'notes' => 'Restored after being denied.']);
+            $this->log($locked, 'ledger_line_restored', $actor, ['status' => 'rejected'], ['status' => 'approved']);
+
+            return $locked->fresh();
+        });
+    }
+
     public function delete(ExpenseRequest $line, User $actor): void
     {
         Gate::forUser($actor)->authorize('edit-ledger-line', $line);
@@ -206,6 +252,20 @@ class ExpenseLedgerService
             $locked->approvals()->delete();
             $locked->delete();
         });
+    }
+
+    /** Adds a newly typed item name to the clean materials list (names only). */
+    private function rememberMaterial(string $name, string $category): void
+    {
+        $label = trim(preg_replace('/\s+/', ' ', $name));
+        if ($label === '' || mb_strlen($label) > 80) {
+            return;
+        }
+        $code = Str::limit(Str::slug($label, '_'), 60, '');
+        if ($code === '' || Lookup::where('type', 'material_item')->where(fn ($query) => $query->where('code', $code)->orWhereRaw('LOWER(label) = ?', [mb_strtolower($label)]))->exists()) {
+            return;
+        }
+        Lookup::create(['type' => 'material_item', 'code' => $code, 'label' => $label, 'parent_type' => 'main_category', 'parent_code' => $category, 'sort_order' => 999, 'is_active' => true]);
     }
 
     /** Expenses go to the lowest level: a phase with subphases is recorded through one of its subphases. */

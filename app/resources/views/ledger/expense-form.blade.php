@@ -33,7 +33,7 @@
   <div class="lg-step"><span>3</span> Item</div>
   <div class="grid">
     <div class="field" style="grid-column:span 2"><label for="item_description">Material / item name <span class="req">*</span></label><input id="item_description" name="item_description" list="itemSuggestions" maxlength="255" value="{{ $value('item_description') }}" placeholder="e.g. Cement, Sand, Binding wire, Fundi labour" required>
-      <datalist id="itemSuggestions">@foreach($suggestions as $suggestion)<option value="{{ $suggestion }}"></option>@endforeach</datalist></div>
+      <datalist id="itemSuggestions">@foreach($suggestions->flatten() as $suggestion)<option value="{{ $suggestion }}"></option>@endforeach</datalist></div>
     <div class="field"><label for="subcategory">Subcategory (optional)</label><select id="subcategory" name="subcategory"><option value="">—</option>@foreach($subcategories->unique('code') as $sub)<option value="{{ $sub->code }}" @selected($value('subcategory') === $sub->code)>{{ $sub->label }}</option>@endforeach</select></div>
     <div class="field" id="workerField" style="grid-column:span 2"><label for="labour_agreement_id">Worker (labour)</label><select id="labour_agreement_id" name="labour_agreement_id"><option value="">— Not a registered worker —</option>@foreach($workers as $worker)<option value="{{ $worker->id }}" @selected((string) $value('labour_agreement_id', request('worker')) === (string) $worker->id)>{{ $worker->fundi_subcontractor }}@if((float) $worker->agreed_value > 0) · contract TSh {{ \App\Support\Money::format($worker->agreed_value) }}@endif</option>@endforeach</select>
       <small class="form-context">Workers are registered under <a href="{{ route('ledger.workers', $project) }}">Workers</a>.</small></div>

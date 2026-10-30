@@ -83,7 +83,8 @@ class RecordingModeTest extends TestCase
         $this->assertSame(['approved', 'unpaid', '920000.00'], [$line->status, $line->payment_status, $line->total_amount]);
         $this->actingAs($pm)->get(route('ledger.to-confirm'))->assertForbidden();
 
-        $this->actingAs($accounts)->get(route('ledger.to-confirm'))->assertOk()->assertSee('Floor tiles')->assertSee('920,000.00');
+        $this->actingAs($accounts)->get(route('ledger.to-confirm'))->assertOk()->assertSee($project->name)->assertSee('920,000.00')
+            ->assertSee(route('ledger.expenses', [$project, 'status' => 'to_confirm', 'sort' => 'oldest']));
         $this->actingAs($accounts)->post(route('ledger.expenses.confirm', [$project, $line]), [
             'total_amount' => '900000', 'amount' => '900000', 'payment_date' => '2026-10-30', 'payment_method' => 'bank_transfer',
         ])->assertRedirect()->assertSessionHasNoErrors();
@@ -265,6 +266,79 @@ class RecordingModeTest extends TestCase
     }
 
     /** @return array{0: Project, 1: Collection<int, ProjectPhase>} */
+    public function test_many_items_are_recorded_in_one_go_and_new_material_names_are_learned(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), [
+            'expense_date' => '2026-10-29', 'status' => 'to_confirm',
+            'rows' => [
+                ['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Cement', 'quantity' => '50', 'unit' => 'bag', 'unit_cost' => '18500'],
+                ['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'River sand special', 'total_amount' => '350000', 'details' => '1 trip'],
+                ['main_category' => 'materials', 'project_phase_id' => $phases[0]->id],
+            ],
+        ])->assertRedirect(route('ledger.expenses', $project))->assertSessionHasNoErrors();
+
+        $this->assertSame(['TST-A-TXN-0001', 'TST-A-TXN-0002'], ExpenseRequest::query()->orderBy('id')->pluck('request_code')->all());
+        $this->assertSame(['925000.00', '350000.00'], ExpenseRequest::query()->orderBy('id')->pluck('total_amount')->all());
+        $this->assertDatabaseHas('lookups', ['type' => 'material_item', 'label' => 'River sand special', 'parent_code' => 'materials']);
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), ['expense_date' => '2026-10-29', 'status' => 'to_confirm',
+            'rows' => [['main_category' => 'materials', 'item_description' => 'Nails']]])->assertSessionHasErrors('rows.0.project_phase_id');
+        $this->assertSame(2, ExpenseRequest::count());
+    }
+
+    public function test_accounts_denies_an_expense_and_can_restore_it(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+        $accounts = $this->user('accounts');
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0]));
+        $line = ExpenseRequest::query()->sole();
+
+        $this->actingAs($pm)->post(route('ledger.expenses.deny', [$project, $line]), ['reason' => 'Duplicate'])->assertForbidden();
+        $this->actingAs($accounts)->post(route('ledger.expenses.deny', [$project, $line]), ['reason' => ''])->assertSessionHasErrors('reason');
+        $this->actingAs($accounts)->post(route('ledger.expenses.deny', [$project, $line]), ['reason' => 'Duplicate of the receipt from Monday'])->assertRedirect();
+        $this->assertSame('rejected', $line->fresh()->status);
+        $this->assertSame('0.00', app(LedgerAnalyticsService::class)->project($project)['totals']['recorded']);
+        $this->actingAs($pm)->get(route('ledger.expenses', [$project, 'status' => 'denied']))->assertOk()->assertSee('Duplicate of the receipt from Monday');
+
+        $this->actingAs($accounts)->post(route('ledger.expenses.restore', [$project, $line]))->assertRedirect();
+        $this->assertSame('approved', $line->fresh()->status);
+        $this->assertSame('920000.00', app(LedgerAnalyticsService::class)->project($project)['totals']['recorded']);
+    }
+
+    public function test_director_sets_what_each_user_can_do_and_which_projects_they_open(): void
+    {
+        [$project, $phases] = $this->project();
+        [$other] = $this->project('BWG-TST-B-2026-001');
+        $director = $this->user('director');
+        $accountsRole = Role::where('name', 'accounts')->value('id');
+
+        $this->actingAs($director)->post(route('admin.users.store'), [
+            'name' => 'Limited Accountant', 'email' => 'limited@buildiwick.test', 'role_id' => $accountsRole, 'is_active' => '1',
+            'password' => 'password123', 'password_confirmation' => 'password123',
+            'permissions' => ['record_expenses', 'export'], 'project_ids' => [$project->id],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $limited = User::where('email', 'limited@buildiwick.test')->sole();
+        $this->assertFalse($limited->seesAllProjects());
+        $this->assertSame([$project->id], $limited->assignedProjects()->pluck('projects.id')->all());
+
+        $this->actingAs($limited)->get(route('ledger.overview', $other))->assertForbidden();
+        $this->actingAs($limited)->get(route('ledger.to-confirm'))->assertForbidden();
+        $this->actingAs($limited)->post(route('ledger.expenses.store', $project), $this->line($phases[0]))->assertSessionHasNoErrors();
+        $line = ExpenseRequest::query()->sole();
+        $this->actingAs($limited)->post(route('ledger.expenses.deny', [$project, $line]), ['reason' => 'No'])->assertForbidden();
+
+        $this->actingAs($director)->put(route('admin.users.update', $limited), [
+            'name' => 'Limited Accountant', 'email' => 'limited@buildiwick.test', 'role_id' => $accountsRole, 'is_active' => '1',
+            'permissions' => ['record_expenses', 'mark_paid'], 'all_projects' => '1',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($limited->fresh())->get(route('ledger.overview', $other))->assertOk();
+        $this->assertTrue($this->user('accounts')->seesAllProjects());
+        $this->assertFalse($this->user('project_manager')->seesAllProjects());
+    }
+
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
     {
         $project = Project::create(['project_code' => $code, 'name' => 'Project '.$code, 'status' => 'active', 'location' => 'Dar es Salaam']);

@@ -105,17 +105,19 @@ class AppServiceProvider extends ServiceProvider
             ]);
         });
 
-        // Recording-mode ledger: Director (admin bypass) and Accounts see every project; a PM sees and
-        // records only on projects they are assigned to, and may correct only their own unpaid lines.
-        $ledgerRole = fn (User $user) => $user->role?->name;
-        Gate::define('view-ledger', fn (User $user, Project $project) => in_array($ledgerRole($user), ['accounts', 'accountant'], true)
-            || ($ledgerRole($user) === 'project_manager' && $user->assignedProjects()->whereKey($project->id)->exists()));
-        Gate::define('record-expense', fn (User $user, Project $project) => in_array($ledgerRole($user), ['accounts', 'accountant'], true)
-            || ($ledgerRole($user) === 'project_manager' && $user->assignedProjects()->whereKey($project->id)->exists()));
-        Gate::define('edit-ledger-line', fn (User $user, ExpenseRequest $line) => in_array($ledgerRole($user), ['accounts', 'accountant'], true)
-            || ($ledgerRole($user) === 'project_manager' && (int) $line->requested_by === (int) $user->id
-                && $user->assignedProjects()->whereKey($line->project_id)->exists()));
-        Gate::define('manage-project-structure', fn (User $user, Project $project) => $ledgerRole($user) === 'director');
+        // Recording-mode ledger: what a user may do comes from their permissions (role defaults,
+        // adjustable per user in User Management) and which projects they may open (all projects, or
+        // the ones assigned to them). Directors pass every check through the Admin bypass above.
+        $ledgerUser = fn (User $user) => in_array($user->role?->name, ['project_manager', 'accounts', 'accountant'], true);
+        Gate::define('view-ledger', fn (User $user, Project $project) => $ledgerUser($user) && $user->canAccessProject($project));
+        Gate::define('record-expense', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('record_expenses') && $user->canAccessProject($project));
+        Gate::define('edit-ledger-line', fn (User $user, ExpenseRequest $line) => $ledgerUser($user) && $user->canAccessProject($line->project_id)
+            && ($user->permits('edit_any_line') || ($user->permits('record_expenses') && (int) $line->requested_by === (int) $user->id)));
+        Gate::define('confirm-payments', fn (User $user, ?Project $project = null) => $ledgerUser($user) && $user->permits('mark_paid') && (! $project || $user->canAccessProject($project)));
+        Gate::define('deny-expense', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('deny_expenses') && $user->canAccessProject($project));
+        Gate::define('manage-workers', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('manage_workers') && $user->canAccessProject($project));
+        Gate::define('manage-project-structure', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('manage_phases_budget') && $user->canAccessProject($project));
+        Gate::define('export-ledger', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('export') && $user->canAccessProject($project));
 
         // @feature('client_billing') ... @endfeature hides a switched-off rollout area in views.
         Blade::if('feature', fn (string $feature) => Features::on($feature));

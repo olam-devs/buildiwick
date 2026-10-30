@@ -12,4 +12,5 @@
   <div class="field"><label for="password_confirmation">Confirm password</label><input id="password_confirmation" name="password_confirmation" type="password"></div>
 </div>
 <div class="field"><label for="is_active">Account access</label><select id="is_active" name="is_active"><option value="1" @selected((string) old('is_active', (int) ($managedUser?->is_active ?? true)) === '1')>Active</option><option value="0" @selected((string) old('is_active', (int) ($managedUser?->is_active ?? true)) === '0')>Inactive</option></select>@error('is_active')<div class="field-err">{{ $message }}</div>@enderror</div>
+@if(\App\Support\Features::recording())@include('admin.users._access')@endif
 <div class="estimate-actions"><button class="btn btn-primary" type="submit">{{ $managedUser ? 'Save Changes' : 'Create User' }}</button><a class="btn btn-ghost" href="{{ route('admin.users.index') }}">Cancel</a></div>

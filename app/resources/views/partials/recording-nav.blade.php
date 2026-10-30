@@ -2,13 +2,18 @@
 @php
   $user = auth()->user();
   $isDirector = $user->hasRole('admin');
-  $isAccounts = $user->hasRole('accounts') || $user->hasRole('accountant');
+  $canConfirm = $user->can('confirm-payments');
   $nav = fn (string $pattern) => request()->routeIs($pattern) ? 'active' : '';
 @endphp
 @if($workspaceProject ?? null)
   <div class="project-workspace-card"><div class="label">Project</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
   <a class="navitem {{ $nav('ledger.overview') }}" href="{{ route('ledger.overview', $workspaceProject) }}">Overview</a>
-  <a class="navitem {{ $nav('ledger.expenses') }}" href="{{ route('ledger.expenses', $workspaceProject) }}">Expenditure</a>
+  @php($confirmView = request()->routeIs('ledger.expenses') && request('status') === 'to_confirm')
+  <a class="navitem {{ request()->routeIs('ledger.expenses') && ! $confirmView ? 'active' : '' }}" href="{{ route('ledger.expenses', $workspaceProject) }}">Expenditure</a>
+  @can('confirm-payments', $workspaceProject)
+    @php($waiting = \App\Models\ExpenseRequest::query()->where('project_id', $workspaceProject->id)->where('status', 'approved')->where('total_amount', '>', 0)->doesntHave('payments')->count())
+    <a class="navitem {{ $confirmView ? 'active' : '' }}" href="{{ route('ledger.expenses', [$workspaceProject, 'status' => 'to_confirm', 'sort' => 'oldest']) }}">To Confirm @if($waiting)<span class="badge warn" style="margin-left:auto">{{ $waiting }}</span>@endif</a>
+  @endcan
   @can('record-expense', $workspaceProject)
     <a class="navitem {{ $nav('ledger.expenses.create') }}" href="{{ route('ledger.expenses.create', $workspaceProject) }}">Record Expense</a>
   @endcan
@@ -25,7 +30,7 @@
     <a class="navitem {{ $nav('director.index') }}" href="{{ route('director.index') }}">Dashboard</a>
   @endif
   <a class="navitem {{ $nav('ledger.index') }}" href="{{ route('ledger.index') }}">Projects</a>
-  @if($isAccounts || $isDirector)
+  @if($canConfirm)
     <a class="navitem {{ $nav('ledger.to-confirm') }}" href="{{ route('ledger.to-confirm') }}">To Confirm</a>
   @endif
   @if($isDirector)

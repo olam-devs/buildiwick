@@ -2,6 +2,31 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — User Access Control, Multi-Item Recording, Deny, Interactive Analytics
+
+- **Per-user access (User Management).** When creating or editing a user, the Director ticks what they can do and which projects they open:
+  - what they can do: record expenses, confirm payments, deny expenses, edit anyone's lines, manage workers, edit phases & budget, download Excel;
+  - which projects: "All projects", which includes projects created later, or a searchable project list.
+
+  Each role starts from defaults in `App\Support\Access`. Accounts and Director see all projects; a PM sees only assigned ones. The Director can add more Directors, PMs and Accountants. Storage is `users.permissions` (null means role defaults) and `users.all_projects`; the ledger gates in `AppServiceProvider` check both. Confirming a payment now also checks project access.
+- **Record Expense takes many items at once.** It is a table with one row per item: category, phase, item, worker (labour rows), subcategory, qty, unit, unit cost, total, receipt no. (optional) and notes.
+  - The phase copies from the row above unless changed.
+  - Changing a row's category switches its item suggestions, usual units and subcategories to that category.
+  - Item suggestions are names only (no amounts), seeded per category and learned from what people type (`material_item` lookups).
+- **Deny an expense.** Accounts and the Director can deny an unpaid line with a reason. It leaves every total, shows under the Status filter as "Denied", and can be restored.
+- **To Confirm by project.**
+  - The company To Confirm page lists projects (count, amount, oldest).
+  - Opening a project shows its Expenditure filtered to "to confirm", oldest first.
+  - Inside a project, Accounts and the Director get a "To Confirm" sidebar link with a count.
+- **Lists and filters.** Projects are numbered with live search. Expenditure filters apply as soon as they change (search after typing pauses); there is no Apply button. The project form's PM picker is a compact searchable list.
+- **Interactive analytics** on the project Overview and the Director dashboard (`partials/ledger/charts`):
+  - hover or tap any column, slice or bar to see the amounts;
+  - category chips filter the cards and every chart to one category;
+  - "Custom" takes From–To dates from a calendar.
+- **Phones and tablets.** Below 860 px the sidebar becomes a ☰ slide-in menu. Ledger tables turn into cards, and wide tables scroll inside their own box.
+- **Sandbox note:** Neema had no project assignments, probably lost with the demo projects removed by the tracker import's `--fresh`. She now has access to all projects.
+- Full suite: 181 tests.
+
 ## 2026-10-30 — Expenses and Category Budgets at the Lowest Phase Level
 
 - The Director can create phases and subphases at any time. Budgets are optional, so recording starts as soon as a phase exists.
