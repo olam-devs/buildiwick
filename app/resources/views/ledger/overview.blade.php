@@ -20,7 +20,7 @@
   ];
 @endphp
 <div class="lg-head">
-  <div><h2>{{ $project->name }}</h2><p>{{ $project->project_code }}@if($project->location) · {{ $project->location }}@endif · <span class="dot-status {{ $project->status === 'active' ? 'active' : 'zero' }}">{{ ucfirst(str_replace('_', ' ', $project->status)) }}</span></p></div>
+  <div><h2>{{ $project->name }}</h2><p>{{ $project->project_code }}@if($project->location) · {{ $project->location }}@endif @if($project->planned_start_date || $project->expected_completion_date)· {{ $project->planned_start_date?->format('d M Y') ?? '…' }} – {{ $project->expected_completion_date?->format('d M Y') ?? '…' }}@endif · <span class="dot-status {{ $project->status === 'active' ? 'active' : 'zero' }}">{{ ucfirst(str_replace('_', ' ', $project->status)) }}</span></p></div>
   <div class="lg-actions">
     @can('record-expense', $project)<a class="btn btn-primary" href="{{ route('ledger.expenses.create', $project) }}">+ Record Expense</a>@endcan
     <a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Expenditure</a>

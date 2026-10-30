@@ -9,9 +9,9 @@ use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectEditLog;
 use App\Models\ProjectPhase;
-use App\Services\ExcelExportService;
 use App\Services\ExpenseLedgerService;
 use App\Services\LedgerAnalyticsService;
+use App\Services\LedgerWorkbookService;
 use App\Services\PhaseBudgetService;
 use App\Services\PhaseStructureService;
 use App\Support\Money;
@@ -38,14 +38,41 @@ class LedgerController extends Controller
         $projects = $analytics->projectsFor($user)
             ->when($filters['search'] ?? null, fn ($rows, $search) => $rows->filter(fn ($project) => str_contains(mb_strtolower($project->name.' '.$project->project_code.' '.$project->location), mb_strtolower($search))))
             ->when(($filters['status'] ?? '') !== '', fn ($rows) => $rows->where('status', $filters['status']));
+        if (! $user->can('view-analytics')) {
+            return view('ledger.index-team', ['rows' => $this->teamRows($projects->values()), 'filters' => $filters]);
+        }
         $portfolio = $analytics->portfolio($projects->values());
 
         return view('ledger.index', compact('portfolio', 'filters'));
     }
 
+    /**
+     * Projects list for staff without "See totals & analytics": only what waits for confirmation on
+     * each project, from two light aggregate queries (no project totals).
+     *
+     * @return Collection<int, array{project: Project, to_confirm: string, to_confirm_count: int, last_entry: ?string}>
+     */
+    private function teamRows(Collection $projects): Collection
+    {
+        $ids = $projects->pluck('id');
+        $open = ExpenseRequest::query()->whereIn('project_id', $ids)->where('status', 'approved')->where('total_amount', '>', 0)->doesntHave('payments')
+            ->selectRaw('project_id, count(*) as lines, sum(total_amount) as amount')->groupBy('project_id')->get()->keyBy('project_id');
+        $last = ExpenseRequest::query()->whereIn('project_id', $ids)->where('status', 'approved')
+            ->selectRaw('project_id, max(requested_at) as last_entry')->groupBy('project_id')->pluck('last_entry', 'project_id');
+
+        return $projects->map(fn (Project $project) => [
+            'project' => $project,
+            'to_confirm' => number_format((float) ($open[$project->id]->amount ?? 0), 2, '.', ''),
+            'to_confirm_count' => (int) ($open[$project->id]->lines ?? 0),
+            'last_entry' => $last[$project->id] ?? null,
+        ]);
+    }
+
     public function toConfirm(Request $request, LedgerAnalyticsService $analytics)
     {
-        abort_unless($request->user()->can('confirm-payments'), 403);
+        if (! $request->user()->can('confirm-payments')) {
+            return redirect()->route('ledger.index');
+        }
         $projects = $analytics->projectsFor($request->user());
         $lines = ExpenseRequest::query()->whereIn('project_id', $projects->pluck('id'))->where('status', 'approved')->with('payments')
             ->get(['id', 'project_id', 'total_amount', 'approved_amount', 'commercial_total', 'status', 'requested_at']);
@@ -63,6 +90,9 @@ class LedgerController extends Controller
     public function overview(Request $request, Project $project, LedgerAnalyticsService $analytics)
     {
         $this->authorize('view-ledger', $project);
+        if (! $request->user()->can('view-analytics', $project)) {
+            return redirect()->route('ledger.expenses', $project);
+        }
         $input = $request->validate([
             'range' => ['nullable', Rule::in(array_keys(ReviewPeriod::PRESETS))],
             'from' => ['nullable', 'required_if:range,custom', 'date'],
@@ -86,7 +116,10 @@ class LedgerController extends Controller
         $totals['to_confirm'] = Money::difference($totals['recorded'], $totals['paid']);
         $page = LengthAwarePaginator::resolveCurrentPage();
         $paged = new LengthAwarePaginator($lines->slice(($page - 1) * 100, 100)->values(), $lines->count(), 100, $page, ['path' => $request->url(), 'query' => $request->query()]);
-        $phaseRows = $analytics->phaseRows($tree, $lines, $analytics->budgets($project))->filter(fn ($row) => $row['depth'] === 1 || $row['count'] > 0);
+        // The per-phase summary is only shown to users who may see totals; skip the work for everyone else.
+        $phaseRows = $request->user()->can('view-analytics', $project)
+            ? $analytics->phaseRows($tree, $lines, $analytics->budgets($project))->filter(fn ($row) => $row['depth'] === 1 || $row['count'] > 0)
+            : collect();
 
         return view('ledger.expenses', [
             'project' => $project, 'lines' => $paged, 'totals' => $totals, 'filters' => $filters, 'tree' => $tree,
@@ -96,25 +129,37 @@ class LedgerController extends Controller
         ]);
     }
 
-    public function export(Request $request, Project $project, LedgerAnalyticsService $analytics, ExcelExportService $excel)
+    public function export(Request $request, Project $project, LedgerAnalyticsService $analytics, LedgerWorkbookService $workbooks)
     {
         $this->authorize('export-ledger', $project);
-        [$lines, , $tree] = $this->filteredLines($request, $project, $analytics);
-        $subcategories = Lookup::ofType('subcategory')->pluck('label', 'code');
-        $units = ExpenseLedgerService::units();
-        $methods = Lookup::ofType('payment_method')->pluck('label', 'code');
-        $rows = $lines->map(fn (ExpenseRequest $line) => [
-            $line->request_code, $line->requested_at, Money::compare($line->approved_outstanding_amount, '0') > 0 ? 'To confirm' : 'Expense',
-            LedgerAnalyticsService::CATEGORIES[$line->main_category] ?? $line->main_category, $subcategories[$line->subcategory] ?? $line->subcategory,
-            $line->item_description, $line->labourAgreement?->fundi_subcontractor, $line->invoice_receipt_no, $line->quantity,
-            $units[$line->unit] ?? $line->unit, $line->unit_cost, $line->total_amount, $line->paid_to_date,
-            $this->statusLabel($line), $methods[$line->payments->last()?->payment_method] ?? $line->payments->last()?->payment_method,
-            $tree->path($line->project_phase_id), $line->notes,
-        ]);
+        [$lines, $filters, $tree] = $this->filteredLines($request, $project, $analytics);
+        $notes = array_values(array_filter([
+            ! empty($filters['category']) ? LedgerAnalyticsService::CATEGORIES[$filters['category']] : null,
+            ! empty($filters['phase']) ? 'Phase: '.$tree->path((int) $filters['phase']) : null,
+            ! empty($filters['status']) ? 'Status: '.str_replace('_', ' ', $filters['status']) : null,
+            ! empty($filters['from']) || ! empty($filters['to']) ? 'Dates: '.($filters['from'] ?? '…').' to '.($filters['to'] ?? '…') : null,
+            ! empty($filters['q']) ? 'Search: '.$filters['q'] : null,
+        ]));
 
-        return $excel->download($project->project_code.'-expenditure', 'Expenditure - '.$project->name,
-            ['Transaction ID', 'Date', 'Transaction Type', 'Main Category', 'Subcategory', 'Item / Description', 'Worker', 'Invoice / Receipt No.', 'Quantity', 'Unit', 'Unit Cost (TSh)', 'Total Amount (TSh)', 'Amount Paid (TSh)', 'Payment Status', 'Payment Method', 'Phase', 'Notes'],
-            $rows, [$project->project_code, $project->location], [10, 11, 12], [1]);
+        return $workbooks->project($project, $lines, $tree, $request->user()->can('view-analytics', $project), $notes, $request->user());
+    }
+
+    /** Every project the user may see, in one workbook (Director, or anyone with totals + Excel access). */
+    public function exportAll(Request $request, LedgerAnalyticsService $analytics, LedgerWorkbookService $workbooks)
+    {
+        $user = $request->user();
+        abort_unless($user->can('view-analytics') && $user->permits('export'), 403);
+        $input = $request->validate([
+            'range' => ['nullable', Rule::in(array_keys(ReviewPeriod::PRESETS))],
+            'from' => ['nullable', 'required_if:range,custom', 'date'],
+            'to' => ['nullable', 'required_if:range,custom', 'date', 'after_or_equal:from'],
+        ]);
+        $range = ! empty($input['range']) ? ReviewPeriod::resolve($input['range'], $input['from'] ?? null, $input['to'] ?? null) : null;
+        // Every line of every project in one workbook needs more than the host's default 128 MB; only this download gets it.
+        ini_set('memory_limit', '512M');
+        set_time_limit(180);
+
+        return $workbooks->portfolio($analytics->projectsFor($user), $range, $user);
     }
 
     public function create(Request $request, Project $project)
@@ -143,6 +188,11 @@ class LedgerController extends Controller
             ->filter(fn ($row) => is_array($row) && collect($row)->except(['main_category', 'project_phase_id'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
             ->values()->all();
         $request->merge(['rows' => $rows]);
+        if ($request->user()->hasRole('admin')) {
+            // The Director's entries are confirmed as they are recorded.
+            $request->merge(['status' => 'paid', 'payment_method' => $request->input('payment_method') ?: 'cash',
+                'payment_date' => $request->input('payment_date') ?: $request->input('expense_date')]);
+        }
         $phaseRule = Rule::exists('project_phases', 'id')->where('project_id', $project->id);
         $header = $request->validate([
             'expense_date' => ['required', 'date', 'before_or_equal:today'],
@@ -182,7 +232,7 @@ class LedgerController extends Controller
     {
         $this->owned($project, $line);
         $this->authorize('edit-ledger-line', $line);
-        abort_if($line->payments()->exists(), 403, 'This line already has a payment recorded.');
+        abort_if($line->payments()->exists() && ! request()->user()->hasRole('admin'), 403, 'This line already has a payment recorded.');
 
         return view('ledger.expense-form', $this->formData($project) + ['line' => $line]);
     }
@@ -237,7 +287,7 @@ class LedgerController extends Controller
 
     public function structure(Request $request, Project $project, LedgerAnalyticsService $analytics)
     {
-        $this->authorize('view-ledger', $project);
+        $this->authorize('view-budget', $project);
         $tree = new PhaseTree($project->phases()->get());
         $rows = $analytics->phaseRows($tree, $analytics->lines($project), $analytics->budgets($project));
         $log = ProjectEditLog::query()->where('project_id', $project->id)->where('document_type', 'budget')->with('editor')->latest()->limit(15)->get();
@@ -288,7 +338,7 @@ class LedgerController extends Controller
 
     public function workers(Request $request, Project $project)
     {
-        $this->authorize('view-ledger', $project);
+        $this->authorize('view-workers', $project);
         $workers = LabourAgreement::query()->where('project_id', $project->id)->withCount('expenseRequests')->orderBy('fundi_subcontractor')->get()
             ->map(function (LabourAgreement $worker) {
                 $lines = LedgerAnalyticsService::normalize($worker->expenseRequests()->where('status', 'approved')->with('payments')->get());

@@ -82,6 +82,16 @@ class DirectorStrategyController extends Controller
         return back()->with('success', $project->name.' now uses the company default warning rules.');
     }
 
+    /** Show or hide a project target for the project's assigned PMs and Accountants. */
+    public function toggleKpiVisibility(DirectorKpiTarget $target)
+    {
+        $this->authorize('manage-director-strategy');
+        abort_if($target->project_id === null, 404);
+        $target->update(['visible_to_team' => ! $target->visible_to_team]);
+
+        return back()->with('success', $target->visible_to_team ? 'Target is now shown to the project team.' : 'Target is now hidden from the project team.');
+    }
+
     public function destroyKpi(DirectorKpiTarget $target)
     {
         $this->authorize('manage-director-strategy');
@@ -102,6 +112,7 @@ class DirectorStrategyController extends Controller
             'to' => ['required_if:period,custom', 'nullable', 'date', 'after_or_equal:from'],
             'target_value' => ['required', 'numeric', 'min:0', 'max:99999999999999.99'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'visible_to_team' => ['nullable', 'boolean'],
         ]);
         [$start, $end] = DirectorKpiService::periodDates($validated['period'], $validated['from'] ?? null, $validated['to'] ?? null);
         DirectorKpiTarget::create([
@@ -113,6 +124,7 @@ class DirectorStrategyController extends Controller
             'period_end' => $end,
             'target_value' => $validated['target_value'],
             'notes' => $validated['notes'] ?? null,
+            'visible_to_team' => $project !== null && $request->boolean('visible_to_team'),
             'created_by' => $request->user()->id,
         ]);
 

@@ -8,6 +8,7 @@
   <div><h2>Projects</h2><p>Open a project to see its spending, record expenses and follow its budget.</p></div>
   <div class="lg-actions">
     <input type="search" id="projectSearch" class="lg-search" placeholder="Search name, ID or location…" value="{{ $filters['search'] ?? '' }}" autofocus>
+    @if(auth()->user()->permits('export'))<a class="btn btn-ghost" href="{{ route('ledger.export') }}">Download Excel</a>@endif
     <select id="statusFilter" class="lg-select"><option value="">All statuses</option>@foreach(\App\Models\Lookup::ofType('project_status')->pluck('label','code') as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</select>
   </div>
 </div>

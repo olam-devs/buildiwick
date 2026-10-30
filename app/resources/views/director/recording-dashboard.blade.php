@@ -26,6 +26,7 @@
 @endphp
 <div class="lg-head">
   <div><h2>Company Dashboard</h2><p>{{ $range['label'] }} · compared with {{ $previousRange['label'] }}</p></div>
+  <div class="lg-actions"><a class="btn btn-ghost" href="{{ route('ledger.export', array_filter(['range' => $range['name'], 'from' => $range['name'] === 'custom' ? $range['from']->toDateString() : null, 'to' => $range['name'] === 'custom' ? $range['to']->toDateString() : null])) }}" title="Every project: summary, categories, months and all lines for this period">Download Excel</a></div>
 </div>
 <div class="lg-chips" style="align-items:center">@foreach($presets as $code => $label)<a class="lg-chip {{ $range['name'] === $code ? 'on' : '' }}" href="{{ route('director.index', ['range' => $code]) }}">{{ $label }}</a>@endforeach
   <form method="GET" class="lg-range" id="customRange"><input type="hidden" name="range" value="custom">

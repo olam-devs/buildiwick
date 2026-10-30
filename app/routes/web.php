@@ -41,6 +41,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     // Recording-mode project workspace (Director, PM, Accounts).
     Route::get('/ledger', [LedgerController::class, 'index'])->name('ledger.index');
     Route::get('/ledger/to-confirm', [LedgerController::class, 'toConfirm'])->name('ledger.to-confirm');
+    Route::get('/ledger/export', [LedgerController::class, 'exportAll'])->name('ledger.export');
     Route::get('/ledger/projects/{project}', [LedgerController::class, 'overview'])->name('ledger.overview');
     Route::get('/ledger/projects/{project}/expenses', [LedgerController::class, 'expenses'])->name('ledger.expenses');
     Route::get('/ledger/projects/{project}/expenses.xlsx', [LedgerController::class, 'export'])->name('ledger.expenses.export');
@@ -74,6 +75,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/director/kpis', [DirectorStrategyController::class, 'kpis'])->name('director.kpis.index');
     Route::post('/director/kpis', [DirectorStrategyController::class, 'storeKpi'])->name('director.kpis.store');
     Route::delete('/director/kpis/{target}', [DirectorStrategyController::class, 'destroyKpi'])->name('director.kpis.destroy');
+    Route::post('/director/kpis/{target}/visibility', [DirectorStrategyController::class, 'toggleKpiVisibility'])->name('director.kpis.visibility');
     Route::get('/director/warning-rules', [DirectorStrategyController::class, 'warningRules'])->name('director.warning-rules.index');
     Route::post('/director/warning-rules', [DirectorStrategyController::class, 'saveWarningRules'])->name('director.warning-rules.save');
     Route::get('/director/projects/{project}/warnings', [DirectorStrategyController::class, 'project'])->name('director.projects.warnings');

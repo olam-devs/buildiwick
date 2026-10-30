@@ -8,6 +8,7 @@
   $colors = \App\Services\LedgerAnalyticsService::CATEGORY_COLORS;
   $short = ['materials' => 'Materials', 'labour_subcontracts' => 'Labour', 'logistics_equipment' => 'Logistics', 'preliminaries_overheads' => 'Prelims & Overheads'];
   $canEdit = auth()->user()->can('manage-project-structure', $project);
+  $showSpend = auth()->user()->can('view-analytics', $project);
   $totalBudget = $money::sum($rows->where('depth', 1)->pluck('budget'));
   $totalRecorded = $money::sum($rows->where('depth', 1)->pluck('recorded'));
 @endphp
@@ -17,12 +18,15 @@
 </div>
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 
+@include('ledger.partials.team-kpis')
+@if($showSpend)
 <div class="lg-cards">
   <div class="lg-card accent"><div class="k">Total budget</div><div class="v">TSh {{ $money::format($totalBudget) }}</div></div>
   <div class="lg-card"><div class="k">Recorded spend</div><div class="v">TSh {{ $money::format($totalRecorded) }}</div></div>
   @php($used = (float) $totalBudget > 0 ? $money::percentage($totalRecorded, $totalBudget) : null)
   <div class="lg-card {{ $used !== null && (float) $used > 100 ? 'danger' : '' }}"><div class="k">Budget used</div><div class="v">{{ $used !== null ? $money::format($used).'%' : '—' }}</div>@if($used !== null)<div class="lg-meter"><span class="{{ (float) $used > 100 ? 'over' : ((float) $used >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $used) }}%"></span></div>@endif</div>
 </div>
+@endif
 
 <form method="POST" action="{{ route('ledger.budget.save', $project) }}" id="budgetForm">@csrf</form>
 <div class="lg-scroll" style="max-height:none">
@@ -34,16 +38,16 @@
       <tr class="{{ $row['depth'] === 1 ? 'top' : '' }}">
         <td class="phase d{{ $row['depth'] }}">
           @if($canEdit)<input form="rename-{{ $phase->id }}" name="phase_name" value="{{ $row['label'] }}" maxlength="150" style="border:1px solid transparent;background:transparent;padding:3px 5px;border-radius:6px;font:inherit;font-weight:inherit;width:100%" onfocus="this.style.borderColor='var(--line)'" onchange="this.form.submit()">@else{{ $row['label'] }}@endif
-          <span class="muted">{{ $row['depth'] === 1 ? 'Phase' : ($row['depth'] === 2 ? 'Subphase' : 'Sub-subphase') }} · {{ $row['count'] }} lines</span>
+          <span class="muted">{{ $row['depth'] === 1 ? 'Phase' : ($row['depth'] === 2 ? 'Subphase' : 'Sub-subphase') }}@if($showSpend) · {{ $row['count'] }} lines @endif</span>
         </td>
         @foreach(array_keys($categories) as $code)
           <td class="amt">@php($cat = $row['categories'][$code])@if(count($row['ids']) === 1 || $cat['own_budget'] !== null)@if($canEdit)<input form="budgetForm" type="number" step="0.01" min="0" name="budget[{{ $phase->id }}][{{ $code }}]" value="{{ $cat['own_budget'] !== null ? (float) $cat['own_budget'] : '' }}" placeholder="—" style="width:104px;text-align:right;padding:5px 7px;border:1px solid var(--line);border-radius:6px">@else{{ $cat['own_budget'] !== null ? $money::format($cat['own_budget']) : '—' }}@endif
             @if(count($row['ids']) > 1)<span class="muted" style="color:#9a6400">set before subphases — clear it and budget the subphases</span>@endif
             @else<span title="Total of its subphases">{{ (float) $cat['budget'] ? $money::format($cat['budget']) : '—' }}</span>@endif
-            @if((float) $row['categories'][$code]['recorded'])<span class="muted">spent {{ $money::format($row['categories'][$code]['recorded']) }}</span>@endif</td>
+            @if($showSpend && (float) $row['categories'][$code]['recorded'])<span class="muted">spent {{ $money::format($row['categories'][$code]['recorded']) }}</span>@endif</td>
         @endforeach
-        <td><b>{{ (float) $row['budget'] ? 'TSh '.$money::format($row['budget']) : 'No budget' }}</b><span class="muted">spent {{ $money::format($row['recorded']) }}@if($row['used'] !== null) · {{ $money::format($row['used']) }}%@endif</span>
-          @if($row['used'] !== null)<div class="lg-meter" style="margin-top:4px"><span class="{{ (float) $row['used'] > 100 ? 'over' : ((float) $row['used'] >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $row['used']) }}%"></span></div>@endif</td>
+        <td><b>{{ (float) $row['budget'] ? 'TSh '.$money::format($row['budget']) : 'No budget' }}</b>@if($showSpend)<span class="muted">spent {{ $money::format($row['recorded']) }}@if($row['used'] !== null) · {{ $money::format($row['used']) }}%@endif</span>@endif
+          @if($showSpend && $row['used'] !== null)<div class="lg-meter" style="margin-top:4px"><span class="{{ (float) $row['used'] > 100 ? 'over' : ((float) $row['used'] >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $row['used']) }}%"></span></div>@endif</td>
         @if($canEdit)<td><div class="lg-row-actions">
           @if($row['depth'] < \App\Support\PhaseTree::MAX_DEPTH)<button class="lg-link" type="button" data-add-child="{{ $phase->id }}" data-parent-name="{{ $row['label'] }}">+ {{ $row['depth'] === 1 ? 'Subphase' : 'Sub-subphase' }}</button>@endif
           <button class="lg-link" form="move-{{ $phase->id }}" name="direction" value="up" title="Move up">↑</button><button class="lg-link" form="move-{{ $phase->id }}" name="direction" value="down" title="Move down">↓</button>
@@ -73,7 +77,7 @@
   <script>document.querySelectorAll('[data-add-child]').forEach(b => b.addEventListener('click', () => { document.getElementById('childParentId').value = b.dataset.addChild; document.getElementById('childParentName').textContent = b.dataset.parentName; document.getElementById('childDialog').showModal(); document.getElementById('child_name').focus(); }));</script>
 @endif
 
-@if($log->isNotEmpty())
+@if(($showSpend || $canEdit) && $log->isNotEmpty())
 <section class="lg-panel" style="margin-top:16px"><h3>Recent budget changes</h3>
   <div class="tablewrap" style="border:0"><table class="lg-table"><thead><tr><th>When</th><th>Phase</th><th>Category</th><th class="amt">Before</th><th class="amt">After</th><th>By</th></tr></thead><tbody>
   @foreach($log as $entry)<tr><td>{{ $entry->created_at->format('d M Y H:i') }}</td><td>{{ $tree->path($entry->document_id) ?: '—' }}</td><td>{{ $entry->item_description }}</td><td class="amt">{{ isset($entry->before_snapshot['amount']) && $entry->before_snapshot['amount'] !== null ? $money::format($entry->before_snapshot['amount']) : '—' }}</td><td class="amt">{{ isset($entry->after_snapshot['amount']) && $entry->after_snapshot['amount'] !== null ? $money::format($entry->after_snapshot['amount']) : '—' }}</td><td>{{ $entry->editor?->name }}</td></tr>@endforeach

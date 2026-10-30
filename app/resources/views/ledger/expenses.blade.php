@@ -9,11 +9,13 @@
   $canConfirm = auth()->user()->can('confirm-payments', $project);
   $canDeny = auth()->user()->can('deny-expense', $project);
   $denied = ($filters['status'] ?? '') === 'denied';
+  $showTotals = auth()->user()->can('view-analytics', $project);
+  $isDirector = auth()->user()->hasRole('admin');
   $statusLabels = ['paid' => 'Paid', 'part_paid' => 'Part paid', 'unpaid' => 'To confirm'];
   $query = fn (array $change) => route('ledger.expenses', array_merge([$project], array_filter(array_merge(request()->except('page'), $change), fn ($v) => $v !== null && $v !== '')));
 @endphp
 <div class="lg-head">
-  <div><h2>Expenditure</h2><p>{{ $project->name }} · every recorded expense, one line each, as in the project tracker.</p></div>
+  <div><h2>Expenditure</h2><p>{{ $project->name }} · {{ $project->project_code }}@if($project->planned_start_date || $project->expected_completion_date) · {{ $project->planned_start_date?->format('d M Y') ?? '…' }} – {{ $project->expected_completion_date?->format('d M Y') ?? '…' }}@endif</p></div>
   <div class="lg-actions">
     @can('record-expense', $project)<a class="btn btn-primary" href="{{ route('ledger.expenses.create', $project) }}">+ Record Expense</a>@endcan
     @can('export-ledger', $project)<a class="btn btn-ghost" href="{{ route('ledger.expenses.export', array_merge([$project], request()->except('page'))) }}">Download Excel</a>@endcan
@@ -40,15 +42,16 @@
   @if(array_filter($filters))<a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Clear filters</a>@endif
 </form>
 
-@unless($denied)
+@include('ledger.partials.team-kpis')
+@if(! $denied && $showTotals)
 <div class="lg-cards">
   <div class="lg-card accent"><div class="k">Recorded</div><div class="v">TSh {{ $money::format($totals['recorded']) }}</div><div class="s">{{ number_format($totals['count']) }} lines in this view</div></div>
   <div class="lg-card good"><div class="k">Paid</div><div class="v">TSh {{ $money::format($totals['paid']) }}</div></div>
   <div class="lg-card warn"><div class="k">To confirm</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div></div>
 </div>
-@else
+@elseif($denied)
 <div class="flash">Denied lines are kept for the record but do not count in any total. {{ number_format($totals['count']) }} denied line(s).</div>
-@endunless
+@endif
 
 <div class="lg-scroll">
   <table class="lg-table lg-cards-sm">
@@ -66,17 +69,17 @@
         <td data-label="Total" class="amt"><b>{{ $money::format($line->total_amount) }}</b></td>
         @if($denied)
           <td data-label="Denied" class="amt"><span class="lg-pill denied">Denied</span><span class="muted">{{ $line->latestApproval?->notes }}</span><span class="muted">{{ $line->latestApproval?->decidedBy?->name }} · {{ $line->latestApproval?->decided_at?->format('d M Y') }}</span></td>
-          <td>@if($canDeny)<form method="POST" action="{{ route('ledger.expenses.restore', [$project, $line]) }}">@csrf<button class="lg-link" type="submit">Restore</button></form>@endif</td>
+          <td class="lg-btn-cell"><div class="lg-btns">@if($canDeny)<form method="POST" action="{{ route('ledger.expenses.restore', [$project, $line]) }}">@csrf<button class="lg-btn" type="submit">Restore</button></form>@endif</div></td>
         @else
           <td data-label="Paid" class="amt">{{ $money::format($line->paid_to_date) }}<span style="display:block;margin-top:3px"><span class="lg-pill {{ $status }}">{{ $statusLabels[$status] }}</span></span></td>
-          <td><div class="lg-row-actions lg-actions-col">
-            @if($canConfirm && $status !== 'paid')<button class="lg-link" type="button" data-confirm-url="{{ route('ledger.expenses.confirm', [$project, $line]) }}" data-code="{{ $line->request_code }}" data-item="{{ $line->item_description }}" data-total="{{ $line->total_amount }}" data-outstanding="{{ $line->approved_outstanding_amount }}" data-paid="{{ $line->paid_to_date }}">Confirm</button>@endif
-            @if($line->payments->isEmpty())
-              @if($canDeny)<button class="lg-link danger" type="button" data-deny-url="{{ route('ledger.expenses.deny', [$project, $line]) }}" data-code="{{ $line->request_code }}" data-item="{{ $line->item_description }}">Deny</button>@endif
-              @can('edit-ledger-line', $line)
-                <a class="lg-link" href="{{ route('ledger.expenses.edit', [$project, $line]) }}">Edit</a>
-                <form method="POST" action="{{ route('ledger.expenses.destroy', [$project, $line]) }}" onsubmit="return confirm('Delete {{ $line->request_code }}?');">@csrf @method('DELETE')<button class="lg-link danger" type="submit">Delete</button></form>
-              @endcan
+          <td class="lg-btn-cell"><div class="lg-btns">
+            @if($canConfirm && $status !== 'paid')<button class="lg-btn ok" type="button" data-confirm-url="{{ route('ledger.expenses.confirm', [$project, $line]) }}" data-code="{{ $line->request_code }}" data-item="{{ $line->item_description }}" data-total="{{ $line->total_amount }}" data-outstanding="{{ $line->approved_outstanding_amount }}" data-paid="{{ $line->paid_to_date }}">✓ Confirm</button>@endif
+            @if($line->payments->isEmpty() || $isDirector)
+              @can('edit-ledger-line', $line)<a class="lg-btn" href="{{ route('ledger.expenses.edit', [$project, $line]) }}">Edit</a>@endcan
+            @endif
+            @if($canDeny && $line->payments->isEmpty())<button class="lg-btn warn" type="button" data-deny-url="{{ route('ledger.expenses.deny', [$project, $line]) }}" data-code="{{ $line->request_code }}" data-item="{{ $line->item_description }}">Deny</button>@endif
+            @if($line->payments->isEmpty() || $isDirector)
+              @can('edit-ledger-line', $line)<form method="POST" action="{{ route('ledger.expenses.destroy', [$project, $line]) }}" onsubmit="return confirm('Delete {{ $line->request_code }}{{ $line->payments->isNotEmpty() ? ' and its payment' : '' }}?');">@csrf @method('DELETE')<button class="lg-btn bad" type="submit">Delete</button></form>@endcan
             @endif
           </div></td>
         @endif
@@ -85,12 +88,12 @@
       <tr><td colspan="9" class="lg-empty">No expenses match this view.</td></tr>
     @endforelse
     </tbody>
-    @if($lines->total() && ! $denied)<tfoot><tr><td colspan="6">Total of {{ number_format($totals['count']) }} lines in this view</td><td class="amt">{{ $money::format($totals['recorded']) }}</td><td class="amt">{{ $money::format($totals['paid']) }}</td><td></td></tr></tfoot>@endif
+    @if($lines->total() && ! $denied && $showTotals)<tfoot><tr><td colspan="6">Total of {{ number_format($totals['count']) }} lines in this view</td><td class="amt">{{ $money::format($totals['recorded']) }}</td><td class="amt">{{ $money::format($totals['paid']) }}</td><td></td></tr></tfoot>@endif
   </table>
 </div>
 @if($lines->hasPages())<div class="lg-pager">Page {{ $lines->currentPage() }} of {{ $lines->lastPage() }} @if(!$lines->onFirstPage())<a class="btn btn-ghost" href="{{ $lines->previousPageUrl() }}">← Previous</a>@endif @if($lines->hasMorePages())<a class="btn btn-ghost" href="{{ $lines->nextPageUrl() }}">Next →</a>@endif</div>@endif
 
-@unless($denied)
+@if(! $denied && $showTotals)
 <section class="lg-panel" style="margin-top:16px">
   <h3>Spend by phase</h3><p class="hint">Totals for the lines in this view, by phase and main category. Each phase includes its subphases.</p>
   <div class="tablewrap" style="border:0"><table class="lg-table lg-tree"><thead><tr><th>Phase</th>@foreach($categories as $code => $label)<th class="amt">{{ $label }}</th>@endforeach<th class="amt">Total</th><th class="amt">Budget</th></tr></thead><tbody>
@@ -101,7 +104,7 @@
     @endforeach
   </tbody></table></div>
 </section>
-@endunless
+@endif
 
 @if($canConfirm)@include('ledger.partials.confirm-dialog')@endif
 @if($canDeny)

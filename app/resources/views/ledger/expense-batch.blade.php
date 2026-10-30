@@ -78,7 +78,15 @@
   </section>
 
   <section class="lg-panel" style="margin-top:12px">
-    @if($canMarkPaid)
+    @if(auth()->user()->hasRole('admin'))
+      <input type="hidden" name="status" value="paid">
+      <p class="form-context" style="margin:0 0 10px">Your entries are recorded as <b>Paid</b> straight away; no confirmation is needed.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="field" style="margin:0"><label for="payment_date">Paid on</label><input type="date" id="payment_date" name="payment_date" value="{{ old('payment_date') }}" max="{{ now()->toDateString() }}" placeholder="Same as the expense date"></div>
+        <div class="field" style="margin:0"><label for="payment_method">Method</label><select id="payment_method" name="payment_method">@foreach($methods as $code => $label)<option value="{{ $code }}" @selected(old('payment_method', 'cash') === $code)>{{ $label }}</option>@endforeach</select></div>
+        <div class="field" style="margin:0"><label for="transaction_reference">Reference</label><input id="transaction_reference" name="transaction_reference" value="{{ old('transaction_reference') }}" maxlength="255"></div>
+      </div>
+    @elseif($canMarkPaid)
       <div style="display:flex;gap:16px;align-items:end;flex-wrap:wrap">
         <div class="lg-seg"><label><input type="radio" name="status" value="to_confirm" @checked(old('status', 'to_confirm') === 'to_confirm')>To confirm</label><label><input type="radio" name="status" value="paid" @checked(old('status') === 'paid')>Paid</label></div>
         <div id="paidFields" style="display:flex;gap:10px;flex-wrap:wrap">

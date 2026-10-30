@@ -14,6 +14,8 @@
     <div class="field" style="grid-column:span 2"><label for="name">Project name <span class="req">*</span></label><input id="name" name="name" value="{{ old('name', $project?->name) }}" maxlength="150" required placeholder="Oysterbay villa build"></div>
     <div class="field"><label for="status">Status <span class="req">*</span></label><select id="status" name="status" required>@foreach($statuses as $status)<option value="{{ $status->code }}" @selected(old('status', $project?->status ?? 'active') === $status->code)>{{ $status->label }}</option>@endforeach</select></div>
     <div class="field" style="grid-column:span 2"><label for="location">Location <span class="req">*</span></label><input id="location" name="location" value="{{ old('location', $project?->location) }}" maxlength="150" required placeholder="Oysterbay, Dar es Salaam"></div>
+    <div class="field"><label for="planned_start_date">Start date</label><input type="date" id="planned_start_date" name="planned_start_date" value="{{ old('planned_start_date', $project?->planned_start_date?->toDateString()) }}"></div>
+    <div class="field"><label for="expected_completion_date">End date</label><input type="date" id="expected_completion_date" name="expected_completion_date" value="{{ old('expected_completion_date', $project?->expected_completion_date?->toDateString()) }}"></div>
     <div class="field" style="grid-column:1/-1"><label>Project Manager(s)</label>
       @if($managers->isEmpty())<span class="form-context">No active Project Manager accounts yet. Add them under User Management.</span>
       @else<div class="lg-people" id="pmPicker">

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
 use App\Models\Lookup;
 use App\Models\Project;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\DatabaseManager;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -51,6 +53,11 @@ class ExpenseLedgerService
             throw ValidationException::withMessages(['status' => 'Only Accounts or the Director can record a line as paid. Save it as "To confirm".']);
         }
         [$quantity, $unitCost, $total] = $this->amounts($data);
+        // The Director's own entries need no confirmation: a line with an amount is recorded as paid.
+        if ($actor->hasRole('admin')) {
+            $markPaid = Money::compare($total, '0') > 0;
+            $data['payment_method'] = ($data['payment_method'] ?? null) ?: 'cash';
+        }
         if ($markPaid && Money::compare($total, '0') <= 0) {
             throw ValidationException::withMessages(['total_amount' => 'Enter the amount before recording the line as paid.']);
         }
@@ -123,7 +130,8 @@ class ExpenseLedgerService
 
         return $this->database->transaction(function () use ($line, $data, $actor, $quantity, $unitCost, $total): ExpenseRequest {
             $locked = ExpenseRequest::query()->whereKey($line->id)->lockForUpdate()->firstOrFail();
-            if ($locked->payments()->exists()) {
+            $payments = $locked->payments()->orderBy('id')->get();
+            if ($payments->isNotEmpty() && ! $actor->hasRole('admin')) {
                 throw ValidationException::withMessages(['line' => 'This line already has a payment recorded and can no longer be edited.']);
             }
             $phase = $locked->project->phases()->whereKey($data['project_phase_id'])->first();
@@ -155,6 +163,9 @@ class ExpenseLedgerService
             ]);
             $locked->approvals()->where('approval_stage', 'recorded')->update(['approved_amount' => $total, 'approved_total' => $total, 'approved_unit_rate' => $unitCost]);
             $this->log($locked, 'ledger_line_updated', $actor, $before, $locked->only(array_keys($before)));
+            if ($payments->isNotEmpty()) {
+                $this->repay($locked, $payments, (string) $before['total_amount'], $actor);
+            }
 
             return $locked->fresh(['payments', 'phase']);
         });
@@ -245,13 +256,42 @@ class ExpenseLedgerService
         Gate::forUser($actor)->authorize('edit-ledger-line', $line);
         $this->database->transaction(function () use ($line, $actor): void {
             $locked = ExpenseRequest::query()->whereKey($line->id)->lockForUpdate()->firstOrFail();
-            if ($locked->payments()->exists()) {
+            $payments = $locked->payments()->get();
+            if ($payments->isNotEmpty() && ! $actor->hasRole('admin')) {
                 throw ValidationException::withMessages(['line' => 'This line already has a payment recorded and cannot be deleted.']);
             }
-            $this->log($locked, 'ledger_line_deleted', $actor, $locked->only(['request_code', 'item_description', 'total_amount']), null);
+            $this->log($locked, 'ledger_line_deleted', $actor, $locked->only(['request_code', 'item_description', 'total_amount']) + ['paid' => Money::sum($payments->pluck('amount'))], null);
+            $payments->each->delete();
             $locked->approvals()->delete();
             $locked->delete();
         });
+    }
+
+    /**
+     * Director correction of a paid line: the old payments are replaced by one payment for what was
+     * paid (capped at the corrected total, the whole total when it was fully paid), on the last
+     * payment's date and method. The before/after paid amounts go to the project edit log.
+     *
+     * @param  Collection<int, ExpensePayment>  $payments
+     */
+    private function repay(ExpenseRequest $line, Collection $payments, string $totalBefore, User $actor): void
+    {
+        $paidBefore = Money::sum($payments->pluck('amount'));
+        $last = $payments->last();
+        $wasFullyPaid = Money::compare($paidBefore, $totalBefore) >= 0;
+        $payments->each->delete();
+        $total = (string) $line->total_amount;
+        $paid = $wasFullyPaid || Money::compare($paidBefore, $total) > 0 ? $total : $paidBefore;
+        if (Money::compare($paid, '0') > 0) {
+            $this->payments->record($line->id, [
+                'amount' => $paid,
+                'payment_date' => $last->payment_date instanceof \DateTimeInterface ? $last->payment_date->format('Y-m-d') : (string) $last->payment_date,
+                'payment_method' => $last->payment_method,
+                'transaction_reference' => $last->transaction_reference,
+                'invoice_receipt_no' => $line->invoice_receipt_no,
+            ], $actor);
+        }
+        $this->log($line, 'ledger_paid_line_corrected', $actor, ['paid' => $paidBefore], ['paid' => $paid]);
     }
 
     /** Adds a newly typed item name to the clean materials list (names only). */
