@@ -12,9 +12,11 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
 /**
- * Recording-mode figures, computed the way the client's tracker does: every recorded line counts as
- * spend (paid or "to confirm"), paid is what Accounts has confirmed, and budgets are the Director's
- * amounts per phase × category. Phase figures roll up the tree (a phase includes its subphases).
+ * Recording-mode figures, computed the way the client's tracker does: spend ("recorded" in these
+ * arrays) is what has been confirmed as paid, so it matches the tracker's totals; lines still "to
+ * confirm" (e.g. deliveries from the procurement log) are reported separately as to_confirm and never
+ * count as spend until confirmed. Budgets are the Director's amounts per phase × category. Phase
+ * figures roll up the tree (a phase includes its subphases).
  *
  * Each line's amounts are converted once to integer cents (exact fixed-point) and every total is
  * summed in cents, so dashboards over thousands of lines stay fast without losing precision.
@@ -42,9 +44,10 @@ class LedgerAnalyticsService
     private array $budgetCache = [];
 
     /** Projects the user may open in the ledger. */
-    public function projectsFor(User $user): Collection
+    public function projectsFor(User $user, bool $withOverheads = false): Collection
     {
         return Project::query()
+            ->when(! ($withOverheads && $user->hasRole('admin')), fn ($query) => $query->where('is_company_overheads', false))
             ->when(! $user->seesAllProjects(), fn ($query) => $query->whereHas('assignedUsers', fn ($users) => $users->whereKey($user->id)))
             ->orderBy('name')->get();
     }
@@ -97,8 +100,9 @@ class LedgerAnalyticsService
         $lines = $all->filter(fn (ExpenseRequest $line) => $this->within($line, $from, $to))->values();
         $budgets = $this->budgetCents($project);
 
-        $recorded = $this->sum($lines, 'ledger_total_c');
-        $paid = $this->sum($lines, 'ledger_paid_c');
+        // Headline spend is what is confirmed (paid), as in the tracker's totals; the rest awaits confirmation.
+        $recorded = $this->sum($lines, 'ledger_paid_c');
+        $paid = $recorded;
         $budget = array_sum($budgets);
         $open = $lines->filter(fn ($line) => $line->ledger_open_c > 0);
 
@@ -111,7 +115,7 @@ class LedgerAnalyticsService
                     $categoryBudget += $amount;
                 }
             }
-            $amount = $this->sum($group, 'ledger_total_c');
+            $amount = $this->sum($group, 'ledger_paid_c');
             $byCategory[$code] = [
                 'label' => $label, 'color' => self::CATEGORY_COLORS[$code], 'recorded' => self::money($amount),
                 'paid' => self::money($this->sum($group, 'ledger_paid_c')), 'budget' => self::money($categoryBudget),
@@ -152,7 +156,7 @@ class LedgerAnalyticsService
         $own = [];
         foreach ($lines as $line) {
             $key = $line->project_phase_id.'|'.$line->main_category;
-            $own[$key]['total'] = ($own[$key]['total'] ?? 0) + $line->ledger_total_c;
+            $own[$key]['total'] = ($own[$key]['total'] ?? 0) + $line->ledger_paid_c;
             $own[$key]['paid'] = ($own[$key]['paid'] ?? 0) + $line->ledger_paid_c;
             $own[$key]['count'] = ($own[$key]['count'] ?? 0) + 1;
         }
@@ -192,7 +196,7 @@ class LedgerAnalyticsService
         $rows = $projects->map(function (Project $project) use ($from, $to, &$months, &$categoryTotals) {
             $lines = $this->lines($project);
             $budget = array_sum($this->budgetCents($project));
-            $recordedAll = $this->sum($lines, 'ledger_total_c');
+            $recordedAll = $this->sum($lines, 'ledger_paid_c');
             $recorded = $paid = $open = $openCount = $count = 0;
             $byCategory = array_fill_keys(array_keys(self::CATEGORIES), 0);
             foreach ($lines as $line) {
@@ -200,19 +204,19 @@ class LedgerAnalyticsService
                     continue;
                 }
                 $count++;
-                $recorded += $line->ledger_total_c;
+                $recorded += $line->ledger_paid_c;
                 $paid += $line->ledger_paid_c;
                 $open += $line->ledger_open_c;
                 $openCount += $line->ledger_open_c > 0 ? 1 : 0;
                 if (isset($byCategory[$line->main_category])) {
-                    $byCategory[$line->main_category] += $line->ledger_total_c;
-                    $categoryTotals[$line->main_category] += $line->ledger_total_c;
+                    $byCategory[$line->main_category] += $line->ledger_paid_c;
+                    $categoryTotals[$line->main_category] += $line->ledger_paid_c;
                 }
                 $month = $line->requested_at?->format('Y-m');
                 if (isset($months[$month])) {
-                    $months[$month]['total'] += $line->ledger_total_c;
+                    $months[$month]['total'] += $line->ledger_paid_c;
                     if (isset($months[$month]['categories'][$line->main_category])) {
-                        $months[$month]['categories'][$line->main_category] += $line->ledger_total_c;
+                        $months[$month]['categories'][$line->main_category] += $line->ledger_paid_c;
                     }
                 }
             }
@@ -250,7 +254,7 @@ class LedgerAnalyticsService
             if (! isset($months[$key])) {
                 continue;
             }
-            $amount = $line->ledger_total_c ?? self::cents($line->total_amount);
+            $amount = $line->ledger_paid_c ?? 0;
             $months[$key]['total'] += $amount;
             if (isset($months[$key]['categories'][$line->main_category])) {
                 $months[$key]['categories'][$line->main_category] += $amount;
@@ -267,11 +271,11 @@ class LedgerAnalyticsService
         foreach ($lines as $line) {
             $key = mb_strtolower(trim((string) $line->item_description));
             $groups[$key] ??= ['name' => $line->item_description, 'total' => 0, 'count' => 0];
-            $groups[$key]['total'] += $line->ledger_total_c ?? self::cents($line->total_amount);
+            $groups[$key]['total'] += $line->ledger_paid_c ?? 0;
             $groups[$key]['count']++;
         }
 
-        return collect($groups)->sortByDesc('total')->take($limit)->map(fn ($row) => ['name' => $row['name'], 'total' => self::money($row['total']), 'count' => $row['count']])->values();
+        return collect($groups)->filter(fn ($row) => $row['total'] > 0)->sortByDesc('total')->take($limit)->map(fn ($row) => ['name' => $row['name'], 'total' => self::money($row['total']), 'count' => $row['count']])->values();
     }
 
     public static function cents(mixed $amount): int

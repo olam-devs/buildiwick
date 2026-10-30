@@ -47,9 +47,8 @@
 @include('ledger.partials.team-kpis')
 @if(! $denied && $showTotals)
 <div class="lg-cards">
-  <div class="lg-card accent"><div class="k">Recorded</div><div class="v">TSh {{ $money::format($totals['recorded']) }}</div><div class="s">{{ number_format($totals['count']) }} lines in this view</div></div>
-  <div class="lg-card good"><div class="k">Paid</div><div class="v">TSh {{ $money::format($totals['paid']) }}</div></div>
-  <div class="lg-card warn"><div class="k">To confirm</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div></div>
+  <div class="lg-card accent"><div class="k">Confirmed spend</div><div class="v">TSh {{ $money::format($totals['paid']) }}</div><div class="s">{{ number_format($totals['count']) }} lines in this view</div></div>
+  <div class="lg-card warn"><div class="k">Awaiting confirmation</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div><div class="s">Not counted as spend until confirmed</div></div>
 </div>
 @elseif($denied)
 <div class="flash">Denied lines are kept for the record but do not count in any total. {{ number_format($totals['count']) }} denied line(s).</div>
@@ -124,10 +123,11 @@
 @if($canConfirm)
 <dialog class="lg-dialog" id="bulkConfirmDialog"><div>
   <h3>Confirm <span data-bulk-count></span> line(s)</h3>
-  <p class="form-context" style="margin:0">Each selected line is confirmed as paid in full for what is still open on it. Lines already paid are skipped.</p>
+  <p class="form-context" style="margin:0">Each selected line is confirmed as paid in full for what is still open on it. For a part payment, use that line's own ✓ Confirm button. Lines already paid are skipped.</p>
   <div class="row2"><div class="field"><label for="bulk_payment_date">Payment date <span class="req">*</span></label><input type="date" id="bulk_payment_date" name="payment_date" form="bulkForm" value="{{ now()->toDateString() }}" max="{{ now()->toDateString() }}" required></div>
-  <div class="field"><label for="bulk_payment_method">Method <span class="req">*</span></label><select id="bulk_payment_method" name="payment_method" form="bulkForm">@foreach($methods as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</select></div></div>
-  <div class="field"><label for="bulk_reference">Reference</label><input id="bulk_reference" name="transaction_reference" form="bulkForm" maxlength="255"></div>
+  <div class="field"><label for="bulk_payment_method">Method</label><select id="bulk_payment_method" name="payment_method" form="bulkForm"><option value="">Not recorded</option>@foreach($methods as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</select></div></div>
+  <div class="row2"><div class="field"><label for="bulk_receipt">Receipt no. (optional)</label><input id="bulk_receipt" name="invoice_receipt_no" form="bulkForm" maxlength="255"></div>
+  <div class="field"><label for="bulk_reference">Reference (optional)</label><input id="bulk_reference" name="transaction_reference" form="bulkForm" maxlength="255"></div></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn btn-primary" type="button" data-bulk-submit="confirm">Confirm selected</button></div>
 </div></dialog>
 @endif

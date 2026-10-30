@@ -6,7 +6,7 @@
   $nav = fn (string $pattern) => request()->routeIs($pattern) ? 'active' : '';
 @endphp
 @if($workspaceProject ?? null)
-  <div class="project-workspace-card"><div class="label">Project</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
+  <div class="project-workspace-card"><div class="label">{{ $workspaceProject->is_company_overheads ? 'Company overheads' : 'Project' }}</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
   @can('view-analytics', $workspaceProject)<a class="navitem {{ $nav('ledger.overview') }}" href="{{ route('ledger.overview', $workspaceProject) }}">Overview</a>@endcan
   @php($confirmView = request()->routeIs('ledger.expenses') && request('status') === 'to_confirm')
   <a class="navitem {{ request()->routeIs('ledger.expenses') && ! $confirmView ? 'active' : '' }}" href="{{ route('ledger.expenses', $workspaceProject) }}">Expenditure</a>
@@ -33,6 +33,7 @@
     <a class="navitem {{ $nav('ledger.to-confirm') }}" href="{{ route('ledger.to-confirm') }}">To Confirm</a>
   @endif
   <a class="navitem {{ $nav('ledger.index') }}" href="{{ route('ledger.index') }}">Projects</a>
+  @if($isDirector)<a class="navitem {{ $nav('ledger.overheads') }}" href="{{ route('ledger.overheads') }}">Company Overheads</a>@endif
   @if($isDirector)
     <div class="label">Company Targets</div>
     <a class="navitem {{ $nav('director.kpis.*') }}" href="{{ route('director.kpis.index') }}">Company KPI Targets</a>

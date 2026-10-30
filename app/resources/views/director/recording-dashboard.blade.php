@@ -38,14 +38,14 @@
 <div class="lg-catbar" id="catBar" style="margin-bottom:12px"></div>
 
 <div class="lg-cards">
-  <div class="lg-card accent"><div class="k">Recorded spend</div><div class="v" id="cRecorded">TSh {{ $money::format($t['recorded']) }}</div><div class="s" id="cRecordedSub">{{ $change($t['recorded'], $previous['recorded']) }}</div></div>
-  <div class="lg-card good"><div class="k">Paid</div><div class="v">TSh {{ $money::format($t['paid']) }}</div><div class="s">{{ $change($t['paid'], $previous['paid']) }}</div></div>
-  <a class="lg-card warn" href="{{ route('ledger.to-confirm') }}"><div class="k">To confirm</div><div class="v">TSh {{ $money::format($t['to_confirm']) }}</div><div class="s">{{ number_format($t['to_confirm_count']) }} lines in this period</div></a>
+  <div class="lg-card accent"><div class="k">Confirmed spend</div><div class="v" id="cRecorded">TSh {{ $money::format($t['recorded']) }}</div><div class="s" id="cRecordedSub">{{ $change($t['recorded'], $previous['recorded']) }}</div></div>
+  <a class="lg-card warn" href="{{ route('ledger.to-confirm') }}"><div class="k">Awaiting confirmation</div><div class="v">TSh {{ $money::format($t['to_confirm']) }}</div><div class="s">{{ number_format($t['to_confirm_count']) }} lines in this period, not counted as spend yet</div></a>
+  @if($overheads)<a class="lg-card" href="{{ route('ledger.overheads') }}"><div class="k">Company overheads</div><div class="v">TSh {{ $money::format($overheads['recorded']) }}</div><div class="s">Office, staff &amp; statutory · not in project totals</div></a>@endif
   <a class="lg-card {{ $attention->isNotEmpty() ? 'danger' : '' }}" href="#attention"><div class="k">Projects needing attention</div><div class="v">{{ $attention->count() }}</div><div class="s">of {{ $t['active_projects'] }} active projects</div></a>
 </div>
 
 <div class="lg-grid">
-  <section class="lg-panel span-8"><h3>Monthly spend</h3><p class="hint">All projects, by main category. Hover a column for the amounts.</p><div class="lg-chart" id="monthly"></div></section>
+  <section class="lg-panel span-8"><h3>Monthly spend</h3><p class="hint">Confirmed spend on all projects (company overheads not included), by main category. Hover a column for the amounts.</p><div class="lg-chart" id="monthly"></div></section>
   <section class="lg-panel span-4"><h3>Spend by category</h3><p class="hint">This period. Hover a slice for the amount.</p>
     <div style="display:flex;justify-content:center" class="lg-chart" id="donut"></div>
     <div class="lg-legend" style="margin-top:10px">@foreach($portfolio['categories'] as $c)<div><i style="background:{{ $c['color'] }}"></i>{{ $c['label'] }}<b>{{ $money::format($c['share']) }}%</b></div>@endforeach</div>
@@ -68,7 +68,7 @@
   </section>
 
   <section class="lg-panel span-12"><div style="display:flex;justify-content:space-between;align-items:center"><h3>All projects</h3><a class="lg-link" href="{{ route('ledger.index') }}">Open projects list →</a></div>
-    <div class="tablewrap" style="border:0;margin-top:8px"><table class="lg-table"><thead><tr><th>Project</th><th class="amt">Spend this period</th><th class="amt">To confirm</th><th style="min-width:150px">Budget used (to date)</th><th>Last entry</th></tr></thead><tbody>
+    <div class="tablewrap" style="border:0;margin-top:8px"><table class="lg-table"><thead><tr><th>Project</th><th class="amt">Confirmed spend (period)</th><th class="amt">Awaiting confirmation</th><th style="min-width:150px">Budget used (to date)</th><th>Last entry</th></tr></thead><tbody>
       @foreach($rows as $row)<tr><td><a href="{{ route('ledger.overview', $row['project']) }}" style="font-weight:600;color:var(--ink);text-decoration:none">{{ $row['project']->name }}</a><span class="muted">{{ $row['project']->project_code }}</span></td><td class="amt">{{ $money::format($row['recorded']) }}</td><td class="amt">{{ $row['to_confirm_count'] ? $money::format($row['to_confirm']) : '—' }}</td>
         <td>@if($row['used'] !== null)<div class="lg-meter" style="margin-top:3px"><span class="{{ (float) $row['used'] > 100 ? 'over' : ((float) $row['used'] >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $row['used']) }}%"></span></div><span class="muted">{{ $money::format($row['used']) }}%</span>@else<span class="muted">No budget</span>@endif</td>
         <td>{{ $row['last_entry'] ? \Carbon\Carbon::parse($row['last_entry'])->format('d M Y') : '—' }}</td></tr>@endforeach
