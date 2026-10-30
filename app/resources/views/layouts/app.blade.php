@@ -46,7 +46,9 @@
   .brand .mark-img{height:22px;width:auto;display:block;flex:none;}
   .mobile-bar .logo{height:20px;width:auto;flex:none;}
 
-  .topbar{display:flex;justify-content:flex-end;margin:-10px 0 8px;min-height:36px}
+  .topbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:-10px 0 8px;min-height:36px}
+  .mobile-bar .mobile-theme{margin-left:auto;flex:none}.mobile-bar .mobile-theme button{padding:4px 8px;font-size:13px}
+  .mobile-bar .mobile-theme + .profile{margin-left:6px}
   .profile{position:relative}
   .profile summary{list-style:none;display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border:1px solid var(--line);border-radius:99px;background:var(--surface);cursor:pointer;user-select:none}
   .profile summary::-webkit-details-marker{display:none}
@@ -302,8 +304,8 @@
   <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Minimize sidebar" aria-expanded="true" title="Minimize sidebar">&#x2039;</button>
   <div class="nav-scrim" onclick="document.body.classList.remove('nav-open')"></div>
   <main class="main @yield('mainClass')">
-    <div class="mobile-bar"><button type="button" aria-label="Open menu" onclick="document.body.classList.add('nav-open')">&#9776;</button><img class="logo" src="{{ asset('images/buildiwick-mark-160.png') }}" alt="Buildiwick"><span class="title">@yield('title', 'Buildiwick')</span>@auth @include('partials.profile-menu') @endauth</div>
-    @auth<div class="topbar">@include('partials.profile-menu')</div>@endauth
+    <div class="mobile-bar"><button type="button" aria-label="Open menu" onclick="document.body.classList.add('nav-open')">&#9776;</button><img class="logo" src="{{ asset('images/buildiwick-mark-160.png') }}" alt="Buildiwick"><span class="title">@yield('title', 'Buildiwick')</span>@auth<div class="theme-switch compact mobile-theme" role="group" aria-label="Theme"><button type="button" data-theme="light" title="Light" aria-label="Light">☀</button><button type="button" data-theme="dark" title="Dark" aria-label="Dark">☾</button><button type="button" data-theme="auto" title="Follow this device" aria-label="Auto">A</button></div>@include('partials.profile-menu')@endauth</div>
+    @auth<div class="topbar"><div class="theme-switch compact" role="group" aria-label="Theme"><button type="button" data-theme="light" title="Light">☀ Light</button><button type="button" data-theme="dark" title="Dark">☾ Dark</button><button type="button" data-theme="auto" title="Follow this device">Auto</button></div>@include('partials.profile-menu')</div>@endauth
     @if (session('success'))<div class="flash">{{ session('success') }}</div>@endif
     @yield('content')
   </main>

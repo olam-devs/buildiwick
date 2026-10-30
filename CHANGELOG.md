@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-10-30 — Always-Visible Account Access, Theme Switch on the Top Bar
+
+- **User Management: Account access is two always-visible choices**, **● Active** (can sign in) and **○ Inactive** (cannot sign in; history is kept), coloured green and red, instead of a dropdown.
+- **Dropdown options are readable in dark mode everywhere** (`select option` uses the theme colours).
+- **The Light / Dark / Auto switch sits on the top bar** next to the profile once signed in, and as compact icons on the phone bar. It is no longer inside the profile menu.
+
 ## 2026-10-30 — Dark Mode, Show Password, Profile Menu, Loading Screen, Faster Dashboards
 
 - **Light / Dark / Auto theme** (`partials/theme.blade.php`). All colours are tokens with light and dark values. Auto follows the device; a choice is remembered per browser (`localStorage` "bw-theme") and applied before the page paints. Chart SVG colours follow the theme through CSS. The switch is in the profile menu and on the sign-in page.

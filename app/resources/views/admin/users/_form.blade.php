@@ -11,6 +11,10 @@
   <div class="field"><label for="password">{{ $managedUser ? 'New temporary password' : 'Temporary password' }} @unless($managedUser)<span class="req">*</span>@endunless</label><input id="password" name="password" type="password" @required(! $managedUser)><p class="form-context">Minimum 8 characters. Leave blank when editing to keep the current password.</p>@error('password')<div class="field-err">{{ $message }}</div>@enderror</div>
   <div class="field"><label for="password_confirmation">Confirm password</label><input id="password_confirmation" name="password_confirmation" type="password"></div>
 </div>
-<div class="field"><label for="is_active">Account access</label><select id="is_active" name="is_active"><option value="1" @selected((string) old('is_active', (int) ($managedUser?->is_active ?? true)) === '1')>Active</option><option value="0" @selected((string) old('is_active', (int) ($managedUser?->is_active ?? true)) === '0')>Inactive</option></select>@error('is_active')<div class="field-err">{{ $message }}</div>@enderror</div>
+@php($isActive = (string) old('is_active', (int) ($managedUser?->is_active ?? true)) === '1')
+<div class="field"><label>Account access</label><div class="access-choice" role="radiogroup" aria-label="Account access">
+  <label class="access-option on-active"><input type="radio" name="is_active" value="1" @checked($isActive)><span><b>● Active</b><small>Can sign in and work</small></span></label>
+  <label class="access-option on-inactive"><input type="radio" name="is_active" value="0" @checked(! $isActive)><span><b>○ Inactive</b><small>Cannot sign in; history is kept</small></span></label>
+</div>@error('is_active')<div class="field-err">{{ $message }}</div>@enderror</div>
 @if(\App\Support\Features::recording())@include('admin.users._access')@endif
 <div class="estimate-actions"><button class="btn btn-primary" type="submit">{{ $managedUser ? 'Save Changes' : 'Create User' }}</button><a class="btn btn-ghost" href="{{ route('admin.users.index') }}">Cancel</a></div>

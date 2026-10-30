@@ -60,6 +60,16 @@
   svg [stroke="#EEF1F4"]{stroke:var(--chart-grid)}
   svg [fill="#8D99A6"]{fill:var(--chart-label)}
   svg [fill="#1F272E"]{fill:var(--ink)}
+  select option, select optgroup{background:var(--surface);color:var(--ink)}
+  .access-choice{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .access-choice .access-option{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);cursor:pointer;margin:0}
+  .access-option input{width:16px!important;height:16px;margin-top:2px;accent-color:var(--primary);flex:none}
+  .access-option b{display:block;font-size:13px;color:var(--ink)}.access-option small{display:block;font-size:11.5px;color:var(--ink-dim);font-weight:400}
+  .access-option.on-active:has(input:checked){border-color:var(--good);background:var(--good-soft)}.access-option.on-active:has(input:checked) b{color:var(--good-ink)}
+  .access-option.on-inactive:has(input:checked){border-color:var(--danger);background:var(--danger-soft)}.access-option.on-inactive:has(input:checked) b{color:var(--danger-ink)}
+  .theme-switch.compact{padding:2px;border-radius:99px;background:var(--surface)}
+  .theme-switch.compact button{padding:5px 10px;border-radius:99px;font-size:12px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+  .theme-switch button{white-space:nowrap}
   .theme-switch{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
   .theme-switch button{flex:1;border:0;background:transparent;color:var(--ink-dim);font:inherit;font-size:12px;font-weight:600;padding:5px 6px;border-radius:6px;cursor:pointer}
   .theme-switch button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
