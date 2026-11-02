@@ -6,7 +6,8 @@
   $money = \App\Support\Money::class;
   $categories = \App\Services\LedgerAnalyticsService::CATEGORIES;
   $colors = \App\Services\LedgerAnalyticsService::CATEGORY_COLORS;
-  $canConfirm = auth()->user()->can('confirm-payments', $project);
+  // Company overheads are entered by the Director and confirmed as recorded: nothing waits for confirmation there.
+  $canConfirm = ! $project->is_company_overheads && auth()->user()->can('confirm-payments', $project);
   $canDeny = auth()->user()->can('deny-expense', $project);
   $denied = ($filters['status'] ?? '') === 'denied';
   $showTotals = auth()->user()->can('view-analytics', $project);
@@ -35,7 +36,7 @@
   @if(!empty($filters['category']))<input type="hidden" name="category" value="{{ $filters['category'] }}">@endif
   <div class="field" style="min-width:200px;flex:1"><label for="q">Search</label><input type="search" id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Item, ID, receipt no." autocomplete="off"></div>
   <div class="field"><label for="phase">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</label><select id="phase" name="phase"><option value="">{{ $project->is_company_overheads ? 'All cost groups' : 'All phases' }}</option>@foreach($tree->flatten() as $node)<option value="{{ $node['phase']->id }}" @selected((string) ($filters['phase'] ?? '') === (string) $node['phase']->id)>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}</option>@endforeach</select></div>
-  <div class="field"><label for="status">Status</label><select id="status" name="status"><option value="">Any</option>@foreach(['to_confirm' => 'To confirm', 'part_paid' => 'Part paid', 'paid' => 'Paid', 'denied' => 'Denied'] as $code => $label)<option value="{{ $code }}" @selected(($filters['status'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
+  <div class="field"><label for="status">Status</label><select id="status" name="status"><option value="">Any</option>@foreach(($project->is_company_overheads ? ['paid' => 'Paid', 'denied' => 'Denied'] : ['to_confirm' => 'To confirm', 'part_paid' => 'Part paid', 'paid' => 'Paid', 'denied' => 'Denied']) as $code => $label)<option value="{{ $code }}" @selected(($filters['status'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
   <div class="field"><label for="subcategory">Subcategory</label><select id="subcategory" name="subcategory"><option value="">Any</option>@foreach($subcategories as $code => $label)<option value="{{ $code }}" @selected(($filters['subcategory'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
   @if($workers->isNotEmpty())<div class="field"><label for="worker">Worker</label><select id="worker" name="worker"><option value="">Any</option>@foreach($workers as $id => $name)<option value="{{ $id }}" @selected((string) ($filters['worker'] ?? '') === (string) $id)>{{ $name }}</option>@endforeach</select></div>@endif
   <div class="field" style="min-width:135px"><label for="from">From</label><input type="date" id="from" name="from" value="{{ $filters['from'] ?? '' }}"></div>
@@ -49,7 +50,7 @@
 @if(! $denied && $showTotals)
 <div class="lg-cards">
   <div class="lg-card accent"><div class="k">Confirmed spend</div><div class="v">TSh {{ $money::format($totals['paid']) }}</div><div class="s">{{ number_format($totals['count']) }} lines in this view</div></div>
-  <div class="lg-card warn"><div class="k">Awaiting confirmation</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div><div class="s">Not counted as spend until confirmed</div></div>
+  <div class="lg-card warn" @if($project->is_company_overheads) hidden @endif><div class="k">Awaiting confirmation</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div><div class="s">Not counted as spend until confirmed</div></div>
 </div>
 @elseif($denied)
 <div class="flash">Denied lines are kept for the record but do not count in any total. {{ number_format($totals['count']) }} denied line(s).</div>

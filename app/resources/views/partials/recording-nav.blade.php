@@ -10,15 +10,15 @@
   @can('view-analytics', $workspaceProject)<a class="navitem {{ $nav('ledger.overview') }}" href="{{ route('ledger.overview', $workspaceProject) }}">Overview</a>@endcan
   @php($confirmView = request()->routeIs('ledger.expenses') && request('status') === 'to_confirm')
   <a class="navitem {{ request()->routeIs('ledger.expenses') && ! $confirmView ? 'active' : '' }}" href="{{ route('ledger.expenses', $workspaceProject) }}">Expenditure</a>
-  @can('confirm-payments', $workspaceProject)
+  @if(! $workspaceProject->is_company_overheads && auth()->user()->can('confirm-payments', $workspaceProject))
     @php($waiting = \App\Models\ExpenseRequest::query()->where('project_id', $workspaceProject->id)->where('status', 'approved')->where('total_amount', '>', 0)->doesntHave('payments')->count())
     <a class="navitem {{ $confirmView ? 'active' : '' }}" href="{{ route('ledger.expenses', [$workspaceProject, 'status' => 'to_confirm', 'sort' => 'oldest']) }}">To Confirm @if($waiting)<span class="badge warn" style="margin-left:auto">{{ $waiting }}</span>@endif</a>
-  @endcan
+  @endif
   @can('record-expense', $workspaceProject)
     <a class="navitem {{ $nav('ledger.expenses.create') }}" href="{{ route('ledger.expenses.create', $workspaceProject) }}">Record Expense</a>
   @endcan
   @can('view-budget', $workspaceProject)<a class="navitem {{ $nav('ledger.structure') }}" href="{{ route('ledger.structure', $workspaceProject) }}">{{ $workspaceProject->is_company_overheads ? 'Cost Groups & Budget' : 'Phases & Budget' }}</a>@endcan
-  @can('view-workers', $workspaceProject)<a class="navitem {{ $nav('ledger.workers') }}" href="{{ route('ledger.workers', $workspaceProject) }}">Workers</a>@endcan
+  @if(! $workspaceProject->is_company_overheads && auth()->user()->can('view-workers', $workspaceProject))<a class="navitem {{ $nav('ledger.workers') }}" href="{{ route('ledger.workers', $workspaceProject) }}">Workers</a>@endif
   @if($isDirector)
     <a class="navitem {{ $nav('director.projects.warnings') }}" href="{{ route('director.projects.warnings', $workspaceProject) }}">Warnings &amp; KPIs</a>
     <a class="navitem {{ $nav('admin.projects.*') }}" href="{{ route('admin.projects.show', $workspaceProject) }}">Project Settings</a>

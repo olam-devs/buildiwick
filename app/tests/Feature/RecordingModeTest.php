@@ -716,6 +716,9 @@ class RecordingModeTest extends TestCase
         $this->assertNull(ProjectPhase::find($rent->id));
         $this->assertSame([$other->id, $other->id], [(int) $line->fresh()->project_phase_id, (int) $line->payments()->sole()->project_phase_id]);
         $this->assertDatabaseHas('project_edit_logs', ['project_id' => $office->id, 'action' => 'cost_group_deleted']);
+        $page = $this->actingAs($director)->get(route('ledger.expenses', $office))->assertOk()->assertDontSee('>To Confirm', false)
+            ->assertDontSee('>Workers</a>', false)->assertDontSee('✓ Confirm')->assertDontSee('value="to_confirm"', false);
+        $this->actingAs($director)->get(route('ledger.to-confirm'))->assertOk()->assertDontSee($office->name);
 
         [$project, $phases] = $this->project();
         $this->actingAs($director)->post(route('ledger.expenses.store', $project), $this->line($phases[0]));
