@@ -2,22 +2,24 @@
 @section('title', ($project ? $project->name.' · Settings' : 'New Project').' · Buildiwick')
 @section('content')
 @include('partials.ledger.styles')
+@php($ovhEdit = (bool) ($project?->is_company_overheads))
 <div class="lg-head">
-  <div><h2>{{ $project ? 'Project Settings' : 'New Project' }}</h2><p>The same details as the top of each project sheet in the tracker: Project ID, name, status and location.</p></div>
+  @if($ovhEdit)<div><h2>Company Overheads Settings</h2><p>The name and code of the office costs ledger. Cost groups and their budgets are under Cost Groups &amp; Budget.</p></div>
+  @else<div><h2>{{ $project ? 'Project Settings' : 'New Project' }}</h2><p>The same details as the top of each project sheet in the tracker: Project ID, name, status and location.</p></div>@endif
   <div class="lg-actions"><a class="btn btn-ghost" href="{{ route('admin.projects.index') }}">All projects</a></div>
 </div>
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 
 <form method="POST" action="{{ $project ? route('admin.projects.update', $project) : route('admin.projects.store') }}" class="lg-panel lg-form">@csrf @if($project) @method('PUT') @endif
   <div class="grid">
-    <div class="field"><label for="project_code">Project ID <span class="req">*</span></label><input id="project_code" name="project_code" value="{{ old('project_code', $project?->project_code) }}" placeholder="BWG-OYS-RES-2026-001" maxlength="50" required style="text-transform:uppercase"></div>
-    <div class="field" style="grid-column:span 2"><label for="name">Project name <span class="req">*</span></label><input id="name" name="name" value="{{ old('name', $project?->name) }}" maxlength="150" required placeholder="Oysterbay villa build"></div>
-    <div class="field"><label for="status">Status <span class="req">*</span></label><select id="status" name="status" required>@foreach($statuses as $status)<option value="{{ $status->code }}" @selected(old('status', $project?->status ?? 'active') === $status->code)>{{ $status->label }}</option>@endforeach</select></div>
-    <div class="field" style="grid-column:span 2"><label for="location">Location <span class="req">*</span></label><input id="location" name="location" value="{{ old('location', $project?->location) }}" maxlength="150" required placeholder="Oysterbay, Dar es Salaam"></div>
-    <div class="field"><label for="work_type">Type of work</label><input id="work_type" name="work_type" list="workTypes" maxlength="80" value="{{ old('work_type', $project?->work_type) }}" placeholder="e.g. Construction, Finishing works"><datalist id="workTypes">@foreach(['Construction', 'Finishing works', 'Construction + finishing', 'Renovation', 'Labour only', 'Fit-out / joinery', 'MEP (plumbing & electrical)', 'Overheads'] as $type)<option value="{{ $type }}">@endforeach</datalist></div>
-    <div class="field"><label for="planned_start_date">Start date</label><input type="date" id="planned_start_date" name="planned_start_date" value="{{ old('planned_start_date', $project?->planned_start_date?->toDateString()) }}"></div>
-    <div class="field"><label for="expected_completion_date">End date</label><input type="date" id="expected_completion_date" name="expected_completion_date" value="{{ old('expected_completion_date', $project?->expected_completion_date?->toDateString()) }}"></div>
-    <div class="field" style="grid-column:1/-1"><label>Project Manager(s)</label>
+    <div class="field"><label for="project_code">{{ $ovhEdit ? 'Code' : 'Project ID' }} <span class="req">*</span></label><input id="project_code" name="project_code" value="{{ old('project_code', $project?->project_code) }}" placeholder="BWG-OYS-RES-2026-001" maxlength="50" required style="text-transform:uppercase"></div>
+    <div class="field" style="grid-column:span 2"><label for="name">{{ $ovhEdit ? 'Name' : 'Project name' }} <span class="req">*</span></label><input id="name" name="name" value="{{ old('name', $project?->name) }}" maxlength="150" required placeholder="Oysterbay villa build"></div>
+    <div @if($ovhEdit) hidden @endif class="field"><label for="status">Status <span class="req">*</span></label><select id="status" name="status" required>@foreach($statuses as $status)<option value="{{ $status->code }}" @selected(old('status', $project?->status ?? 'active') === $status->code)>{{ $status->label }}</option>@endforeach</select></div>
+    <div @if($ovhEdit) hidden @endif class="field" style="grid-column:span 2"><label for="location">Location <span class="req">*</span></label><input id="location" name="location" value="{{ old('location', $project?->location) }}" maxlength="150" required placeholder="Oysterbay, Dar es Salaam"></div>
+    <div @if($ovhEdit) hidden @endif class="field"><label for="work_type">Type of work</label><input id="work_type" name="work_type" list="workTypes" maxlength="80" value="{{ old('work_type', $project?->work_type) }}" placeholder="e.g. Construction, Finishing works"><datalist id="workTypes">@foreach(['Construction', 'Finishing works', 'Construction + finishing', 'Renovation', 'Labour only', 'Fit-out / joinery', 'MEP (plumbing & electrical)', 'Overheads'] as $type)<option value="{{ $type }}">@endforeach</datalist></div>
+    <div @if($ovhEdit) hidden @endif class="field"><label for="planned_start_date">Start date</label><input type="date" id="planned_start_date" name="planned_start_date" value="{{ old('planned_start_date', $project?->planned_start_date?->toDateString()) }}"></div>
+    <div @if($ovhEdit) hidden @endif class="field"><label for="expected_completion_date">End date</label><input type="date" id="expected_completion_date" name="expected_completion_date" value="{{ old('expected_completion_date', $project?->expected_completion_date?->toDateString()) }}"></div>
+    <div @if($ovhEdit) hidden @endif class="field" style="grid-column:1/-1"><label>Project Manager(s)</label>
       @if($managers->isEmpty())<span class="form-context">No active Project Manager accounts yet. Add them under User Management.</span>
       @else<div class="lg-people" id="pmPicker">
         @if($managers->count() > 6)<input type="search" class="lg-people-search" placeholder="Search managers…">@endif
@@ -29,7 +31,7 @@
         box.addEventListener('change', count); count();
         if (q) q.addEventListener('input', () => rows.forEach(r => r.hidden = !r.dataset.search.includes(q.value.trim().toLowerCase()))); })();</script>
       @endif</div>
-    <label class="field" style="grid-column:1/-1;display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" name="is_company_overheads" value="1" style="width:16px;height:16px" @checked(old('is_company_overheads', $project?->is_company_overheads))> Company overheads, not a construction project (salaries, rent, statutory, subscriptions). Only the Director sees it, and it stays out of project totals.</label>
+    <label @if($ovhEdit) hidden @endif class="field" style="grid-column:1/-1;display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" name="is_company_overheads" value="1" style="width:16px;height:16px" @checked(old('is_company_overheads', $project?->is_company_overheads))> Company overheads, not a construction project (salaries, rent, statutory, subscriptions). Only the Director sees it, and it stays out of project totals.</label>
     <div class="field" style="grid-column:1/-1"><label for="notes">Notes</label><input id="notes" name="notes" value="{{ old('notes', $project?->notes) }}" maxlength="2000"></div>
   </div>
   @unless($project)

@@ -720,6 +720,20 @@ class RecordingModeTest extends TestCase
             ->assertDontSee('>Workers</a>', false)->assertDontSee('✓ Confirm')->assertDontSee('value="to_confirm"', false)
             ->assertDontSee('<label for="status">', false)->assertSee('Paid via')->assertSee('Total spend')->assertDontSee('data-deny-url', false);
         $this->actingAs($director)->get(route('ledger.overview', $office))->assertOk()->assertDontSee('Awaiting confirmation</th>', false);
+
+        // Office costs have no categories: whatever is posted, a line is filed under one category with no subcategory.
+        $this->actingAs($director)->get(route('ledger.expenses.create', $office))->assertOk()->assertSee('ovh-form');
+        $this->actingAs($director)->post(route('ledger.expenses.store', $office), $this->line($other, ['main_category' => 'materials', 'subcategory' => 'hardware', 'item_description' => 'Printer paper']));
+        $paper = ExpenseRequest::where('item_description', 'Printer paper')->sole();
+        $this->assertSame(['preliminaries_overheads', null], [$paper->main_category, $paper->subcategory]);
+        $this->actingAs($director)->get(route('ledger.expenses', $office))->assertOk()->assertDontSee('<label for="subcategory">', false)->assertDontSee('<th>Category</th>', false);
+        $this->actingAs($director)->get(route('ledger.structure', $office))->assertOk()->assertSee('Budget (TSh)')->assertDontSee('>Labour</span>', false);
+        $warnings = $this->actingAs($director)->get(route('director.projects.warnings', $office))->assertOk()->assertSee('All office costs')->assertDontSee('kpi_category');
+        $warnings->assertDontSee('<option value="to_confirm"', false);
+        $this->actingAs($director)->get(route('admin.projects.show', $office))->assertOk()->assertSee('Company Overheads Settings');
+        $this->actingAs($director)->put(route('admin.projects.update', $office), ['project_code' => $office->project_code, 'name' => 'Office costs', 'status' => 'active', 'location' => 'Head office', 'is_company_overheads' => '1'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(['Office costs', true], [$office->fresh()->name, (bool) $office->fresh()->is_company_overheads]);
         $this->actingAs($director)->get(route('ledger.to-confirm'))->assertOk()->assertDontSee($office->name);
 
         [$project, $phases] = $this->project();

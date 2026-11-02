@@ -34,7 +34,7 @@ class DirectorKpiService
      * project, one phase (with its subphases) and one main category.
      */
     public const RECORDING_METRICS = [
-        'spend' => ['label' => 'Recorded spend (ceiling)', 'unit' => 'money', 'direction' => 'at_most', 'basis' => 'period'],
+        'spend' => ['label' => 'Spend (ceiling)', 'unit' => 'money', 'direction' => 'at_most', 'basis' => 'period'],
         'paid_out' => ['label' => 'Money paid out (ceiling)', 'unit' => 'money', 'direction' => 'at_most', 'basis' => 'period'],
         'to_confirm' => ['label' => 'Amount still to confirm (ceiling)', 'unit' => 'money', 'direction' => 'at_most', 'basis' => 'current'],
         'budget_used_pct' => ['label' => 'Budget used, % of budget (ceiling)', 'unit' => 'percent', 'direction' => 'at_most', 'basis' => 'current'],

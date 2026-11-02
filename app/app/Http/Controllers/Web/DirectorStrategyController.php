@@ -56,6 +56,9 @@ class DirectorStrategyController extends Controller
         $projectWarnings = Features::recording()
             ? $warnings->evaluateLedger($ledger->project($project))
             : $warnings->evaluate($analytics->project($project, $today->startOfYear(), $today));
+        if ($project->is_company_overheads) {
+            $projectWarnings = array_values(array_filter($projectWarnings, fn ($warning) => $warning['rule'] === 'budget_used_pct'));
+        }
         $phases = (new PhaseTree($project->phases()->get()))->flatten();
         $rules = $warnings->rules($project->id);
         $groups = $this->grouped($kpis, DirectorKpiTarget::query()->where('project_id', $project->id)->with(['createdBy', 'phase'])

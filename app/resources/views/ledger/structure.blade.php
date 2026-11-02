@@ -11,6 +11,11 @@
   $categories = \App\Services\LedgerAnalyticsService::CATEGORIES;
   $colors = \App\Services\LedgerAnalyticsService::CATEGORY_COLORS;
   $short = ['materials' => 'Materials', 'labour_subcontracts' => 'Labour', 'logistics_equipment' => 'Logistics', 'preliminaries_overheads' => 'Prelims & Overheads'];
+  if ($groups) {
+      // Office costs have one budget per cost group (they are all filed under one category).
+      $categories = [\App\Services\ExpenseLedgerService::OVERHEADS_CATEGORY => 'Budget'];
+      $short = [\App\Services\ExpenseLedgerService::OVERHEADS_CATEGORY => 'Budget (TSh)'];
+  }
   $canEdit = auth()->user()->can('manage-project-structure', $project);
   $showSpend = auth()->user()->can('view-analytics', $project);
   $totalBudget = $money::sum($rows->where('depth', 1)->pluck('budget'));
@@ -27,7 +32,7 @@
 @if($showSpend)
 <div class="lg-cards">
   <div class="lg-card accent"><div class="k">Total budget</div><div class="v">TSh {{ $money::format($totalBudget) }}</div></div>
-  <div class="lg-card"><div class="k">Confirmed spend</div><div class="v">TSh {{ $money::format($totalRecorded) }}</div></div>
+  <div class="lg-card"><div class="k">{{ $groups ? 'Total spend' : 'Confirmed spend' }}</div><div class="v">TSh {{ $money::format($totalRecorded) }}</div></div>
   @php($used = (float) $totalBudget > 0 ? $money::percentage($totalRecorded, $totalBudget) : null)
   <div class="lg-card {{ $used !== null && (float) $used > 100 ? 'danger' : '' }}"><div class="k">Budget used</div><div class="v">{{ $used !== null ? $money::format($used).'%' : '—' }}</div>@if($used !== null)<div class="lg-meter"><span class="{{ (float) $used > 100 ? 'over' : ((float) $used >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $used) }}%"></span></div>@endif</div>
 </div>
@@ -36,7 +41,7 @@
 <form method="POST" action="{{ route('ledger.budget.save', $project) }}" id="budgetForm">@csrf</form>
 <div class="lg-scroll" style="max-height:none">
   <table class="lg-table lg-tree">
-    <thead><tr><th style="min-width:200px">{{ $word }}</th>@foreach($categories as $code => $label)<th class="amt"><span class="lg-cat" style="justify-content:flex-end" title="{{ $label }}"><i style="background:{{ $colors[$code] }}"></i>{{ $short[$code] }}</span></th>@endforeach<th style="min-width:170px">Total (incl. subphases)</th>@if($canEdit)<th></th>@endif</tr></thead>
+    <thead><tr><th style="min-width:200px">{{ $word }}</th>@foreach($categories as $code => $label)<th class="amt"><span class="lg-cat" style="justify-content:flex-end" title="{{ $label }}">@unless($groups)<i style="background:{{ $colors[$code] }}"></i>@endunless{{ $short[$code] }}</span></th>@endforeach<th style="min-width:170px">{{ $groups ? 'Total (incl. sub-groups)' : 'Total (incl. subphases)' }}</th>@if($canEdit)<th></th>@endif</tr></thead>
     <tbody>
     @forelse($rows as $row)
       @php($phase = $row['phase'])

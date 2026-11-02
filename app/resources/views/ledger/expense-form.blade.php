@@ -20,10 +20,12 @@
 @if($phases->isEmpty())<div class="flash error">This project has no phases yet. The Director adds them under @can('view-budget', $project)<a href="{{ route('ledger.structure', $project) }}">Phases &amp; Budget</a>@else Phases &amp; Budget @endcan.</div>@endif
 
 <form method="POST" action="{{ $line ? route('ledger.expenses.update', [$project, $line]) : route('ledger.expenses.store', $project) }}" class="lg-panel lg-form" id="expenseForm">@csrf @if($line) @method('PUT') @endif
+  @if($project->is_company_overheads)<input type="hidden" name="main_category" value="{{ \App\Services\ExpenseLedgerService::OVERHEADS_CATEGORY }}">@else
   <div class="lg-step" style="margin-top:0"><span>1</span> Main category</div>
   <div class="lg-cat-pick">@foreach($categories as $code => $label)<label><input type="radio" name="main_category" value="{{ $code }}" required @checked($value('main_category', request('worker') ? 'labour_subcontracts' : null) === $code)><i style="width:9px;height:9px;border-radius:50%;background:{{ $colors[$code] }}"></i>{{ $label }}</label>@endforeach</div>
+  @endif
 
-  <div class="lg-step"><span>2</span> {{ $project->is_company_overheads ? 'Cost group' : 'Phase' }} and date</div>
+  <div class="lg-step" @if($project->is_company_overheads) style="margin-top:0" @endif><span>{{ $project->is_company_overheads ? 1 : 2 }}</span> {{ $project->is_company_overheads ? 'Cost group' : 'Phase' }} and date</div>
   <div class="grid">
     <div class="field" style="grid-column:span 2"><label for="project_phase_id">{{ $project->is_company_overheads ? 'Cost group' : 'Phase / subphase' }} <span class="req">*</span></label><select id="project_phase_id" name="project_phase_id" required><option value="">Choose…</option>@foreach($phases as $node)@php($selected = (string) $value('project_phase_id') === (string) $node['phase']->id)<option value="{{ $node['phase']->id }}" @selected($selected) @disabled(! $node['leaf'] && ! $selected)>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}{{ $node['leaf'] ? '' : ' ▸' }}</option>@endforeach</select>
       <small class="form-context">Phases marked ▸ have subphases. Record the expense on the subphase.</small></div>
@@ -32,9 +34,9 @@
 
   <div class="lg-step"><span>3</span> Item</div>
   <div class="grid">
-    <div class="field" style="grid-column:span 2"><label for="item_description">Material / item name <span class="req">*</span></label><input id="item_description" name="item_description" list="itemSuggestions" maxlength="255" value="{{ $value('item_description') }}" placeholder="e.g. Cement, Sand, Binding wire, Fundi labour" required>
+    <div class="field" style="grid-column:span 2"><label for="item_description">{{ $project->is_company_overheads ? 'Item / description' : 'Material / item name' }} <span class="req">*</span></label><input id="item_description" name="item_description" list="itemSuggestions" maxlength="255" value="{{ $value('item_description') }}" placeholder="e.g. Cement, Sand, Binding wire, Fundi labour" required>
       <datalist id="itemSuggestions">@foreach($suggestions->flatten() as $suggestion)<option value="{{ $suggestion }}"></option>@endforeach</datalist></div>
-    <div class="field"><label for="subcategory">Subcategory (optional)</label><select id="subcategory" name="subcategory"><option value="">—</option>@foreach($subcategories->unique('code') as $sub)<option value="{{ $sub->code }}" @selected($value('subcategory') === $sub->code)>{{ $sub->label }}</option>@endforeach</select></div>
+    <div class="field" @if($project->is_company_overheads) hidden @endif><label for="subcategory">Subcategory (optional)</label><select id="subcategory" name="subcategory"><option value="">—</option>@foreach($subcategories->unique('code') as $sub)<option value="{{ $sub->code }}" @selected($value('subcategory') === $sub->code)>{{ $sub->label }}</option>@endforeach</select></div>
     <div class="field" id="workerField" style="grid-column:span 2"><label for="labour_agreement_id">Worker (labour)</label><select id="labour_agreement_id" name="labour_agreement_id"><option value="">— Not a registered worker —</option>@foreach($workers as $worker)<option value="{{ $worker->id }}" @selected((string) $value('labour_agreement_id', request('worker')) === (string) $worker->id)>{{ $worker->fundi_subcontractor }}@if((float) $worker->agreed_value > 0) · contract TSh {{ \App\Support\Money::format($worker->agreed_value) }}@endif</option>@endforeach</select>
       <small class="form-context">@can('view-workers', $project)Workers are registered under <a href="{{ route('ledger.workers', $project) }}">Workers</a>.@else New workers can be added from the entry form.@endcan</small></div>
     <div class="field" style="grid-column:1/-1"><label for="details">Description / notes</label><input id="details" name="details" maxlength="2000" value="{{ $value('details') }}" placeholder="Extra detail, e.g. size, where it was used"></div>

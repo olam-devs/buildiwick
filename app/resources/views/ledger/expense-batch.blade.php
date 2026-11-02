@@ -7,7 +7,7 @@
   $colors = \App\Services\LedgerAnalyticsService::CATEGORY_COLORS;
   $leafPhases = $phases->where('leaf', true);
   $defaultPhase = old('default_phase', request('phase', $leafPhases->count() === 1 ? $leafPhases->first()['phase']->id : ''));
-  $defaultCategory = old('default_category', request('worker') ? 'labour_subcontracts' : 'materials');
+  $defaultCategory = $project->is_company_overheads ? \App\Services\ExpenseLedgerService::OVERHEADS_CATEGORY : old('default_category', request('worker') ? 'labour_subcontracts' : 'materials');
   $oldRows = old('rows', [[]]);
   $config = [
       'suggestions' => $suggestions,
@@ -46,6 +46,10 @@
   .rb-total{font-size:16px;font-weight:700}
   @media(max-width:900px){.rb-head{grid-template-columns:1fr}}
   .rb-more-toggle{display:none}
+  /* Company overheads: costs are organised by cost group only (no category or subcategory). */
+  .ovh-form .rb-cat-th,.ovh-form .rb-sub-th,.ovh-form .rb-table td.rb-catcell,.ovh-form .rb-table td.rb-subcell{display:none!important}
+  .ovh-form .rb-head{grid-template-columns:150px 1fr}
+  @media(max-width:760px){.ovh-form .rb-table td.rb-phasecell{display:block;grid-column:1/-1}.ovh-form .rb-head{grid-template-columns:1fr}}
   .rb-remove-label{display:none}
   @media(max-width:760px){.rb-remove-label{display:inline}}
   @media(max-width:760px){
@@ -74,17 +78,17 @@
 </style>
 
 <div class="lg-head">
-  <div><h2>Record Expense</h2><p>{{ $project->name }} · add one or many items. Each row follows the date, category and phase chosen above unless you change it on the row.</p></div>
+  <div><h2>Record Expense</h2><p>{{ $project->name }} · add one or many items. Each row follows the date{{ $project->is_company_overheads ? ' and cost group' : ', category and phase' }} chosen above unless you change it on the row.</p></div>
   <div class="lg-actions">@if($entryMode ?? false)@if($canChangeProject ?? true)<a class="btn btn-ghost" href="{{ route('entry.index') }}">Change project</a>@endif @else<a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Back to Expenditure</a>@endif</div>
 </div>
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach(collect($errors->all())->unique()->take(12) as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 @if($leafPhases->isEmpty())<div class="flash error">This project has no phases yet. @if($entryMode ?? false)Ask the Director to add them.@else The Director adds them under <a href="{{ route('ledger.structure', $project) }}">Phases &amp; Budget</a>.@endif</div>@endif
 
-<form method="POST" action="{{ route('ledger.expenses.store', $project) }}" id="batchForm">@csrf
+<form method="POST" action="{{ route('ledger.expenses.store', $project) }}" id="batchForm" @class(['ovh-form' => $project->is_company_overheads])>@csrf
   <section class="lg-panel" style="margin-bottom:12px">
     <div class="rb-head">
       <div class="field" style="margin:0"><label for="expense_date">Date <span class="req">*</span></label><input type="date" id="expense_date" name="expense_date" value="{{ old('expense_date', now()->toDateString()) }}" max="{{ now()->toDateString() }}" required></div>
-      <div class="field" style="margin:0"><label for="default_category">Main category <span class="req">*</span></label>
+      <div class="field" style="margin:0" @if($project->is_company_overheads) hidden @endif><label for="default_category">Main category <span class="req">*</span></label>
         <select id="default_category" name="default_category">@foreach($categories as $code => $label)<option value="{{ $code }}" @selected($defaultCategory === $code)>{{ $label }}</option>@endforeach</select></div>
       <div class="field" style="margin:0"><label for="default_phase">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }} <span class="req">*</span></label>
         <select id="default_phase" name="default_phase"><option value="">Choose…</option>@foreach($phases as $node)<option value="{{ $node['phase']->id }}" @selected((string) $defaultPhase === (string) $node['phase']->id) @disabled(! $node['leaf'])>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}{{ $node['leaf'] ? '' : ' ▸' }}</option>@endforeach</select></div>
@@ -94,7 +98,7 @@
   <section class="lg-panel" style="padding:0;overflow:hidden">
     <div style="overflow:auto">
       <table class="rb-table">
-        <thead><tr><th></th><th style="width:150px">Category</th><th style="width:170px">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:150px">Subcategory</th><th style="width:80px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
+        <thead><tr><th></th><th style="width:150px" class="rb-cat-th">Category</th><th style="width:170px">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:150px" class="rb-sub-th">Subcategory</th><th style="width:80px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -196,10 +200,10 @@
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="idx"></td>
       <td class="rb-cat rb-catcell" data-label="Category"><select data-f="cat" name="rows[${i}][main_category]">${Object.entries(C.categories).map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('')}</select></td>
-      <td class="rb-more" data-label="${C.phaseWord}"><select data-f="phase" name="rows[${i}][project_phase_id]">${phaseOptions}</select></td>
+      <td class="rb-more rb-phasecell" data-label="${C.phaseWord}"><select data-f="phase" name="rows[${i}][project_phase_id]">${phaseOptions}</select></td>
       <td class="rb-item" data-label="Item"><input data-f="item" name="rows[${i}][item_description]" maxlength="255" value="${esc(data.item_description)}" autocomplete="off">
           <div class="worker-wrap" style="margin-top:5px"><select name="rows[${i}][labour_agreement_id]">${workerOptions(data.labour_agreement_id ?? (i === 0 ? C.presetWorker : ''))}</select></div></td>
-      <td class="rb-more" data-label="Subcategory"><select data-f="sub" name="rows[${i}][subcategory]" data-value="${esc(data.subcategory)}"></select></td>
+      <td class="rb-more rb-subcell" data-label="Subcategory"><select data-f="sub" name="rows[${i}][subcategory]" data-value="${esc(data.subcategory)}"></select></td>
       <td data-label="Qty"><input data-f="qty" class="num" type="number" step="0.01" min="0" name="rows[${i}][quantity]" value="${esc(data.quantity ?? '1')}"></td>
       <td data-label="Unit"><select data-f="unit" name="rows[${i}][unit]" data-value="${esc(data.unit)}"></select></td>
       <td data-label="Unit cost (TSh)"><input data-f="cost" class="num" type="number" step="0.01" min="0" name="rows[${i}][unit_cost]" value="${esc(data.unit_cost)}"></td>

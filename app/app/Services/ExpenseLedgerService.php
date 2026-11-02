@@ -45,8 +45,15 @@ class ExpenseLedgerService
     /**
      * @param  array{expense_date: string, project_phase_id: int, main_category: string, subcategory?: ?string, item_description: string, details?: ?string, quantity?: mixed, unit?: ?string, unit_cost?: mixed, total_amount?: mixed, invoice_receipt_no?: ?string, labour_agreement_id?: ?int, status?: string, payment_date?: ?string, payment_method?: ?string, transaction_reference?: ?string}  $data
      */
+    /** Office costs are organised by cost group, so every overheads line is filed under one category. */
+    public const OVERHEADS_CATEGORY = 'preliminaries_overheads';
+
     public function record(Project $project, array $data, User $actor): ExpenseRequest
     {
+        if ($project->is_company_overheads) {
+            $data['main_category'] = self::OVERHEADS_CATEGORY;
+            $data['subcategory'] = null;
+        }
         Gate::forUser($actor)->authorize('record-expense', $project);
         $markPaid = ($data['status'] ?? 'to_confirm') === 'paid';
         if ($markPaid && ! self::canMarkPaid($actor)) {
@@ -125,6 +132,10 @@ class ExpenseLedgerService
     /** Edits a line that has no payment yet. */
     public function update(ExpenseRequest $line, array $data, User $actor): ExpenseRequest
     {
+        if ($line->project?->is_company_overheads) {
+            $data['main_category'] = self::OVERHEADS_CATEGORY;
+            $data['subcategory'] = null;
+        }
         Gate::forUser($actor)->authorize('edit-ledger-line', $line);
         [$quantity, $unitCost, $total] = $this->amounts($data);
 
