@@ -216,7 +216,9 @@
   <aside class="sidebar">
     <div class="brand"><img class="mark-img" src="{{ asset('images/buildiwick-mark-160.png') }}" alt="Buildiwick logo"><span>Buildiwick</span></div>
     <nav class="navgroup">
-    @if(\App\Support\Features::recording() && auth()->check() && (auth()->user()->hasRole('admin') || in_array(auth()->user()->role?->name, ['project_manager', 'accounts', 'accountant'], true)))
+    @if(\App\Support\Features::recording() && auth()->check() && auth()->user()->role?->name === 'data_entry')
+      @include('partials.entry-nav')
+    @elseif(\App\Support\Features::recording() && auth()->check() && (auth()->user()->hasRole('admin') || in_array(auth()->user()->role?->name, ['project_manager', 'accounts', 'accountant'], true)))
       @include('partials.recording-nav')
     @else
       @if($workspaceProject ?? null)

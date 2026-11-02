@@ -1,7 +1,7 @@
 {{-- Signed-in user's menu (top right): who is signed in, the theme switch and Sign out. --}}
 @php
   $me = auth()->user();
-  $roleNames = ['director' => 'Director', 'admin' => 'Director', 'project_manager' => 'Project Manager', 'accounts' => 'Accounts', 'accountant' => 'Accounts'];
+  $roleNames = ['director' => 'Director', 'admin' => 'Director', 'project_manager' => 'Project Manager', 'accounts' => 'Accounts', 'accountant' => 'Accounts', 'data_entry' => 'Data Entry'];
   $initials = collect(preg_split('/\s+/', trim(preg_replace('/\(.*?\)/', '', $me->name))))->filter()->take(2)->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))->join('');
 @endphp
 <details class="profile">

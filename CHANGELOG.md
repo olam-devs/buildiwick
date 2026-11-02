@@ -2,6 +2,21 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-02 — Data Entry Role
+
+- **New role "Data Entry"** (`roles.data_entry`; added by migration and `RoleSeeder`): someone who only enters expenses, so the client doesn't have to use the rest of the system.
+  - After signing in they land on **New Entry** (`DataEntryController`, `/entry`): their projects as large buttons with search.
+  - Choosing a project opens the multi-row Record Expense form, with "Change project" instead of the register link.
+  - Below the form, **Entered today** lists their own lines with Edit and Delete.
+  - The sidebar shows only New Entry and the project being entered.
+- **What they can and can't do.** Role default permission: `record_expenses` only.
+  - They can't open the register, Overview, Phases & Budget, Workers or the projects list (`view-ledger` and `view-budget` exclude the role).
+  - Their lines wait for Accounts as "To confirm".
+  - They see only the projects the Director assigns in User Management (all-projects is off by default).
+- **Same-day corrections.** `edit-ledger-line` for Data Entry allows only their own lines, created today, still not denied, and before any payment. After that, a PM or the Director corrects the line and Accounts can deny it. Every edit and delete is in the project log.
+- **"+ Add new worker…"** in the worker dropdown of labour rows (`ledger.workers.quick`, for anyone who can record on the project). It adds a fundi by name and kind of work, reuses an existing worker with the same name, and selects it at once. Contract value and details stay with the PM or Director under Workers.
+- Full suite: 193 tests.
+
 ## 2026-10-30 — Always-Visible Account Access, Theme Switch on the Top Bar
 
 - **User Management: Account access is two always-visible choices**, **● Active** (can sign in) and **○ Inactive** (cannot sign in; history is kept), coloured green and red, instead of a dropdown.
