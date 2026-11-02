@@ -15,6 +15,7 @@ class RoleSeeder extends Seeder
             ['name' => 'estimator_qs', 'description' => 'Estimator / QS — historical pricing only, no cash or profit'],
             ['name' => 'project_manager', 'description' => 'Project Manager — assigned projects, reviews and approves expenses'],
             ['name' => 'site_operator', 'description' => 'Site Operator — write-only expense entry, assigned projects'],
+            ['name' => 'data_entry', 'description' => 'Data Entry — picks a project and enters expenses on one form; Accounts confirms them'],
         ];
 
         foreach ($roles as $role) {

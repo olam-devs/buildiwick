@@ -57,6 +57,7 @@ class AuthController extends Controller
                 'admin' => 'ledger.index',
                 'director' => 'director.index',
                 'accounts', 'accountant' => 'ledger.to-confirm',
+                'data_entry' => 'entry.index',
                 'project_manager' => 'ledger.index',
                 default => null,
             };

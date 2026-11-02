@@ -48,10 +48,10 @@
 
 <div class="lg-head">
   <div><h2>Record Expense</h2><p>{{ $project->name }} · add one or many items. Each row follows the date, category and phase chosen above unless you change it on the row.</p></div>
-  <div class="lg-actions"><a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Back to Expenditure</a></div>
+  <div class="lg-actions">@if($entryMode ?? false)<a class="btn btn-ghost" href="{{ route('entry.index') }}">Change project</a>@else<a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Back to Expenditure</a>@endif</div>
 </div>
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach(collect($errors->all())->unique()->take(12) as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
-@if($leafPhases->isEmpty())<div class="flash error">This project has no phases yet. The Director adds them under <a href="{{ route('ledger.structure', $project) }}">Phases &amp; Budget</a>.</div>@endif
+@if($leafPhases->isEmpty())<div class="flash error">This project has no phases yet. @if($entryMode ?? false)Ask the Director to add them.@else The Director adds them under <a href="{{ route('ledger.structure', $project) }}">Phases &amp; Budget</a>.@endif</div>@endif
 
 <form method="POST" action="{{ route('ledger.expenses.store', $project) }}" id="batchForm">@csrf
   <section class="lg-panel" style="margin-bottom:12px">
@@ -99,7 +99,7 @@
       <input type="hidden" name="status" value="to_confirm">
       <p class="form-context" style="margin:0">Lines are saved as <b>To confirm</b>; Accounts confirms the payments.</p>
     @endif
-    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-primary" type="submit" id="saveButton">Save Expenses</button><button class="btn btn-ghost" type="submit" name="after" value="another">Save &amp; Record More</button></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-primary" type="submit" id="saveButton">Save Expenses</button>@unless($entryMode ?? false)<button class="btn btn-ghost" type="submit" name="after" value="another">Save &amp; Record More</button>@endunless</div>
   </section>
 </form>
 
@@ -127,7 +127,28 @@
     const known = C.units.some(u => u.code === value);
     return (value && !known ? `<option value="${esc(value)}" selected>${esc(value)}</option>` : '') + `<optgroup label="Usual">${top.map(opt).join('')}</optgroup><optgroup label="All units">${rest.map(opt).join('')}</optgroup>`;
   };
-  const workerOptions = value => `<option value="">— Worker —</option>` + C.workers.map(w => `<option value="${w.id}" ${String(w.id) === String(value) ? 'selected' : ''}>${esc(w.name)}</option>`).join('');
+  const workerOptions = value => `<option value="">— Worker —</option>` + C.workers.map(w => `<option value="${w.id}" ${String(w.id) === String(value) ? 'selected' : ''}>${esc(w.name)}</option>`).join('') + `<option value="__new">+ Add new worker…</option>`;
+  // "+ Add new worker…": register a fundi by name (and kind of work) without leaving the form.
+  document.addEventListener('change', async e => {
+    const select = e.target;
+    if (!select.matches || !select.matches('select[name$="[labour_agreement_id]"]') || select.value !== '__new') return;
+    const name = (window.prompt('New worker (fundi) name:') || '').trim();
+    if (!name) { select.value = ''; return; }
+    const work = (window.prompt('Kind of work (optional), e.g. Mason, Plumber:') || '').trim();
+    try {
+      const response = await fetch({{ Js::from(route('ledger.workers.quick', $project)) }}, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('#batchForm input[name=_token]').value},
+        body: JSON.stringify({fundi_subcontractor: name, scope_of_work: work}),
+      });
+      if (!response.ok) throw new Error();
+      const worker = await response.json();
+      if (!C.workers.some(w => String(w.id) === String(worker.id))) C.workers.push({id: worker.id, name: worker.name});
+      document.querySelectorAll('select[name$="[labour_agreement_id]"]').forEach(s => { const keep = s === select ? worker.id : s.value; s.innerHTML = workerOptions(keep); });
+    } catch (err) {
+      window.alert('The worker could not be added. Please try again.');
+      select.value = '';
+    }
+  });
 
   const applyCategory = (tr, cat, keepValues) => {
     tr.className = rowClass[cat] || '';
@@ -194,4 +215,5 @@
   document.getElementById('batchForm').addEventListener('submit', e => { const bad = [...body.children].find(tr => tr.querySelector('[data-f=item]').value.trim() && !tr.querySelector('[data-f=phase]').value); if (bad) { e.preventDefault(); bad.querySelector('[data-f=phase]').focus(); alert('Choose a phase for every item.'); } });
 })();
 </script>
+@if($entryMode ?? false)@include('entry._today', ['today' => $today])@endif
 @endsection

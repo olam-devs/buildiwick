@@ -4,6 +4,7 @@ use App\Http\Controllers\Web\AccountantController;
 use App\Http\Controllers\Web\AdminUserController;
 use App\Http\Controllers\Web\AuthController;
 use App\Http\Controllers\Web\DashboardController;
+use App\Http\Controllers\Web\DataEntryController;
 use App\Http\Controllers\Web\DirectorController;
 use App\Http\Controllers\Web\DirectorStrategyController;
 use App\Http\Controllers\Web\EntryController;
@@ -62,6 +63,9 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::delete('/ledger/projects/{project}/phases/{phase}', [LedgerController::class, 'destroyPhase'])->name('ledger.phases.destroy');
     Route::post('/ledger/projects/{project}/budget', [LedgerController::class, 'saveBudget'])->name('ledger.budget.save');
     Route::get('/ledger/projects/{project}/workers', [LedgerController::class, 'workers'])->name('ledger.workers');
+    Route::post('/ledger/projects/{project}/workers/quick', [LedgerController::class, 'quickWorker'])->name('ledger.workers.quick');
+    Route::get('/entry', [DataEntryController::class, 'index'])->name('entry.index');
+    Route::get('/entry/projects/{project}', [DataEntryController::class, 'form'])->name('entry.form');
     Route::post('/ledger/projects/{project}/workers', [LedgerController::class, 'storeWorker'])->name('ledger.workers.store');
     Route::put('/ledger/projects/{project}/workers/{worker}', [LedgerController::class, 'updateWorker'])->name('ledger.workers.update');
     Route::get('/director', [DirectorController::class, 'index'])->name('director.index');

@@ -195,7 +195,7 @@ class LedgerController extends Controller
             return $this->storeRows($request, $project, $ledger);
         }
         $line = $ledger->record($project, $this->validated($request, $project), $request->user());
-        $next = $request->input('after') === 'another' ? route('ledger.expenses.create', $project) : route('ledger.expenses', $project);
+        $next = $this->afterSave($request, $project);
 
         return redirect($next)->with('success', $line->request_code.' recorded: '.$line->item_description.' · TSh '.Money::format($line->total_amount).'.');
     }
@@ -242,7 +242,7 @@ class LedgerController extends Controller
             'payment_method' => $header['payment_method'] ?? null, 'transaction_reference' => $header['transaction_reference'] ?? null,
         ], $request->user())));
         $total = LedgerAnalyticsService::money((int) $lines->sum(fn ($line) => LedgerAnalyticsService::cents($line->total_amount)));
-        $next = $request->input('after') === 'another' ? route('ledger.expenses.create', $project) : route('ledger.expenses', $project);
+        $next = $this->afterSave($request, $project);
 
         return redirect($next)->with('success', $lines->count().' line(s) recorded ('.$lines->first()->request_code.($lines->count() > 1 ? ' – '.$lines->last()->request_code : '').') · TSh '.Money::format($total).'.');
     }
@@ -261,7 +261,45 @@ class LedgerController extends Controller
         $this->owned($project, $line);
         $line = $ledger->update($line, $this->validated($request, $project, editing: true), $request->user());
 
-        return redirect()->route('ledger.expenses', $project)->with('success', $line->request_code.' updated.');
+        return redirect($request->user()->role?->name === 'data_entry' ? route('entry.form', $project) : route('ledger.expenses', $project))
+            ->with('success', $line->request_code.' updated.');
+    }
+
+    /** Where a save goes next: Data Entry back to its form; others to the register or another form. */
+    private function afterSave(Request $request, Project $project): string
+    {
+        if ($request->user()->role?->name === 'data_entry') {
+            return route('entry.form', $project);
+        }
+
+        return $request->input('after') === 'another' ? route('ledger.expenses.create', $project) : route('ledger.expenses', $project);
+    }
+
+    /**
+     * Adds a worker by name (and kind of work) from the expense form, so a new fundi's payment can be
+     * entered at once. The PM or Director completes the contract details later under Workers.
+     */
+    public function quickWorker(Request $request, Project $project)
+    {
+        $this->authorize('record-expense', $project);
+        $data = $request->validate([
+            'fundi_subcontractor' => ['required', 'string', 'max:150'],
+            'scope_of_work' => ['nullable', 'string', 'max:255'],
+        ]);
+        $name = trim(preg_replace('/\s+/', ' ', $data['fundi_subcontractor']));
+        $worker = LabourAgreement::query()->where('project_id', $project->id)->whereRaw('lower(fundi_subcontractor) = ?', [mb_strtolower($name)])->first()
+            ?? LabourAgreement::create([
+                'agreement_code' => 'WRK-'.strtoupper(substr(md5(uniqid('', true)), 0, 8)),
+                'project_id' => $project->id,
+                'fundi_subcontractor' => $name,
+                'scope_of_work' => $data['scope_of_work'] ?? null,
+                'agreement_date' => now()->toDateString(),
+                'agreed_value' => 0,
+                'status' => 'active',
+                'created_by' => $request->user()->id,
+            ]);
+
+        return response()->json(['id' => $worker->id, 'name' => $worker->fundi_subcontractor]);
     }
 
     public function destroy(Request $request, Project $project, ExpenseRequest $line, ExpenseLedgerService $ledger)
@@ -593,6 +631,8 @@ class LedgerController extends Controller
     private function owned(Project $project, ExpenseRequest $line): void
     {
         abort_unless((int) $line->project_id === (int) $project->id, 404);
-        $this->authorize('view-ledger', $project);
+        // Data Entry has no register access but may fix its own lines; each action checks its own gate as well.
+        $user = request()->user();
+        abort_unless($user->can('view-ledger', $project) || $user->can('record-expense', $project), 403);
     }
 }

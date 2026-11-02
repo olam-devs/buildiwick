@@ -24,6 +24,8 @@ class Access
         // A staff accountant only checks and confirms what PMs enter; the Director covers everything else.
         'accounts' => ['mark_paid', 'deny_expenses'],
         'accountant' => ['mark_paid', 'deny_expenses'],
+        // Data Entry only fills the entry form; the entries wait for Accounts to confirm.
+        'data_entry' => ['record_expenses'],
     ];
 
     /** Roles that see every project unless the Director limits them. */

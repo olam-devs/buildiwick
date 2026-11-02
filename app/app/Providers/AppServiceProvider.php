@@ -109,11 +109,22 @@ class AppServiceProvider extends ServiceProvider
         // Recording-mode ledger: what a user may do comes from their permissions (role defaults,
         // adjustable per user in User Management) and which projects they may open (all projects, or
         // the ones assigned to them). Directors pass every check through the Admin bypass above.
-        $ledgerUser = fn (User $user) => in_array($user->role?->name, ['project_manager', 'accounts', 'accountant'], true);
-        Gate::define('view-ledger', fn (User $user, Project $project) => $ledgerUser($user) && $user->canAccessProject($project));
+        $ledgerUser = fn (User $user) => in_array($user->role?->name, ['project_manager', 'accounts', 'accountant', 'data_entry'], true);
+        // Data Entry fills the entry form only: no registers, budgets or workers pages.
+        $dataEntry = fn (User $user) => $user->role?->name === 'data_entry';
+        Gate::define('view-ledger', fn (User $user, Project $project) => $ledgerUser($user) && ! $dataEntry($user) && $user->canAccessProject($project));
         Gate::define('record-expense', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('record_expenses') && $user->canAccessProject($project));
-        Gate::define('edit-ledger-line', fn (User $user, ExpenseRequest $line) => $ledgerUser($user) && $user->canAccessProject($line->project_id)
-            && ($user->permits('edit_any_line') || ($user->permits('record_expenses') && (int) $line->requested_by === (int) $user->id)));
+        Gate::define('edit-ledger-line', function (User $user, ExpenseRequest $line) use ($ledgerUser, $dataEntry): bool {
+            if (! $ledgerUser($user) || ! $user->canAccessProject($line->project_id)) {
+                return false;
+            }
+            // Data Entry may fix or remove only their own lines, the same day, before Accounts confirms.
+            if ($dataEntry($user)) {
+                return (int) $line->requested_by === (int) $user->id && $line->created_at?->isToday() && $line->status === 'approved';
+            }
+
+            return $user->permits('edit_any_line') || ($user->permits('record_expenses') && (int) $line->requested_by === (int) $user->id);
+        });
         Gate::define('confirm-payments', fn (User $user, ?Project $project = null) => $ledgerUser($user) && $user->permits('mark_paid') && (! $project || $user->canAccessProject($project)));
         Gate::define('deny-expense', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('deny_expenses') && $user->canAccessProject($project));
         Gate::define('manage-workers', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('manage_workers') && $user->canAccessProject($project));
@@ -121,7 +132,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('export-ledger', fn (User $user, Project $project) => $ledgerUser($user) && $user->permits('export') && $user->canAccessProject($project));
         // Totals and analytics are sensitive: only users with "See totals & analytics" (and the Director).
         Gate::define('view-analytics', fn (User $user, ?Project $project = null) => $ledgerUser($user) && $user->permits('view_analytics') && (! $project || $user->canAccessProject($project)));
-        Gate::define('view-budget', fn (User $user, Project $project) => $ledgerUser($user) && $user->canAccessProject($project)
+        Gate::define('view-budget', fn (User $user, Project $project) => $ledgerUser($user) && ! $dataEntry($user) && $user->canAccessProject($project)
             && ($user->permits('view_analytics') || $user->permits('manage_phases_budget') || $user->permits('record_expenses')));
         Gate::define('view-workers', fn (User $user, Project $project) => $ledgerUser($user) && $user->canAccessProject($project)
             && ($user->permits('manage_workers') || $user->permits('view_analytics')));

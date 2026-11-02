@@ -32,7 +32,7 @@ class RecordingModeTest extends TestCase
         Carbon::setTestNow('2026-10-30 10:00:00');
         config(['buildiwick.mode' => 'recording', 'buildiwick.features' => ['client_billing' => false, 'estimates' => false, 'site_operator' => false, 'approvals' => false]]);
         $this->seed(LookupSeeder::class);
-        foreach (['director', 'accounts', 'project_manager', 'estimator_qs', 'site_operator'] as $role) {
+        foreach (['director', 'accounts', 'project_manager', 'estimator_qs', 'site_operator', 'data_entry'] as $role) {
             Role::firstOrCreate(['name' => $role], ['description' => $role]);
         }
     }
@@ -556,6 +556,61 @@ class RecordingModeTest extends TestCase
         $line = ExpenseRequest::where('item_description', 'Sand')->sole();
         $this->actingAs($director)->delete(route('ledger.expenses.destroy', [$project, $line]))->assertRedirect();
         $this->actingAs($director)->get(route('director.index', ['range' => 'this_year']))->assertOk()->assertSee('920,000.00')->assertDontSee('960,000.00');
+    }
+
+    public function test_data_entry_only_picks_a_project_and_enters_expenses(): void
+    {
+        [$project, $phases] = $this->project();
+        [$other] = $this->project('BWG-TST-B-2026-001');
+        $clerk = $this->user('data_entry', $project);
+
+        $this->actingAs($clerk)->get('/')->assertRedirect(route('entry.index'));
+        $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee($project->name)->assertDontSee($other->name)
+            ->assertDontSee('>Expenditure</a>', false)->assertDontSee('Confirmed spend');
+        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('Change project')->assertSee('Entered today');
+        $this->actingAs($clerk)->get(route('entry.form', $other))->assertForbidden();
+        foreach (['ledger.expenses', 'ledger.overview', 'ledger.structure', 'ledger.workers'] as $page) {
+            $this->actingAs($clerk)->get(route($page, $project))->assertForbidden();
+        }
+        $this->actingAs($clerk)->get(route('ledger.index'))->assertForbidden();
+
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), ['expense_date' => '2026-10-29', 'status' => 'to_confirm',
+            'rows' => [['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Cement', 'quantity' => '10', 'unit_cost' => '18000']]])
+            ->assertRedirect(route('entry.form', $project));
+        $line = ExpenseRequest::query()->sole();
+        $this->assertSame(['unpaid', (int) $clerk->id], [$line->payment_status, (int) $line->requested_by]);
+        $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee($line->request_code)->assertSee('To confirm');
+        $this->actingAs($this->user('accounts'))->get(route('ledger.expenses', [$project, 'status' => 'to_confirm']))->assertOk()->assertSee('Cement');
+    }
+
+    public function test_data_entry_fixes_own_lines_only_the_same_day_and_adds_workers_by_name(): void
+    {
+        [$project, $phases] = $this->project();
+        $clerk = $this->user('data_entry', $project);
+        $pm = $this->user('project_manager', $project);
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), $this->line($phases[0]));
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'PM line']));
+        [$own, $pmLine] = ExpenseRequest::query()->orderBy('id')->get()->all();
+
+        $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $own]))->assertOk()->assertSee('Back to entry');
+        $this->actingAs($clerk)->put(route('ledger.expenses.update', [$project, $own]), $this->line($phases[0], ['unit_cost' => '24000']))->assertRedirect(route('entry.form', $project));
+        $this->assertSame('960000.00', (string) $own->fresh()->total_amount);
+        $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $pmLine]))->assertForbidden();
+
+        Carbon::setTestNow('2026-10-31 09:00:00');
+        $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $own]))->assertForbidden();
+        $this->actingAs($clerk)->delete(route('ledger.expenses.destroy', [$project, $own]))->assertForbidden();
+        Carbon::setTestNow('2026-10-30 10:00:00');
+        $this->actingAs($clerk)->delete(route('ledger.expenses.destroy', [$project, $own]))->assertRedirect();
+        $this->assertNull(ExpenseRequest::find($own->id));
+
+        $first = $this->actingAs($clerk)->postJson(route('ledger.workers.quick', $project), ['fundi_subcontractor' => 'Juma  Mason', 'scope_of_work' => 'Mason'])->assertOk()->json();
+        $again = $this->actingAs($clerk)->postJson(route('ledger.workers.quick', $project), ['fundi_subcontractor' => 'juma mason'])->assertOk()->json();
+        $this->assertSame([$first['id'], 'Juma Mason'], [$again['id'], $first['name']]);
+        $this->assertSame(1, LabourAgreement::count());
+        [$other] = $this->project('BWG-TST-B-2026-001');
+        $this->actingAs($clerk)->postJson(route('ledger.workers.quick', $other), ['fundi_subcontractor' => 'X'])->assertForbidden();
+        $this->actingAs($this->user('director'))->get(route('admin.users.create'))->assertOk()->assertSee('Data Entry');
     }
 
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
