@@ -29,17 +29,17 @@
 
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 
-<div class="lg-chips">
+@unless($ovh)<div class="lg-chips">
   <a class="lg-chip {{ empty($filters['category']) ? 'on' : '' }}" href="{{ $query(['category' => null]) }}">All categories</a>
   @foreach($categories as $code => $label)<a class="lg-chip {{ ($filters['category'] ?? '') === $code ? 'on' : '' }}" href="{{ $query(['category' => $code]) }}"><i style="background:{{ $colors[$code] }}"></i>{{ $label }}</a>@endforeach
-</div>
+</div>@endunless
 
 <form method="GET" class="lg-filters" id="filters">
   @if(!empty($filters['category']))<input type="hidden" name="category" value="{{ $filters['category'] }}">@endif
   <div class="field" style="min-width:200px;flex:1"><label for="q">Search</label><input type="search" id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Item, ID, receipt no." autocomplete="off"></div>
   <div class="field"><label for="phase">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</label><select id="phase" name="phase"><option value="">{{ $project->is_company_overheads ? 'All cost groups' : 'All phases' }}</option>@foreach($tree->flatten() as $node)<option value="{{ $node['phase']->id }}" @selected((string) ($filters['phase'] ?? '') === (string) $node['phase']->id)>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}</option>@endforeach</select></div>
   @unless($ovh)  <div class="field"><label for="status">Status</label><select id="status" name="status"><option value="">Any</option>@foreach(($project->is_company_overheads ? ['paid' => 'Paid', 'denied' => 'Denied'] : ['to_confirm' => 'To confirm', 'part_paid' => 'Part paid', 'paid' => 'Paid', 'denied' => 'Denied']) as $code => $label)<option value="{{ $code }}" @selected(($filters['status'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>@endunless
-  <div class="field"><label for="subcategory">Subcategory</label><select id="subcategory" name="subcategory"><option value="">Any</option>@foreach($subcategories as $code => $label)<option value="{{ $code }}" @selected(($filters['subcategory'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
+  @unless($ovh)  <div class="field"><label for="subcategory">Subcategory</label><select id="subcategory" name="subcategory"><option value="">Any</option>@foreach($subcategories as $code => $label)<option value="{{ $code }}" @selected(($filters['subcategory'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>@endunless
   @if($workers->isNotEmpty() && ! $ovh)<div class="field"><label for="worker">Worker</label><select id="worker" name="worker"><option value="">Any</option>@foreach($workers as $id => $name)<option value="{{ $id }}" @selected((string) ($filters['worker'] ?? '') === (string) $id)>{{ $name }}</option>@endforeach</select></div>@endif
   <div class="field" style="min-width:135px"><label for="from">From</label><input type="date" id="from" name="from" value="{{ $filters['from'] ?? '' }}"></div>
   <div class="field" style="min-width:135px"><label for="to">To</label><input type="date" id="to" name="to" value="{{ $filters['to'] ?? '' }}"></div>
@@ -60,14 +60,14 @@
 
 <div class="lg-scroll">
   <table class="lg-table lg-cards-sm">
-    <thead><tr>@if($bulk)<th class="lg-check"><input type="checkbox" id="checkAll" aria-label="Select all lines on this page"></th>@endif<th>ID / Date</th><th>Category</th><th>Item / Description</th><th>{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th class="amt">Qty</th><th class="amt">Unit Cost</th><th class="amt">Total</th><th class="amt">{{ $denied ? 'Denied' : ($ovh ? 'Paid via' : 'Paid') }}</th><th></th></tr></thead>
+    <thead><tr>@if($bulk)<th class="lg-check"><input type="checkbox" id="checkAll" aria-label="Select all lines on this page"></th>@endif<th>ID / Date</th>@unless($ovh)<th>Category</th>@endunless<th>Item / Description</th><th>{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th class="amt">Qty</th><th class="amt">Unit Cost</th><th class="amt">Total</th><th class="amt">{{ $denied ? 'Denied' : ($ovh ? 'Paid via' : 'Paid') }}</th><th></th></tr></thead>
     <tbody>
     @forelse($lines as $line)
       @php($status = $line->ledger_status ?? $line->payment_status)
       <tr title="Recorded by {{ $line->requestedBy?->name ?? '—' }}">
         @if($bulk)<td class="lg-check" data-label="Select"><input type="checkbox" class="rowCheck" value="{{ $line->id }}" aria-label="Select {{ $line->request_code }}" data-code="{{ $line->request_code }}" data-item="{{ \Illuminate\Support\Str::limit($line->item_description, 60) }}" data-open="{{ $status === 'paid' ? '0' : $line->approved_outstanding_amount }}" data-receipt="{{ $line->invoice_receipt_no }}"></td>@endif
         <td data-label="ID / Date" style="white-space:nowrap"><span class="code">{{ $line->request_code }}</span><span class="muted">{{ $line->requested_at?->format('d M Y') }}</span></td>
-        <td data-label="Category" style="min-width:140px"><span class="lg-cat"><i style="background:{{ $colors[$line->main_category] ?? '#999' }}"></i>{{ $categories[$line->main_category] ?? $line->main_category }}</span>@if($line->subcategory)<span class="muted">{{ $subcategories[$line->subcategory] ?? $line->subcategory }}</span>@endif</td>
+        @unless($ovh)<td data-label="Category" style="min-width:140px"><span class="lg-cat"><i style="background:{{ $colors[$line->main_category] ?? '#999' }}"></i>{{ $categories[$line->main_category] ?? $line->main_category }}</span>@if($line->subcategory)<span class="muted">{{ $subcategories[$line->subcategory] ?? $line->subcategory }}</span>@endif</td>@endunless
         <td data-label="Item" style="min-width:200px"><b style="font-weight:600">{{ $line->item_description }}</b>@if($line->labourAgreement)<span class="muted">Worker: {{ $line->labourAgreement->fundi_subcontractor }}</span>@endif @if($line->duplicate_note && ($canConfirm || $canDeny))<span class="lg-dup">⚠ Possible duplicate: {{ $line->duplicate_note }}</span>@endif @if($line->notes)<span class="muted" title="{{ $line->notes }}">{{ \Illuminate\Support\Str::limit(\Illuminate\Support\Str::after($line->notes, 'Evidence: '), 48) }}</span>@endif</td>
         <td data-label="{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}" style="min-width:110px">{{ $tree->path($line->project_phase_id) }}</td>
         <td data-label="Qty" class="amt">{{ $line->quantity !== null ? rtrim(rtrim($line->quantity, '0'), '.') : '—' }}<span class="muted">{{ $units[$line->unit] ?? $line->unit }}</span></td>
@@ -96,21 +96,21 @@
         @endif
       </tr>
     @empty
-      <tr><td colspan="{{ $bulk ? 10 : 9 }}" class="lg-empty">No expenses match this view.</td></tr>
+      <tr><td colspan="{{ ($bulk ? 10 : 9) - ($ovh ? 1 : 0) }}" class="lg-empty">No expenses match this view.</td></tr>
     @endforelse
     </tbody>
-    @if($lines->total() && ! $denied && $showTotals)<tfoot><tr><td colspan="{{ $bulk ? 7 : 6 }}">Total of {{ number_format($totals['count']) }} lines in this view</td><td class="amt">{{ $money::format($totals['recorded']) }}</td><td class="amt">{{ $ovh ? '' : $money::format($totals['paid']) }}</td><td></td></tr></tfoot>@endif
+    @if($lines->total() && ! $denied && $showTotals)<tfoot><tr><td colspan="{{ ($bulk ? 7 : 6) - ($ovh ? 1 : 0) }}">Total of {{ number_format($totals['count']) }} lines in this view</td><td class="amt">{{ $money::format($totals['recorded']) }}</td><td class="amt">{{ $ovh ? '' : $money::format($totals['paid']) }}</td><td></td></tr></tfoot>@endif
   </table>
 </div>
 @if($lines->hasPages())<div class="lg-pager">Page {{ $lines->currentPage() }} of {{ $lines->lastPage() }} @if(!$lines->onFirstPage())<a class="btn btn-ghost" href="{{ $lines->previousPageUrl() }}">← Previous</a>@endif @if($lines->hasMorePages())<a class="btn btn-ghost" href="{{ $lines->nextPageUrl() }}">Next →</a>@endif</div>@endif
 
 @if(! $denied && $showTotals)
 <section class="lg-panel" style="margin-top:16px">
-  <h3>{{ $project->is_company_overheads ? 'Spend by cost group' : 'Spend by phase' }}</h3><p class="hint">Totals for the lines in this view, by phase and main category. Each phase includes its subphases.</p>
-  <div class="tablewrap" style="border:0"><table class="lg-table lg-tree"><thead><tr><th>{{ $ovh ? 'Cost group' : 'Phase' }}</th>@foreach($categories as $code => $label)<th class="amt">{{ $label }}</th>@endforeach<th class="amt">Total</th><th class="amt">Budget</th></tr></thead><tbody>
+  <h3>{{ $project->is_company_overheads ? 'Spend by cost group' : 'Spend by phase' }}</h3><p class="hint">{{ $ovh ? 'Totals for the lines in this view, by cost group.' : 'Totals for the lines in this view, by phase and main category.' }} Each phase includes its subphases.</p>
+  <div class="tablewrap" style="border:0"><table class="lg-table lg-tree"><thead><tr><th>{{ $ovh ? 'Cost group' : 'Phase' }}</th>@foreach(($ovh ? [] : $categories) as $code => $label)<th class="amt">{{ $label }}</th>@endforeach<th class="amt">Total</th><th class="amt">Budget</th></tr></thead><tbody>
     @foreach($phaseRows as $row)
       <tr class="{{ $row['depth'] === 1 ? 'top' : '' }}"><td class="phase d{{ $row['depth'] }}"><a href="{{ $query(['phase' => $row['phase']->id]) }}" style="color:inherit;text-decoration:none">{{ $row['label'] }}</a></td>
-        @foreach(array_keys($categories) as $code)<td class="amt">{{ (float) $row['categories'][$code]['recorded'] ? $money::format($row['categories'][$code]['recorded']) : '—' }}</td>@endforeach
+        @foreach(($ovh ? [] : array_keys($categories)) as $code)<td class="amt">{{ (float) $row['categories'][$code]['recorded'] ? $money::format($row['categories'][$code]['recorded']) : '—' }}</td>@endforeach
         <td class="amt"><b>{{ $money::format($row['recorded']) }}</b></td><td class="amt">{{ (float) $row['budget'] ? $money::format($row['budget']) : '—' }}</td></tr>
     @endforeach
   </tbody></table></div>

@@ -2,6 +2,17 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-02 — Company Overheads Pages Reviewed
+
+Every page of the Company Overheads ledger now fits office costs, which are organised by **cost group** only:
+- **Record Expense / Edit:** no main category or subcategory. Every overheads line is filed under "Preliminaries & Site Overheads" with no subcategory (`ExpenseLedgerService::OVERHEADS_CATEGORY`, enforced in `record()` and `update()`). The form shows date, cost group, item, qty, unit, unit cost, total, receipt no. and notes.
+- **Expenditure:** no category chips, Category column or Subcategory filter. "Spend by cost group" shows one total per group.
+- **Cost Groups & Budget:** one **Budget (TSh)** per group instead of four category columns, with "Total spend" and "incl. sub-groups" wording.
+- **Overview:** no category filter, category donut or "Categories against budget". Monthly spend spans the full width, and cost-group bars and top items remain.
+- **Warnings & KPIs:** only *Spend* and *Budget used* targets, set per cost group or for all office costs, with no category. Only the budget warning limit is shown or evaluated.
+- **Settings:** just name, code and notes. Status, location, dates, type of work, PMs and the overheads switch are kept as hidden values, so saving can't turn the ledger into a project.
+- The KPI measure "Recorded spend (ceiling)" is renamed "Spend (ceiling)".
+
 ## 2026-11-02 — Simpler Company Overheads Pages
 
 - **Office lines are paid when recorded, so the overheads Expenditure and Overview drop what no longer means anything.** That is the Status filter, Deny, the Worker filter, the "Paid" amount-and-status column, "Awaiting confirmation" columns and status pills.

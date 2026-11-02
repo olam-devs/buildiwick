@@ -21,7 +21,7 @@
   @if(! $workspaceProject->is_company_overheads && auth()->user()->can('view-workers', $workspaceProject))<a class="navitem {{ $nav('ledger.workers') }}" href="{{ route('ledger.workers', $workspaceProject) }}">Workers</a>@endif
   @if($isDirector)
     <a class="navitem {{ $nav('director.projects.warnings') }}" href="{{ route('director.projects.warnings', $workspaceProject) }}">Warnings &amp; KPIs</a>
-    <a class="navitem {{ $nav('admin.projects.*') }}" href="{{ route('admin.projects.show', $workspaceProject) }}">Project Settings</a>
+    <a class="navitem {{ $nav('admin.projects.*') }}" href="{{ route('admin.projects.show', $workspaceProject) }}">{{ $workspaceProject->is_company_overheads ? 'Settings' : 'Project Settings' }}</a>
   @endif
   <a class="navitem close-workspace" href="{{ $isDirector ? route('director.index') : route('ledger.index') }}">Close Project</a>
 @else

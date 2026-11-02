@@ -38,7 +38,7 @@
 </div>
 @error('from')<div class="flash error">{{ $message }}</div>@enderror @error('to')<div class="flash error">{{ $message }}</div>@enderror
 
-<div class="lg-catbar" id="catBar" style="margin-bottom:12px"></div>
+<div class="lg-catbar" id="catBar" style="margin-bottom:12px" @if($project->is_company_overheads) hidden @endif></div>
 
 <div class="lg-cards">
   <div class="lg-card accent"><div class="k">{{ $project->is_company_overheads ? 'Total spend' : 'Confirmed spend' }}</div><div class="v" id="cRecorded">TSh {{ $money::format($t['recorded']) }}</div><div class="s"><span id="cLines">{{ number_format($t['lines']) }}</span> lines @if($t['last_entry'])· last {{ \Carbon\Carbon::parse($t['last_entry'])->format('d M Y') }}@endif</div></div>
@@ -47,17 +47,17 @@
 </div>
 
 <div class="lg-grid">
-  <section class="lg-panel span-5">
+  <section class="lg-panel span-5" @if($project->is_company_overheads) hidden @endif>
     <h3>Spend by category</h3><p class="hint">Hover a slice for the amount</p>
     <div class="lg-donut-wrap"><div class="lg-chart" id="donut"></div>
       <div class="lg-legend" style="flex:1;min-width:200px">@foreach($report['categories'] as $code => $c)<div><i style="background:{{ $c['color'] }}"></i><a href="{{ route('ledger.expenses', [$project, 'category' => $code]) }}" style="color:inherit;text-decoration:none">{{ $c['label'] }}</a><b>{{ $money::format($c['share']) }}%</b></div>@endforeach</div>
     </div>
   </section>
-  <section class="lg-panel span-7"><h3>Monthly spend</h3><p class="hint">Hover a column for the month's amounts</p><div class="lg-chart" id="monthly"></div></section>
-  <section class="lg-panel span-7"><h3>{{ $project->is_company_overheads ? 'Cost groups: spend against budget' : 'Phases: spend against budget' }}</h3><p class="hint">Each phase includes its subphases. The grey line marks the budget.</p><div class="lg-bars lg-chart" id="phaseBars"></div></section>
+  <section class="lg-panel {{ $project->is_company_overheads ? 'span-12' : 'span-7' }}"><h3>Monthly spend</h3><p class="hint">Hover a column for the month's amounts</p><div class="lg-chart" id="monthly"></div></section>
+  <section class="lg-panel span-7"><h3>{{ $project->is_company_overheads ? 'Cost groups: spend against budget' : 'Phases: spend against budget' }}</h3><p class="hint">{{ $project->is_company_overheads ? 'Each group includes its sub-groups.' : 'Each phase includes its subphases.' }} The grey line marks the budget.</p><div class="lg-bars lg-chart" id="phaseBars"></div></section>
   <section class="lg-panel span-5"><h3>Top items</h3><p class="hint">Largest items by recorded amount</p><div class="lg-bars lg-chart" id="topItems"></div></section>
 
-  <section class="lg-panel span-12">
+  <section class="lg-panel span-12" @if($project->is_company_overheads) hidden @endif>
     <h3>Categories against budget</h3><p class="hint">{{ $project->is_company_overheads ? 'Spend per main category, with the budget' : 'Confirmed spend and what awaits confirmation per main category, with the Director\'s budget' }}</p>
     <div class="tablewrap" style="border:0"><table class="lg-table lg-cards-sm"><thead><tr><th>Category</th><th class="amt">Lines</th><th class="amt">{{ $project->is_company_overheads ? 'Spend' : 'Confirmed spend' }}</th>@unless($project->is_company_overheads)<th class="amt">Awaiting confirmation</th>@endunless<th class="amt">Budget</th><th style="min-width:160px">Used</th></tr></thead><tbody>
       @foreach($report['categories'] as $code => $c)
@@ -69,10 +69,10 @@
 
   <section class="lg-panel span-12">
     <div style="display:flex;justify-content:space-between;align-items:center"><h3>Latest entries</h3><a class="lg-link" href="{{ route('ledger.expenses', $project) }}">Open Expenditure →</a></div>
-    <div class="tablewrap" style="border:0;margin-top:8px"><table class="lg-table lg-cards-sm"><thead><tr><th>ID</th><th>Date</th><th>Item / Description</th><th>Category</th><th>{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th class="amt">Amount</th>@unless($project->is_company_overheads)<th>Status</th>@endunless</tr></thead><tbody>
+    <div class="tablewrap" style="border:0;margin-top:8px"><table class="lg-table lg-cards-sm"><thead><tr><th>ID</th><th>Date</th><th>Item / Description</th>@unless($project->is_company_overheads)<th>Category</th>@endunless<th>{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th class="amt">Amount</th>@unless($project->is_company_overheads)<th>Status</th>@endunless</tr></thead><tbody>
       @forelse($report['recent'] as $line)
         @php($status = $line->ledger_status ?? $line->payment_status)
-        <tr><td data-label="ID" class="code">{{ $line->request_code }}</td><td data-label="Date">{{ $line->requested_at?->format('d M Y') }}</td><td data-label="Item">{{ $line->item_description }}</td><td data-label="Category"><span class="lg-cat"><i style="background:{{ \App\Services\LedgerAnalyticsService::CATEGORY_COLORS[$line->main_category] ?? '#999' }}"></i>{{ \App\Services\LedgerAnalyticsService::CATEGORIES[$line->main_category] ?? $line->main_category }}</span></td><td data-label="Phase">{{ $report['tree']->path($line->project_phase_id) }}</td><td data-label="Amount" class="amt">{{ $money::format($line->total_amount) }}</td>@unless($project->is_company_overheads)<td data-label="Status"><span class="lg-pill {{ $status }}">{{ ['paid' => 'Paid', 'part_paid' => 'Part paid', 'unpaid' => 'To confirm'][$status] }}</span></td>@endunless</tr>
+        <tr><td data-label="ID" class="code">{{ $line->request_code }}</td><td data-label="Date">{{ $line->requested_at?->format('d M Y') }}</td><td data-label="Item">{{ $line->item_description }}</td>@unless($project->is_company_overheads)<td data-label="Category"><span class="lg-cat"><i style="background:{{ \App\Services\LedgerAnalyticsService::CATEGORY_COLORS[$line->main_category] ?? '#999' }}"></i>{{ \App\Services\LedgerAnalyticsService::CATEGORIES[$line->main_category] ?? $line->main_category }}</span></td>@endunless<td data-label="Phase">{{ $report['tree']->path($line->project_phase_id) }}</td><td data-label="Amount" class="amt">{{ $money::format($line->total_amount) }}</td>@unless($project->is_company_overheads)<td data-label="Status"><span class="lg-pill {{ $status }}">{{ ['paid' => 'Paid', 'part_paid' => 'Part paid', 'unpaid' => 'To confirm'][$status] }}</span></td>@endunless</tr>
       @empty<tr><td colspan="7" class="lg-empty">Nothing recorded yet. @can('record-expense', $project)<a href="{{ route('ledger.expenses.create', $project) }}">Record the first expense</a>.@endcan</td></tr>@endforelse
     </tbody></table></div>
   </section>
@@ -92,7 +92,7 @@
     document.getElementById('cUsed').textContent = used === null ? 'No budget' : used.toFixed(2) + '%';
     document.getElementById('cMeterWrap').hidden = used === null;
     const meter = document.getElementById('cMeter'); meter.style.width = Math.min(100, used || 0) + '%'; meter.className = used > 100 ? 'over' : (used >= 85 ? 'near' : '');
-    document.getElementById('cBudget').textContent = used === null ? 'The Director sets it under Phases & Budget' : 'of TSh ' + L.fmt(budget);
+    document.getElementById('cBudget').textContent = used === null ? {{ Js::from($project->is_company_overheads ? 'Set it under Cost Groups & Budget' : 'The Director sets it under Phases & Budget') }} : 'of TSh ' + L.fmt(budget);
     L.donut(document.getElementById('donut'), cats, Object.fromEntries(Object.entries(D.totals).map(([c, v]) => [c, v.recorded])), sel);
     L.monthly(document.getElementById('monthly'), D.monthly, cats, sel);
     L.bars(document.getElementById('phaseBars'), D.phases.map(p => ({label: p.label, href: p.href + (sel ? '&category=' + sel : ''),
