@@ -7,8 +7,10 @@
   $categories = \App\Services\LedgerAnalyticsService::CATEGORIES;
   $colors = \App\Services\LedgerAnalyticsService::CATEGORY_COLORS;
   // Company overheads are entered by the Director and confirmed as recorded: nothing waits for confirmation there.
-  $canConfirm = ! $project->is_company_overheads && auth()->user()->can('confirm-payments', $project);
-  $canDeny = auth()->user()->can('deny-expense', $project);
+  $ovh = (bool) $project->is_company_overheads;
+  $canConfirm = ! $ovh && auth()->user()->can('confirm-payments', $project);
+  // Overheads lines are paid when recorded, so they cannot be denied (the Director edits or deletes them instead).
+  $canDeny = ! $ovh && auth()->user()->can('deny-expense', $project);
   $denied = ($filters['status'] ?? '') === 'denied';
   $showTotals = auth()->user()->can('view-analytics', $project);
   $isDirector = auth()->user()->hasRole('admin');
@@ -36,9 +38,9 @@
   @if(!empty($filters['category']))<input type="hidden" name="category" value="{{ $filters['category'] }}">@endif
   <div class="field" style="min-width:200px;flex:1"><label for="q">Search</label><input type="search" id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Item, ID, receipt no." autocomplete="off"></div>
   <div class="field"><label for="phase">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</label><select id="phase" name="phase"><option value="">{{ $project->is_company_overheads ? 'All cost groups' : 'All phases' }}</option>@foreach($tree->flatten() as $node)<option value="{{ $node['phase']->id }}" @selected((string) ($filters['phase'] ?? '') === (string) $node['phase']->id)>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}</option>@endforeach</select></div>
-  <div class="field"><label for="status">Status</label><select id="status" name="status"><option value="">Any</option>@foreach(($project->is_company_overheads ? ['paid' => 'Paid', 'denied' => 'Denied'] : ['to_confirm' => 'To confirm', 'part_paid' => 'Part paid', 'paid' => 'Paid', 'denied' => 'Denied']) as $code => $label)<option value="{{ $code }}" @selected(($filters['status'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
+  @unless($ovh)  <div class="field"><label for="status">Status</label><select id="status" name="status"><option value="">Any</option>@foreach(($project->is_company_overheads ? ['paid' => 'Paid', 'denied' => 'Denied'] : ['to_confirm' => 'To confirm', 'part_paid' => 'Part paid', 'paid' => 'Paid', 'denied' => 'Denied']) as $code => $label)<option value="{{ $code }}" @selected(($filters['status'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>@endunless
   <div class="field"><label for="subcategory">Subcategory</label><select id="subcategory" name="subcategory"><option value="">Any</option>@foreach($subcategories as $code => $label)<option value="{{ $code }}" @selected(($filters['subcategory'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
-  @if($workers->isNotEmpty())<div class="field"><label for="worker">Worker</label><select id="worker" name="worker"><option value="">Any</option>@foreach($workers as $id => $name)<option value="{{ $id }}" @selected((string) ($filters['worker'] ?? '') === (string) $id)>{{ $name }}</option>@endforeach</select></div>@endif
+  @if($workers->isNotEmpty() && ! $ovh)<div class="field"><label for="worker">Worker</label><select id="worker" name="worker"><option value="">Any</option>@foreach($workers as $id => $name)<option value="{{ $id }}" @selected((string) ($filters['worker'] ?? '') === (string) $id)>{{ $name }}</option>@endforeach</select></div>@endif
   <div class="field" style="min-width:135px"><label for="from">From</label><input type="date" id="from" name="from" value="{{ $filters['from'] ?? '' }}"></div>
   <div class="field" style="min-width:135px"><label for="to">To</label><input type="date" id="to" name="to" value="{{ $filters['to'] ?? '' }}"></div>
   @if($canConfirm || $canDeny)<div class="field" style="min-width:150px"><label for="check">Check</label><select id="check" name="check"><option value="">Everything</option><option value="duplicates" @selected(($filters['check'] ?? '') === 'duplicates')>Possible duplicates</option></select></div>@endif
@@ -49,7 +51,7 @@
 @include('ledger.partials.team-kpis')
 @if(! $denied && $showTotals)
 <div class="lg-cards">
-  <div class="lg-card accent"><div class="k">Confirmed spend</div><div class="v">TSh {{ $money::format($totals['paid']) }}</div><div class="s">{{ number_format($totals['count']) }} lines in this view</div></div>
+  <div class="lg-card accent"><div class="k">{{ $ovh ? 'Total spend' : 'Confirmed spend' }}</div><div class="v">TSh {{ $money::format($totals['paid']) }}</div><div class="s">{{ number_format($totals['count']) }} lines in this view</div></div>
   <div class="lg-card warn" @if($project->is_company_overheads) hidden @endif><div class="k">Awaiting confirmation</div><div class="v">TSh {{ $money::format($totals['to_confirm']) }}</div><div class="s">Not counted as spend until confirmed</div></div>
 </div>
 @elseif($denied)
@@ -58,7 +60,7 @@
 
 <div class="lg-scroll">
   <table class="lg-table lg-cards-sm">
-    <thead><tr>@if($bulk)<th class="lg-check"><input type="checkbox" id="checkAll" aria-label="Select all lines on this page"></th>@endif<th>ID / Date</th><th>Category</th><th>Item / Description</th><th>{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th class="amt">Qty</th><th class="amt">Unit Cost</th><th class="amt">Total</th><th class="amt">{{ $denied ? 'Denied' : 'Paid' }}</th><th></th></tr></thead>
+    <thead><tr>@if($bulk)<th class="lg-check"><input type="checkbox" id="checkAll" aria-label="Select all lines on this page"></th>@endif<th>ID / Date</th><th>Category</th><th>Item / Description</th><th>{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th class="amt">Qty</th><th class="amt">Unit Cost</th><th class="amt">Total</th><th class="amt">{{ $denied ? 'Denied' : ($ovh ? 'Paid via' : 'Paid') }}</th><th></th></tr></thead>
     <tbody>
     @forelse($lines as $line)
       @php($status = $line->ledger_status ?? $line->payment_status)
@@ -75,7 +77,12 @@
           <td data-label="Denied" class="amt"><span class="lg-pill denied">Denied</span><span class="muted">{{ $line->latestApproval?->notes }}</span><span class="muted">{{ $line->latestApproval?->decidedBy?->name }} · {{ $line->latestApproval?->decided_at?->format('d M Y') }}</span></td>
           <td class="lg-btn-cell"><div class="lg-btns">@if($canDeny)<form method="POST" action="{{ route('ledger.expenses.restore', [$project, $line]) }}">@csrf<button class="lg-btn" type="submit">Restore</button></form>@endif</div></td>
         @else
+          @if($ovh)
+            @php($lastPayment = $line->payments->sortBy('payment_date')->last())
+            <td data-label="Paid via" class="amt">{{ $methods[$lastPayment?->payment_method] ?? ($lastPayment?->payment_method ? ucfirst(str_replace('_', ' ', $lastPayment->payment_method)) : '—') }}<span class="muted">{{ $lastPayment?->payment_date?->format('d M Y') }}</span></td>
+          @else
           <td data-label="Paid" class="amt">{{ $money::format($line->paid_to_date) }}<span style="display:block;margin-top:3px"><span class="lg-pill {{ $status }}">{{ $statusLabels[$status] }}</span></span></td>
+          @endif
           <td class="lg-btn-cell"><div class="lg-btns">
             @if($canConfirm && $status !== 'paid')<button class="lg-btn ok" type="button" data-confirm-url="{{ route('ledger.expenses.confirm', [$project, $line]) }}" data-code="{{ $line->request_code }}" data-item="{{ $line->item_description }}" data-total="{{ $line->total_amount }}" data-outstanding="{{ $line->approved_outstanding_amount }}" data-paid="{{ $line->paid_to_date }}">✓ Confirm</button>@endif
             @if($line->payments->isEmpty() || $isDirector)
@@ -92,7 +99,7 @@
       <tr><td colspan="{{ $bulk ? 10 : 9 }}" class="lg-empty">No expenses match this view.</td></tr>
     @endforelse
     </tbody>
-    @if($lines->total() && ! $denied && $showTotals)<tfoot><tr><td colspan="{{ $bulk ? 7 : 6 }}">Total of {{ number_format($totals['count']) }} lines in this view</td><td class="amt">{{ $money::format($totals['recorded']) }}</td><td class="amt">{{ $money::format($totals['paid']) }}</td><td></td></tr></tfoot>@endif
+    @if($lines->total() && ! $denied && $showTotals)<tfoot><tr><td colspan="{{ $bulk ? 7 : 6 }}">Total of {{ number_format($totals['count']) }} lines in this view</td><td class="amt">{{ $money::format($totals['recorded']) }}</td><td class="amt">{{ $ovh ? '' : $money::format($totals['paid']) }}</td><td></td></tr></tfoot>@endif
   </table>
 </div>
 @if($lines->hasPages())<div class="lg-pager">Page {{ $lines->currentPage() }} of {{ $lines->lastPage() }} @if(!$lines->onFirstPage())<a class="btn btn-ghost" href="{{ $lines->previousPageUrl() }}">← Previous</a>@endif @if($lines->hasMorePages())<a class="btn btn-ghost" href="{{ $lines->nextPageUrl() }}">Next →</a>@endif</div>@endif
@@ -100,7 +107,7 @@
 @if(! $denied && $showTotals)
 <section class="lg-panel" style="margin-top:16px">
   <h3>{{ $project->is_company_overheads ? 'Spend by cost group' : 'Spend by phase' }}</h3><p class="hint">Totals for the lines in this view, by phase and main category. Each phase includes its subphases.</p>
-  <div class="tablewrap" style="border:0"><table class="lg-table lg-tree"><thead><tr><th>Phase</th>@foreach($categories as $code => $label)<th class="amt">{{ $label }}</th>@endforeach<th class="amt">Total</th><th class="amt">Budget</th></tr></thead><tbody>
+  <div class="tablewrap" style="border:0"><table class="lg-table lg-tree"><thead><tr><th>{{ $ovh ? 'Cost group' : 'Phase' }}</th>@foreach($categories as $code => $label)<th class="amt">{{ $label }}</th>@endforeach<th class="amt">Total</th><th class="amt">Budget</th></tr></thead><tbody>
     @foreach($phaseRows as $row)
       <tr class="{{ $row['depth'] === 1 ? 'top' : '' }}"><td class="phase d{{ $row['depth'] }}"><a href="{{ $query(['phase' => $row['phase']->id]) }}" style="color:inherit;text-decoration:none">{{ $row['label'] }}</a></td>
         @foreach(array_keys($categories) as $code)<td class="amt">{{ (float) $row['categories'][$code]['recorded'] ? $money::format($row['categories'][$code]['recorded']) : '—' }}</td>@endforeach
