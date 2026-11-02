@@ -19,6 +19,9 @@ class DataEntryController extends Controller
         $user = $request->user();
         $projects = $analytics->projectsFor($user)->filter(fn (Project $project) => $user->can('record-expense', $project))->values();
         abort_if($projects->isEmpty() && ! $user->hasRole('admin') && $user->role?->name !== 'data_entry', 403);
+        if ($projects->count() === 1 && $user->role?->name === 'data_entry') {
+            return redirect()->route('entry.form', $projects->first());
+        }
 
         return view('entry.index', [
             'projects' => $projects,
@@ -30,8 +33,11 @@ class DataEntryController extends Controller
     {
         $this->authorize('record-expense', $project);
 
+        $user = $request->user();
+
         return $ledger->create($request, $project)->with([
             'entryMode' => true,
+            'canChangeProject' => app(LedgerAnalyticsService::class)->projectsFor($user)->filter(fn (Project $p) => $user->can('record-expense', $p))->count() > 1,
             'today' => $this->todaysLines($request)->where('project_id', $project->id)->values(),
         ]);
     }

@@ -565,9 +565,13 @@ class RecordingModeTest extends TestCase
         $clerk = $this->user('data_entry', $project);
 
         $this->actingAs($clerk)->get('/')->assertRedirect(route('entry.index'));
-        $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee($project->name)->assertDontSee($other->name)
-            ->assertDontSee('>Expenditure</a>', false)->assertDontSee('Confirmed spend');
-        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('Change project')->assertSee('Entered today');
+        $this->actingAs($clerk)->get(route('entry.index'))->assertRedirect(route('entry.form', $project));
+        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('Entered today')->assertDontSee('Change project')
+            ->assertDontSee($other->name)->assertDontSee('>Expenditure</a>', false)->assertDontSee('Confirmed spend');
+        [$third] = $this->project('BWG-TST-C-2026-001');
+        $third->assignedUsers()->attach($clerk->id);
+        $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee($project->name)->assertSee($third->name)->assertDontSee($other->name);
+        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('Change project');
         $this->actingAs($clerk)->get(route('entry.form', $other))->assertForbidden();
         foreach (['ledger.expenses', 'ledger.overview', 'ledger.structure', 'ledger.workers'] as $page) {
             $this->actingAs($clerk)->get(route($page, $project))->assertForbidden();
@@ -611,6 +615,34 @@ class RecordingModeTest extends TestCase
         [$other] = $this->project('BWG-TST-B-2026-001');
         $this->actingAs($clerk)->postJson(route('ledger.workers.quick', $other), ['fundi_subcontractor' => 'X'])->assertForbidden();
         $this->actingAs($this->user('director'))->get(route('admin.users.create'))->assertOk()->assertSee('Data Entry');
+    }
+
+    public function test_people_sign_in_with_a_username_and_stay_signed_in(): void
+    {
+        [$project] = $this->project();
+        $director = $this->user('director');
+        $role = Role::where('name', 'data_entry')->value('id');
+        $base = ['name' => 'Rehema', 'role_id' => $role, 'is_active' => '1', 'password' => 'secret-123', 'password_confirmation' => 'secret-123', 'project_ids' => [$project->id], 'permissions' => ['record_expenses']];
+
+        $this->actingAs($director)->post(route('admin.users.store'), $base)->assertSessionHasErrors(['username', 'email']);
+        $this->actingAs($director)->post(route('admin.users.store'), $base + ['username' => 'Has Space'])->assertSessionHasErrors('username');
+        $this->actingAs($director)->post(route('admin.users.store'), $base + ['username' => '  Rehema.M '])->assertRedirect()->assertSessionHasNoErrors();
+        $clerk = User::where('username', 'rehema.m')->sole();
+        $this->assertNull($clerk->email);
+        $this->actingAs($director)->get(route('admin.users.index'))->assertOk()->assertSee('rehema.m');
+        $this->post('/logout');
+
+        $this->post('/login', ['login' => 'rehema.m', 'password' => 'wrong'])->assertSessionHasErrors('login');
+        $this->assertGuest();
+        $response = $this->post('/login', ['login' => 'REHEMA.M', 'password' => 'secret-123', 'remember' => '1']);
+        $response->assertRedirect(route('entry.index'));
+        $this->assertAuthenticatedAs($clerk);
+        $this->assertNotNull($clerk->fresh()->remember_token, 'Keep me signed in sets a remember token.');
+        $this->get(route('entry.index'))->assertRedirect(route('entry.form', $project)); // one project: the form opens directly
+        $this->get(route('entry.form', $project))->assertOk()->assertDontSee('Change project');
+        $this->post('/logout');
+
+        $this->post('/login', ['login' => $director->email, 'password' => 'password'])->assertRedirect(route('director.index'));
     }
 
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array

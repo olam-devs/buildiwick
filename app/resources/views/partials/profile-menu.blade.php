@@ -7,7 +7,7 @@
 <details class="profile">
   <summary aria-label="Account menu"><span class="avatar">{{ $initials ?: 'U' }}</span><span class="profile-name">{{ $me->name }}</span><span class="caret" aria-hidden="true">▾</span></summary>
   <div class="profile-menu">
-    <div class="profile-who"><span class="avatar lg">{{ $initials ?: 'U' }}</span><div><b>{{ $me->name }}</b><small>{{ $roleNames[$me->role?->name] ?? ucfirst(str_replace('_', ' ', (string) $me->role?->name)) }}</small><small>{{ $me->email }}</small></div></div>
+    <div class="profile-who"><span class="avatar lg">{{ $initials ?: 'U' }}</span><div><b>{{ $me->name }}</b><small>{{ $roleNames[$me->role?->name] ?? ucfirst(str_replace('_', ' ', (string) $me->role?->name)) }}</small><small>{{ $me->username ?: $me->email }}</small></div></div>
     <form method="POST" action="{{ url('/logout') }}">@csrf<button type="submit" class="btn btn-ghost profile-signout">Sign out</button></form>
   </div>
 </details>

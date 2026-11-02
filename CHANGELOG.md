@@ -2,6 +2,17 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-02 — Usernames, Stay Signed In, Simple Phone Entry
+
+- **Sign in with a username or an email** (`users.username`, unique and stored lowercase).
+  - The sign-in box is now "Username or email"; usernames are not case-sensitive.
+  - In User Management a user needs a username, an email or both. Email is no longer required (`users.email` is nullable), for staff without a work email.
+  - Existing accounts keep signing in with their email.
+- **Keep me signed in on this device** (ticked by default): Laravel's remember-me cookie keeps the device signed in until Sign out.
+- **Data Entry with one project** goes straight to that project's form. "New Entry" and "Change project" appear only when they have more than one project.
+- **Record Expense on phones** (all roles) shows each item as a simple card: item, qty, unit, unit cost and total are large and easy to tap. Category stays visible; phase, subcategory, receipt no. and notes sit behind **More details** (the header's phase and category apply). Save is full-width.
+- Full suite: 194 tests.
+
 ## 2026-11-02 — Data Entry Role
 
 - **New role "Data Entry"** (`roles.data_entry`; added by migration and `RoleSeeder`): someone who only enters expenses, so the client doesn't have to use the rest of the system.

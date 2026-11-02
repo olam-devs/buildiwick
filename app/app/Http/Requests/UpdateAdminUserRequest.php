@@ -25,11 +25,22 @@ class UpdateAdminUserRequest extends FormRequest
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
+    /** Usernames are stored lowercase and without spaces around them. */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'username' => $this->filled('username') ? mb_strtolower(trim((string) $this->input('username'))) : null,
+            'email' => $this->filled('email') ? trim((string) $this->input('email')) : null,
+        ]);
+    }
+
     public function rules(): array
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('user'))],
+            // Sign-in name: a username, an email, or both; at least one is required.
+            'username' => ['nullable', 'required_without:email', 'string', 'min:3', 'max:40', 'regex:/^[a-z0-9._-]+$/', Rule::unique('users', 'username')->ignore($this->route('user'))],
+            'email' => ['nullable', 'required_without:username', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('user'))],
             'phone' => ['nullable', 'string', 'max:50'],
             'role_id' => ['required', 'integer', 'exists:roles,id', function ($attribute, $value, $fail) {
                 $name = Role::whereKey($value)->value('name');
@@ -44,6 +55,16 @@ class UpdateAdminUserRequest extends FormRequest
             'all_projects' => ['nullable', 'boolean'],
             'project_ids' => ['nullable', 'array'],
             'project_ids.*' => ['integer', 'exists:projects,id'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'username.regex' => 'Use small letters, numbers, dots, dashes or underscores (no spaces), e.g. rehema.m',
+            'username.required_without' => 'Give a username or an email address (or both).',
+            'email.required_without' => 'Give a username or an email address (or both).',
         ];
     }
 }

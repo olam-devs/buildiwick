@@ -20,13 +20,20 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
-        $credentials = $request->validate([
-            'email' => ['required', 'email'],
+        // One box takes a username or an email address ("login"; older forms post "email").
+        $request->merge(['login' => trim((string) $request->input('login', $request->input('email')))]);
+        $validated = $request->validate([
+            'login' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
-        ]);
+        ], ['login.required' => 'Enter your username or email.']);
+        $field = str_contains($validated['login'], '@') ? 'email' : 'username';
+        $credentials = [$field => $field === 'username' ? mb_strtolower($validated['login']) : $validated['login'], 'password' => $validated['password']];
 
-        if (! Auth::attempt($credentials)) {
-            return back()->withErrors(['email' => 'Those credentials don\'t match our records.'])->onlyInput('email');
+        // "Keep me signed in" (ticked by default): the device stays signed in until Sign out.
+        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+            $message = 'Those details don\'t match our records.';
+
+            return back()->withErrors(['login' => $message, 'email' => $message])->onlyInput('login');
         }
 
         if (! Auth::user()->is_active) {

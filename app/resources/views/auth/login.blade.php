@@ -19,6 +19,8 @@
   .brand{display:flex;align-items:center;gap:9px;margin-bottom:22px;}
   .brand .mark{width:28px;height:28px;border-radius:7px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
   .brand span{font-weight:700;font-size:17px;}
+  .remember{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink);margin:-4px 0 16px;cursor:pointer}
+  .remember input{width:16px;height:16px;margin:0;accent-color:var(--primary)}
   .login-theme{position:fixed;top:14px;right:14px;width:210px}
   .brand .logo{height:34px;width:auto;display:block;}
   h1{font-size:21px;margin:0 0 20px;font-weight:700;letter-spacing:-0.01em;}
@@ -41,10 +43,11 @@
     @endif
     <form method="POST" action="{{ url('/login') }}">
       @csrf
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" value="{{ old('email') }}" autofocus>
+      <label for="login">Username or email</label>
+      <input id="login" name="login" type="text" value="{{ old('login') }}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus>
       <label for="password">Password</label>
       <input id="password" name="password" type="password">
+      <label class="remember"><input type="checkbox" name="remember" value="1" checked> Keep me signed in on this device</label>
       <button type="submit">Sign in</button>
     </form>
     @if (app()->environment(['local', 'testing']))

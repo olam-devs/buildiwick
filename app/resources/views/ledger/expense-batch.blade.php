@@ -44,11 +44,37 @@
   .rb-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
   .rb-total{font-size:16px;font-weight:700}
   @media(max-width:900px){.rb-head{grid-template-columns:1fr}}
+  .rb-more-toggle{display:none}
+  .rb-remove-label{display:none}
+  @media(max-width:760px){.rb-remove-label{display:inline}}
+  @media(max-width:760px){
+    .rb-table{min-width:0;font-size:15px}
+    .rb-table thead{display:none}
+    .rb-table,.rb-table tbody{display:block}
+    .rb-table tr{display:grid;grid-template-columns:1fr 1fr;gap:10px 10px;padding:14px;margin:10px;border:1px solid var(--line);border-radius:14px;background:var(--surface);position:relative}
+    .rb-table tr.labour{background:var(--row-labour)}.rb-table tr.logistics{background:var(--row-logistics)}.rb-table tr.prelims{background:var(--row-prelims)}
+    .rb-table tr td{display:block;border:0;padding:0;background:transparent!important}
+    .rb-table td::before{content:attr(data-label);display:block;font-size:12px;font-weight:600;color:var(--ink-dim);margin-bottom:4px}
+    .rb-table td.idx{grid-column:1/-1;padding:0;font-size:14px;font-weight:700;color:var(--ink)}.rb-table td.idx::before{content:'Item #';display:inline!important;font-size:14px;font-weight:700;color:var(--ink);margin:0}
+    .rb-table td.rb-item,.rb-table td.rb-catcell,.rb-table td.rb-del{grid-column:1/-1}
+    .rb-table td.rb-more{display:none;grid-column:1/-1}
+    .rb-table tr.open td.rb-more{display:block}
+    .rb-cat{border-left:0!important}
+    .rb-table input,.rb-table select{font-size:16px;padding:10px 12px;min-height:44px;border-radius:10px}
+    .rb-table td.rb-del::before{content:none}
+    .rb-table td.rb-del{display:flex;justify-content:space-between;align-items:center}
+    .rb-more-toggle{display:inline-flex;background:none;border:0;color:var(--primary-dark);font:inherit;font-size:14px;font-weight:600;padding:6px 0;cursor:pointer}
+    .rb-remove{font-size:14px;font-weight:600}
+    .rb-foot{flex-direction:column;align-items:stretch}
+    .rb-foot .btn{flex:1;justify-content:center;min-height:44px}
+    .rb-total{text-align:center}
+    #saveButton{width:100%;min-height:48px;font-size:16px;justify-content:center}
+  }
 </style>
 
 <div class="lg-head">
   <div><h2>Record Expense</h2><p>{{ $project->name }} · add one or many items. Each row follows the date, category and phase chosen above unless you change it on the row.</p></div>
-  <div class="lg-actions">@if($entryMode ?? false)<a class="btn btn-ghost" href="{{ route('entry.index') }}">Change project</a>@else<a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Back to Expenditure</a>@endif</div>
+  <div class="lg-actions">@if($entryMode ?? false)@if($canChangeProject ?? true)<a class="btn btn-ghost" href="{{ route('entry.index') }}">Change project</a>@endif @else<a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Back to Expenditure</a>@endif</div>
 </div>
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach(collect($errors->all())->unique()->take(12) as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 @if($leafPhases->isEmpty())<div class="flash error">This project has no phases yet. @if($entryMode ?? false)Ask the Director to add them.@else The Director adds them under <a href="{{ route('ledger.structure', $project) }}">Phases &amp; Budget</a>.@endif</div>@endif
@@ -168,18 +194,19 @@
     const phase = data.project_phase_id || (prev ? prev.querySelector('[data-f=phase]').value : headPhase.value);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="idx"></td>
-      <td class="rb-cat"><select data-f="cat" name="rows[${i}][main_category]">${Object.entries(C.categories).map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('')}</select></td>
-      <td><select data-f="phase" name="rows[${i}][project_phase_id]">${phaseOptions}</select></td>
-      <td><input data-f="item" name="rows[${i}][item_description]" maxlength="255" value="${esc(data.item_description)}" autocomplete="off">
+      <td class="rb-cat rb-catcell" data-label="Category"><select data-f="cat" name="rows[${i}][main_category]">${Object.entries(C.categories).map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('')}</select></td>
+      <td class="rb-more" data-label="Phase"><select data-f="phase" name="rows[${i}][project_phase_id]">${phaseOptions}</select></td>
+      <td class="rb-item" data-label="Item"><input data-f="item" name="rows[${i}][item_description]" maxlength="255" value="${esc(data.item_description)}" autocomplete="off">
           <div class="worker-wrap" style="margin-top:5px"><select name="rows[${i}][labour_agreement_id]">${workerOptions(data.labour_agreement_id ?? (i === 0 ? C.presetWorker : ''))}</select></div></td>
-      <td><select data-f="sub" name="rows[${i}][subcategory]" data-value="${esc(data.subcategory)}"></select></td>
-      <td><input data-f="qty" class="num" type="number" step="0.01" min="0" name="rows[${i}][quantity]" value="${esc(data.quantity ?? '1')}"></td>
-      <td><select data-f="unit" name="rows[${i}][unit]" data-value="${esc(data.unit)}"></select></td>
-      <td><input data-f="cost" class="num" type="number" step="0.01" min="0" name="rows[${i}][unit_cost]" value="${esc(data.unit_cost)}"></td>
-      <td><input data-f="total" class="num" type="number" step="0.01" min="0" name="rows[${i}][total_amount]" value="${esc(data.total_amount)}"></td>
-      <td><input name="rows[${i}][invoice_receipt_no]" maxlength="255" value="${esc(data.invoice_receipt_no)}" placeholder="Optional"></td>
-      <td><input name="rows[${i}][details]" maxlength="2000" value="${esc(data.details)}" placeholder="Optional"></td>
-      <td><button type="button" class="rb-remove" title="Remove row">×</button></td>`;
+      <td class="rb-more" data-label="Subcategory"><select data-f="sub" name="rows[${i}][subcategory]" data-value="${esc(data.subcategory)}"></select></td>
+      <td data-label="Qty"><input data-f="qty" class="num" type="number" step="0.01" min="0" name="rows[${i}][quantity]" value="${esc(data.quantity ?? '1')}"></td>
+      <td data-label="Unit"><select data-f="unit" name="rows[${i}][unit]" data-value="${esc(data.unit)}"></select></td>
+      <td data-label="Unit cost (TSh)"><input data-f="cost" class="num" type="number" step="0.01" min="0" name="rows[${i}][unit_cost]" value="${esc(data.unit_cost)}"></td>
+      <td data-label="Total (TSh)"><input data-f="total" class="num" type="number" step="0.01" min="0" name="rows[${i}][total_amount]" value="${esc(data.total_amount)}"></td>
+      <td class="rb-more" data-label="Receipt no."><input name="rows[${i}][invoice_receipt_no]" maxlength="255" value="${esc(data.invoice_receipt_no)}" placeholder="Optional"></td>
+      <td class="rb-more" data-label="Notes"><input name="rows[${i}][details]" maxlength="2000" value="${esc(data.details)}" placeholder="Optional"></td>
+      <td class="rb-del"><button type="button" class="rb-more-toggle">More details ▾</button><button type="button" class="rb-remove" title="Remove row">× <span class="rb-remove-label">Remove</span></button></td>`;
+    tr.querySelector('.rb-more-toggle').addEventListener('click', e => { const open = tr.classList.toggle('open'); e.currentTarget.textContent = open ? 'Fewer details ▴' : 'More details ▾'; });
     body.appendChild(tr);
     tr.querySelector('[data-f=cat]').value = cat;
     const phaseSelect = tr.querySelector('[data-f=phase]'); phaseSelect.value = phase; phaseSelect.querySelector('option[value=""]').textContent = 'Phase…';
