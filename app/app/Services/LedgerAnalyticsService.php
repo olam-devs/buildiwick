@@ -148,6 +148,7 @@ class LedgerAnalyticsService
     {
         return Project::query()
             ->when(! ($withOverheads && $user->hasRole('admin')), fn ($query) => $query->where('is_company_overheads', false))
+            ->when(! $user->hasRole('admin'), fn ($query) => $query->where('status', '!=', 'completed'))
             ->when(! $user->seesAllProjects(), fn ($query) => $query->whereHas('assignedUsers', fn ($users) => $users->whereKey($user->id)))
             ->orderBy('name')->get();
     }

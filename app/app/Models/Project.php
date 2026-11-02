@@ -14,7 +14,7 @@ class Project extends Model
     use HasFactory;
 
     protected $fillable = [
-        'project_code', 'name', 'status', 'location', 'created_by', 'client_id',
+        'project_code', 'name', 'work_type', 'status', 'location', 'created_by', 'client_id',
         'contract_reference', 'contract_signed', 'contract_signed_at',
         'planned_start_date', 'expected_completion_date', 'notes', 'is_company_overheads',
     ];

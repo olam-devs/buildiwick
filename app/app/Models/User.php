@@ -115,12 +115,16 @@ class User extends Authenticatable
 
     public function canAccessProject(Project|int $project): bool
     {
-        $project = $project instanceof Project ? $project : ($this->projectLookup[$project] ??= Project::query()->find($project, ['id', 'is_company_overheads']));
+        $project = $project instanceof Project ? $project : ($this->projectLookup[$project] ??= Project::query()->find($project, ['id', 'is_company_overheads', 'status']));
         if (! $project) {
             return false;
         }
         // Company overheads (salaries, rent, statutory) are the Director's only.
         if ($project->is_company_overheads) {
+            return $this->hasRole('admin');
+        }
+        // A completed project leaves everyone's view except the Director's.
+        if ($project->status === 'completed') {
             return $this->hasRole('admin');
         }
 

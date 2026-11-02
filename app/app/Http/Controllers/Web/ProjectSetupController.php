@@ -70,7 +70,7 @@ class ProjectSetupController extends Controller
             $this->authorize('create', Project::class);
             $data = $this->recordingData($request, null);
             $project = DB::transaction(function () use ($data, $request, $phases): Project {
-                $project = Project::create(collect($data)->only(['project_code', 'name', 'status', 'location', 'planned_start_date', 'expected_completion_date', 'notes'])->all() + ['is_company_overheads' => $request->boolean('is_company_overheads')] + ['created_by' => $request->user()->id]);
+                $project = Project::create(collect($data)->only(['project_code', 'name', 'work_type', 'status', 'location', 'planned_start_date', 'expected_completion_date', 'notes'])->all() + ['is_company_overheads' => $request->boolean('is_company_overheads')] + ['created_by' => $request->user()->id]);
                 $project->assignedUsers()->sync(array_filter($data['project_manager_ids'] ?? []));
                 if ($request->boolean('standard_stages')) {
                     foreach (self::TRACKER_STAGES as $stage) {
@@ -123,7 +123,7 @@ class ProjectSetupController extends Controller
         if (Features::recording()) {
             $this->authorize('update', $project);
             $data = $this->recordingData($request, $project);
-            $project->update(collect($data)->only(['project_code', 'name', 'status', 'location', 'planned_start_date', 'expected_completion_date', 'notes'])->all() + ['is_company_overheads' => $request->boolean('is_company_overheads')]);
+            $project->update(collect($data)->only(['project_code', 'name', 'work_type', 'status', 'location', 'planned_start_date', 'expected_completion_date', 'notes'])->all() + ['is_company_overheads' => $request->boolean('is_company_overheads')]);
             $managers = User::query()->whereHas('role', fn ($query) => $query->where('name', 'project_manager'))->pluck('id');
             $project->assignedUsers()->detach($managers->diff($data['project_manager_ids'] ?? [])->all());
             $project->assignedUsers()->syncWithoutDetaching(array_filter($data['project_manager_ids'] ?? []));
@@ -163,6 +163,7 @@ class ProjectSetupController extends Controller
             'name' => ['required', 'string', 'max:150'],
             'status' => ['required', Rule::exists('lookups', 'code')->where('type', 'project_status')],
             'location' => ['required', 'string', 'max:150'],
+            'work_type' => ['nullable', 'string', 'max:80'],
             'planned_start_date' => ['nullable', 'date'],
             'is_company_overheads' => ['nullable', 'boolean'],
             'expected_completion_date' => ['nullable', 'date', 'after_or_equal:planned_start_date'],

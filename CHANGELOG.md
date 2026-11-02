@@ -2,6 +2,18 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-02 — Pilot Projects (Clean Start), Completed Projects Hidden from Staff
+
+- **Clean start with the pilot projects.** The client's "Active Projects" list says: "Clean start 01/11/2026. All expenses entered manually from this date."
+  - `php artisan app:pilot-projects <xlsx> [--fresh] [--dry-run]` reads it: code, name, type of work, district, start date, status, project manager and notes.
+  - With `--fresh` it first deletes every existing project and all its records.
+  - Codes become `BWG-<CODE>-2026-001`, and each project gets the 8 standard tracker stages as phases.
+  - "Office & overheads" becomes the company overheads ledger. A blank district stays blank and is never guessed.
+  - The sandbox now holds only these 17 projects, with no expenses. The tracker-history database was backed up before the switch.
+- **Completed projects are the Director's only.** When a project's status is Completed it disappears from every PM, Accounts and Data Entry list and page (`User::canAccessProject()`, `LedgerAnalyticsService::projectsFor()`). The Director still sees it and its history.
+- **Type of work** (`projects.work_type`) appears on the project form, with suggestions, and in Project Setup.
+- Full suite: 196 tests.
+
 ## 2026-11-02 — Usernames for Data Entry Only
 
 - **Usernames are only for Data Entry accounts.** For Data Entry, User Management requires a username and the email is optional. Every other role (Director, PM, Accounts) must have an email, and any username sent for them is dropped. The Username field appears only when the role is Data Entry.
