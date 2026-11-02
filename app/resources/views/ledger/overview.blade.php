@@ -54,7 +54,7 @@
     </div>
   </section>
   <section class="lg-panel span-7"><h3>Monthly spend</h3><p class="hint">Hover a column for the month's amounts</p><div class="lg-chart" id="monthly"></div></section>
-  <section class="lg-panel span-7"><h3>Phases: spend against budget</h3><p class="hint">Each phase includes its subphases. The grey line marks the budget.</p><div class="lg-bars lg-chart" id="phaseBars"></div></section>
+  <section class="lg-panel span-7"><h3>{{ $project->is_company_overheads ? 'Cost groups: spend against budget' : 'Phases: spend against budget' }}</h3><p class="hint">Each phase includes its subphases. The grey line marks the budget.</p><div class="lg-bars lg-chart" id="phaseBars"></div></section>
   <section class="lg-panel span-5"><h3>Top items</h3><p class="hint">Largest items by recorded amount</p><div class="lg-bars lg-chart" id="topItems"></div></section>
 
   <section class="lg-panel span-12">

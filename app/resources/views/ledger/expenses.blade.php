@@ -34,7 +34,7 @@
 <form method="GET" class="lg-filters" id="filters">
   @if(!empty($filters['category']))<input type="hidden" name="category" value="{{ $filters['category'] }}">@endif
   <div class="field" style="min-width:200px;flex:1"><label for="q">Search</label><input type="search" id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Item, ID, receipt no." autocomplete="off"></div>
-  <div class="field"><label for="phase">Phase</label><select id="phase" name="phase"><option value="">All phases</option>@foreach($tree->flatten() as $node)<option value="{{ $node['phase']->id }}" @selected((string) ($filters['phase'] ?? '') === (string) $node['phase']->id)>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}</option>@endforeach</select></div>
+  <div class="field"><label for="phase">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</label><select id="phase" name="phase"><option value="">{{ $project->is_company_overheads ? 'All cost groups' : 'All phases' }}</option>@foreach($tree->flatten() as $node)<option value="{{ $node['phase']->id }}" @selected((string) ($filters['phase'] ?? '') === (string) $node['phase']->id)>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}</option>@endforeach</select></div>
   <div class="field"><label for="status">Status</label><select id="status" name="status"><option value="">Any</option>@foreach(['to_confirm' => 'To confirm', 'part_paid' => 'Part paid', 'paid' => 'Paid', 'denied' => 'Denied'] as $code => $label)<option value="{{ $code }}" @selected(($filters['status'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
   <div class="field"><label for="subcategory">Subcategory</label><select id="subcategory" name="subcategory"><option value="">Any</option>@foreach($subcategories as $code => $label)<option value="{{ $code }}" @selected(($filters['subcategory'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
   @if($workers->isNotEmpty())<div class="field"><label for="worker">Worker</label><select id="worker" name="worker"><option value="">Any</option>@foreach($workers as $id => $name)<option value="{{ $id }}" @selected((string) ($filters['worker'] ?? '') === (string) $id)>{{ $name }}</option>@endforeach</select></div>@endif
@@ -57,7 +57,7 @@
 
 <div class="lg-scroll">
   <table class="lg-table lg-cards-sm">
-    <thead><tr>@if($bulk)<th class="lg-check"><input type="checkbox" id="checkAll" aria-label="Select all lines on this page"></th>@endif<th>ID / Date</th><th>Category</th><th>Item / Description</th><th>Phase</th><th class="amt">Qty</th><th class="amt">Unit Cost</th><th class="amt">Total</th><th class="amt">{{ $denied ? 'Denied' : 'Paid' }}</th><th></th></tr></thead>
+    <thead><tr>@if($bulk)<th class="lg-check"><input type="checkbox" id="checkAll" aria-label="Select all lines on this page"></th>@endif<th>ID / Date</th><th>Category</th><th>Item / Description</th><th>{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th class="amt">Qty</th><th class="amt">Unit Cost</th><th class="amt">Total</th><th class="amt">{{ $denied ? 'Denied' : 'Paid' }}</th><th></th></tr></thead>
     <tbody>
     @forelse($lines as $line)
       @php($status = $line->ledger_status ?? $line->payment_status)
@@ -66,7 +66,7 @@
         <td data-label="ID / Date" style="white-space:nowrap"><span class="code">{{ $line->request_code }}</span><span class="muted">{{ $line->requested_at?->format('d M Y') }}</span></td>
         <td data-label="Category" style="min-width:140px"><span class="lg-cat"><i style="background:{{ $colors[$line->main_category] ?? '#999' }}"></i>{{ $categories[$line->main_category] ?? $line->main_category }}</span>@if($line->subcategory)<span class="muted">{{ $subcategories[$line->subcategory] ?? $line->subcategory }}</span>@endif</td>
         <td data-label="Item" style="min-width:200px"><b style="font-weight:600">{{ $line->item_description }}</b>@if($line->labourAgreement)<span class="muted">Worker: {{ $line->labourAgreement->fundi_subcontractor }}</span>@endif @if($line->duplicate_note && ($canConfirm || $canDeny))<span class="lg-dup">⚠ Possible duplicate: {{ $line->duplicate_note }}</span>@endif @if($line->notes)<span class="muted" title="{{ $line->notes }}">{{ \Illuminate\Support\Str::limit(\Illuminate\Support\Str::after($line->notes, 'Evidence: '), 48) }}</span>@endif</td>
-        <td data-label="Phase" style="min-width:110px">{{ $tree->path($line->project_phase_id) }}</td>
+        <td data-label="{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}" style="min-width:110px">{{ $tree->path($line->project_phase_id) }}</td>
         <td data-label="Qty" class="amt">{{ $line->quantity !== null ? rtrim(rtrim($line->quantity, '0'), '.') : '—' }}<span class="muted">{{ $units[$line->unit] ?? $line->unit }}</span></td>
         <td data-label="Unit cost" class="amt">{{ $line->unit_cost !== null ? $money::format($line->unit_cost) : '—' }}</td>
         <td data-label="Total" class="amt"><b>{{ $money::format($line->total_amount) }}</b></td>
@@ -98,7 +98,7 @@
 
 @if(! $denied && $showTotals)
 <section class="lg-panel" style="margin-top:16px">
-  <h3>Spend by phase</h3><p class="hint">Totals for the lines in this view, by phase and main category. Each phase includes its subphases.</p>
+  <h3>{{ $project->is_company_overheads ? 'Spend by cost group' : 'Spend by phase' }}</h3><p class="hint">Totals for the lines in this view, by phase and main category. Each phase includes its subphases.</p>
   <div class="tablewrap" style="border:0"><table class="lg-table lg-tree"><thead><tr><th>Phase</th>@foreach($categories as $code => $label)<th class="amt">{{ $label }}</th>@endforeach<th class="amt">Total</th><th class="amt">Budget</th></tr></thead><tbody>
     @foreach($phaseRows as $row)
       <tr class="{{ $row['depth'] === 1 ? 'top' : '' }}"><td class="phase d{{ $row['depth'] }}"><a href="{{ $query(['phase' => $row['phase']->id]) }}" style="color:inherit;text-decoration:none">{{ $row['label'] }}</a></td>

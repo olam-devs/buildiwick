@@ -27,6 +27,7 @@
       'categories' => $categories,
       'colors' => $colors,
       'presetWorker' => request('worker'),
+      'phaseWord' => $project->is_company_overheads ? 'Cost group' : 'Phase',
   ];
 @endphp
 <style>
@@ -85,7 +86,7 @@
       <div class="field" style="margin:0"><label for="expense_date">Date <span class="req">*</span></label><input type="date" id="expense_date" name="expense_date" value="{{ old('expense_date', now()->toDateString()) }}" max="{{ now()->toDateString() }}" required></div>
       <div class="field" style="margin:0"><label for="default_category">Main category <span class="req">*</span></label>
         <select id="default_category" name="default_category">@foreach($categories as $code => $label)<option value="{{ $code }}" @selected($defaultCategory === $code)>{{ $label }}</option>@endforeach</select></div>
-      <div class="field" style="margin:0"><label for="default_phase">Phase <span class="req">*</span></label>
+      <div class="field" style="margin:0"><label for="default_phase">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }} <span class="req">*</span></label>
         <select id="default_phase" name="default_phase"><option value="">Choose…</option>@foreach($phases as $node)<option value="{{ $node['phase']->id }}" @selected((string) $defaultPhase === (string) $node['phase']->id) @disabled(! $node['leaf'])>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}{{ $node['leaf'] ? '' : ' ▸' }}</option>@endforeach</select></div>
     </div>
   </section>
@@ -93,7 +94,7 @@
   <section class="lg-panel" style="padding:0;overflow:hidden">
     <div style="overflow:auto">
       <table class="rb-table">
-        <thead><tr><th></th><th style="width:150px">Category</th><th style="width:170px">Phase</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:150px">Subcategory</th><th style="width:80px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
+        <thead><tr><th></th><th style="width:150px">Category</th><th style="width:170px">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:150px">Subcategory</th><th style="width:80px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -195,7 +196,7 @@
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="idx"></td>
       <td class="rb-cat rb-catcell" data-label="Category"><select data-f="cat" name="rows[${i}][main_category]">${Object.entries(C.categories).map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('')}</select></td>
-      <td class="rb-more" data-label="Phase"><select data-f="phase" name="rows[${i}][project_phase_id]">${phaseOptions}</select></td>
+      <td class="rb-more" data-label="${C.phaseWord}"><select data-f="phase" name="rows[${i}][project_phase_id]">${phaseOptions}</select></td>
       <td class="rb-item" data-label="Item"><input data-f="item" name="rows[${i}][item_description]" maxlength="255" value="${esc(data.item_description)}" autocomplete="off">
           <div class="worker-wrap" style="margin-top:5px"><select name="rows[${i}][labour_agreement_id]">${workerOptions(data.labour_agreement_id ?? (i === 0 ? C.presetWorker : ''))}</select></div></td>
       <td class="rb-more" data-label="Subcategory"><select data-f="sub" name="rows[${i}][subcategory]" data-value="${esc(data.subcategory)}"></select></td>
@@ -209,7 +210,7 @@
     tr.querySelector('.rb-more-toggle').addEventListener('click', e => { const open = tr.classList.toggle('open'); e.currentTarget.textContent = open ? 'Fewer details ▴' : 'More details ▾'; });
     body.appendChild(tr);
     tr.querySelector('[data-f=cat]').value = cat;
-    const phaseSelect = tr.querySelector('[data-f=phase]'); phaseSelect.value = phase; phaseSelect.querySelector('option[value=""]').textContent = 'Phase…';
+    const phaseSelect = tr.querySelector('[data-f=phase]'); phaseSelect.value = phase; phaseSelect.querySelector('option[value=""]').textContent = C.phaseWord + '…';
     applyCategory(tr, cat, !!(data.subcategory || data.unit));
     let manualTotal = !!data.total_amount && !data.unit_cost;
     const qty = tr.querySelector('[data-f=qty]'), cost = tr.querySelector('[data-f=cost]'), total = tr.querySelector('[data-f=total]');

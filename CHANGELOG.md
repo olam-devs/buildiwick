@@ -2,6 +2,16 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-02 — Office Cost Groups (Company Overheads)
+
+- **A company overheads ledger uses office cost groups instead of construction phases** (`ProjectSetupController::OFFICE_COST_GROUPS`). The groups are: Staff Salaries & Allowances, Statutory & Taxes, Office Rent & Utilities, Transport & Vehicles, Tools & Equipment, Communication & Subscriptions, Stationery & Printing, and Other Office Costs.
+  - New overheads ledgers (Project Setup tick or the pilot import) start with them.
+  - A migration swaps them in on existing overheads ledgers that still have only the untouched construction stages and no records. The sandbox's Office & overheads switched automatically.
+- **Only the Director** (overheads are Director-only) can add, rename, reorder and delete groups, and give each group an **optional note**.
+- **Deleting a group with records keeps them.** The Director picks the group they move to; the lines and their payments move, the group's budget amounts are removed, and `project_edit_logs` records `cost_group_deleted`. Project phases keep the old rule: a used phase cannot be deleted.
+- On an overheads ledger the screens say **Cost group / Cost Groups & Budget** instead of Phase.
+- Full suite: 197 tests.
+
 ## 2026-11-02 — Pilot Projects (Clean Start), Completed Projects Hidden from Staff
 
 - **Clean start with the pilot projects.** The client's "Active Projects" list says: "Clean start 01/11/2026. All expenses entered manually from this date."

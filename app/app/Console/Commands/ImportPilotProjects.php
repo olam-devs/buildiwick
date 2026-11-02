@@ -73,7 +73,7 @@ class ImportPilotProjects extends Command
                     continue;
                 }
                 $project = Project::create(collect($row)->except(['pm'])->all() + ['created_by' => $actor->id]);
-                foreach (ProjectSetupController::TRACKER_STAGES as $stage) {
+                foreach (ProjectSetupController::startingPhases($project->is_company_overheads) as $stage) {
                     $phases->create($project, $stage, null, $actor);
                 }
                 if ($row['pm']) {

@@ -23,9 +23,9 @@
   <div class="lg-step" style="margin-top:0"><span>1</span> Main category</div>
   <div class="lg-cat-pick">@foreach($categories as $code => $label)<label><input type="radio" name="main_category" value="{{ $code }}" required @checked($value('main_category', request('worker') ? 'labour_subcontracts' : null) === $code)><i style="width:9px;height:9px;border-radius:50%;background:{{ $colors[$code] }}"></i>{{ $label }}</label>@endforeach</div>
 
-  <div class="lg-step"><span>2</span> Phase and date</div>
+  <div class="lg-step"><span>2</span> {{ $project->is_company_overheads ? 'Cost group' : 'Phase' }} and date</div>
   <div class="grid">
-    <div class="field" style="grid-column:span 2"><label for="project_phase_id">Phase / subphase <span class="req">*</span></label><select id="project_phase_id" name="project_phase_id" required><option value="">Choose…</option>@foreach($phases as $node)@php($selected = (string) $value('project_phase_id') === (string) $node['phase']->id)<option value="{{ $node['phase']->id }}" @selected($selected) @disabled(! $node['leaf'] && ! $selected)>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}{{ $node['leaf'] ? '' : ' ▸' }}</option>@endforeach</select>
+    <div class="field" style="grid-column:span 2"><label for="project_phase_id">{{ $project->is_company_overheads ? 'Cost group' : 'Phase / subphase' }} <span class="req">*</span></label><select id="project_phase_id" name="project_phase_id" required><option value="">Choose…</option>@foreach($phases as $node)@php($selected = (string) $value('project_phase_id') === (string) $node['phase']->id)<option value="{{ $node['phase']->id }}" @selected($selected) @disabled(! $node['leaf'] && ! $selected)>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}{{ $node['leaf'] ? '' : ' ▸' }}</option>@endforeach</select>
       <small class="form-context">Phases marked ▸ have subphases. Record the expense on the subphase.</small></div>
     <div class="field"><label for="expense_date">Date <span class="req">*</span></label><input type="date" id="expense_date" name="expense_date" value="{{ $value('expense_date', now()->toDateString()) }}" max="{{ now()->toDateString() }}" required></div>
   </div>

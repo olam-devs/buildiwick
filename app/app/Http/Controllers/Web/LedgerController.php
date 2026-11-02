@@ -441,8 +441,11 @@ class LedgerController extends Controller
     public function renamePhase(Request $request, Project $project, ProjectPhase $phase, PhaseStructureService $phases)
     {
         abort_unless((int) $phase->project_id === (int) $project->id, 404);
-        $validated = $request->validate(['phase_name' => ['required', 'string', 'max:150']]);
+        $validated = $request->validate(['phase_name' => ['required', 'string', 'max:150'], 'notes' => ['nullable', 'string', 'max:500']]);
         $phases->rename($phase, $validated['phase_name'], $request->user());
+        if ($request->has('notes')) {
+            $phase->update(['notes' => $validated['notes'] ?? null]); // optional note on a cost group
+        }
 
         return back()->with('success', 'Renamed to "'.$validated['phase_name'].'".');
     }
@@ -458,7 +461,7 @@ class LedgerController extends Controller
     public function destroyPhase(Request $request, Project $project, ProjectPhase $phase, PhaseStructureService $phases)
     {
         abort_unless((int) $phase->project_id === (int) $project->id, 404);
-        $phases->delete($phase, $request->user());
+        $phases->delete($phase, $request->user(), $request->integer('move_to') ?: null);
 
         return back()->with('success', '"'.$phase->stage_label.'" deleted.');
     }
