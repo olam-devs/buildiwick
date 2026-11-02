@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-02 — Usernames for Data Entry Only
+
+- **Usernames are only for Data Entry accounts.** For Data Entry, User Management requires a username and the email is optional. Every other role (Director, PM, Accounts) must have an email, and any username sent for them is dropped. The Username field appears only when the role is Data Entry.
+
 ## 2026-11-02 — Usernames, Stay Signed In, Simple Phone Entry
 
 - **Sign in with a username or an email** (`users.username`, unique and stored lowercase).

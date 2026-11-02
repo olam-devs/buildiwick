@@ -624,7 +624,10 @@ class RecordingModeTest extends TestCase
         $role = Role::where('name', 'data_entry')->value('id');
         $base = ['name' => 'Rehema', 'role_id' => $role, 'is_active' => '1', 'password' => 'secret-123', 'password_confirmation' => 'secret-123', 'project_ids' => [$project->id], 'permissions' => ['record_expenses']];
 
-        $this->actingAs($director)->post(route('admin.users.store'), $base)->assertSessionHasErrors(['username', 'email']);
+        $this->actingAs($director)->post(route('admin.users.store'), $base)->assertSessionHasErrors('username')->assertSessionDoesntHaveErrors('email');
+        $pmRole = Role::where('name', 'project_manager')->value('id');
+        $this->actingAs($director)->post(route('admin.users.store'), ['role_id' => $pmRole, 'username' => 'pm.user'] + $base)
+            ->assertSessionHasErrors('email')->assertSessionDoesntHaveErrors('username');
         $this->actingAs($director)->post(route('admin.users.store'), $base + ['username' => 'Has Space'])->assertSessionHasErrors('username');
         $this->actingAs($director)->post(route('admin.users.store'), $base + ['username' => '  Rehema.M '])->assertRedirect()->assertSessionHasNoErrors();
         $clerk = User::where('username', 'rehema.m')->sole();
