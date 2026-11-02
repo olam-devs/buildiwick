@@ -1,9 +1,13 @@
 @extends('layouts.app')
-@section('title', $project->name.' · Phases & Budget')
+@section('title', $project->name.' · '.($project->is_company_overheads ? 'Cost Groups & Budget' : 'Phases & Budget'))
 @section('content')
 @include('partials.ledger.styles')
 @php
   $money = \App\Support\Money::class;
+  $groups = (bool) $project->is_company_overheads;
+  $word = $groups ? 'Cost group' : 'Phase';
+  $levels = $groups ? [1 => 'Cost group', 2 => 'Sub-group', 3 => 'Sub-sub-group'] : [1 => 'Phase', 2 => 'Subphase', 3 => 'Sub-subphase'];
+  $leafGroups = $rows->filter(fn ($row) => count($row['ids']) === 1);
   $categories = \App\Services\LedgerAnalyticsService::CATEGORIES;
   $colors = \App\Services\LedgerAnalyticsService::CATEGORY_COLORS;
   $short = ['materials' => 'Materials', 'labour_subcontracts' => 'Labour', 'logistics_equipment' => 'Logistics', 'preliminaries_overheads' => 'Prelims & Overheads'];
@@ -13,8 +17,9 @@
   $totalRecorded = $money::sum($rows->where('depth', 1)->pluck('recorded'));
 @endphp
 <div class="lg-head">
-  <div><h2>Phases &amp; Budget</h2><p>{{ $project->name }} · phases with optional subphases and sub-subphases. Expenses and category budgets go on the lowest level: a phase without subphases takes them itself; a phase with subphases shows their totals. Budgets are optional, so recording can start as soon as a phase exists.@unless($canEdit) Only the Director can change them.@endunless</p></div>
-  @if($canEdit)<form method="POST" action="{{ route('ledger.phases.store', $project) }}" class="lg-actions">@csrf<input name="phase_name" maxlength="150" placeholder="New phase name" required style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:220px"><button class="btn btn-primary" type="submit">+ Add Phase</button></form>@endif
+  @if($groups)<div><h2>Cost Groups &amp; Budget</h2><p>{{ $project->name }} · office costs are grouped (salaries, statutory, rent …). Add, rename or delete groups and add an optional note to each; deleting a group with records moves them to another group, so nothing is lost. Budgets per group are optional.</p></div>
+  @else<div><h2>Phases &amp; Budget</h2><p>{{ $project->name }} · phases with optional subphases and sub-subphases. Expenses and category budgets go on the lowest level: a phase without subphases takes them itself; a phase with subphases shows their totals. Budgets are optional, so recording can start as soon as a phase exists.@unless($canEdit) Only the Director can change them.@endunless</p></div>@endif
+  @if($canEdit)<form method="POST" action="{{ route('ledger.phases.store', $project) }}" class="lg-actions">@csrf<input name="phase_name" maxlength="150" placeholder="New {{ strtolower($word) }} name" required style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:220px"><button class="btn btn-primary" type="submit">+ Add {{ $word }}</button></form>@endif
 </div>
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 
@@ -31,14 +36,15 @@
 <form method="POST" action="{{ route('ledger.budget.save', $project) }}" id="budgetForm">@csrf</form>
 <div class="lg-scroll" style="max-height:none">
   <table class="lg-table lg-tree">
-    <thead><tr><th style="min-width:200px">Phase</th>@foreach($categories as $code => $label)<th class="amt"><span class="lg-cat" style="justify-content:flex-end" title="{{ $label }}"><i style="background:{{ $colors[$code] }}"></i>{{ $short[$code] }}</span></th>@endforeach<th style="min-width:170px">Total (incl. subphases)</th>@if($canEdit)<th></th>@endif</tr></thead>
+    <thead><tr><th style="min-width:200px">{{ $word }}</th>@foreach($categories as $code => $label)<th class="amt"><span class="lg-cat" style="justify-content:flex-end" title="{{ $label }}"><i style="background:{{ $colors[$code] }}"></i>{{ $short[$code] }}</span></th>@endforeach<th style="min-width:170px">Total (incl. subphases)</th>@if($canEdit)<th></th>@endif</tr></thead>
     <tbody>
     @forelse($rows as $row)
       @php($phase = $row['phase'])
       <tr class="{{ $row['depth'] === 1 ? 'top' : '' }}">
         <td class="phase d{{ $row['depth'] }}">
           @if($canEdit)<input form="rename-{{ $phase->id }}" name="phase_name" value="{{ $row['label'] }}" maxlength="150" style="border:1px solid transparent;background:transparent;padding:3px 5px;border-radius:6px;font:inherit;font-weight:inherit;width:100%" onfocus="this.style.borderColor='var(--line)'" onchange="this.form.submit()">@else{{ $row['label'] }}@endif
-          <span class="muted">{{ $row['depth'] === 1 ? 'Phase' : ($row['depth'] === 2 ? 'Subphase' : 'Sub-subphase') }}@if($showSpend) · {{ $row['count'] }} lines @endif</span>
+          @if($groups && $canEdit)<input form="rename-{{ $phase->id }}" name="notes" value="{{ $phase->notes }}" maxlength="500" placeholder="Note (optional)" class="group-note" onchange="this.form.submit()">@elseif($groups && $phase->notes)<span class="muted">{{ $phase->notes }}</span>@endif
+          <span class="muted">{{ $levels[$row['depth']] }}@if($showSpend) · {{ $row['count'] }} lines @endif</span>
         </td>
         @foreach(array_keys($categories) as $code)
           <td class="amt">@php($cat = $row['categories'][$code])@if(count($row['ids']) === 1 || $cat['own_budget'] !== null)@if($canEdit)<input form="budgetForm" type="number" step="0.01" min="0" name="budget[{{ $phase->id }}][{{ $code }}]" value="{{ $cat['own_budget'] !== null ? (float) $cat['own_budget'] : '' }}" placeholder="—" style="width:104px;text-align:right;padding:5px 7px;border:1px solid var(--line);border-radius:6px">@else{{ $cat['own_budget'] !== null ? $money::format($cat['own_budget']) : '—' }}@endif
@@ -49,13 +55,14 @@
         <td><b>{{ (float) $row['budget'] ? 'TSh '.$money::format($row['budget']) : 'No budget' }}</b>@if($showSpend)<span class="muted">spent {{ $money::format($row['recorded']) }}@if($row['used'] !== null) · {{ $money::format($row['used']) }}%@endif</span>@endif
           @if($showSpend && $row['used'] !== null)<div class="lg-meter" style="margin-top:4px"><span class="{{ (float) $row['used'] > 100 ? 'over' : ((float) $row['used'] >= 85 ? 'near' : '') }}" style="width:{{ min(100, (float) $row['used']) }}%"></span></div>@endif</td>
         @if($canEdit)<td><div class="lg-row-actions">
-          @if($row['depth'] < \App\Support\PhaseTree::MAX_DEPTH)<button class="lg-link" type="button" data-add-child="{{ $phase->id }}" data-parent-name="{{ $row['label'] }}">+ {{ $row['depth'] === 1 ? 'Subphase' : 'Sub-subphase' }}</button>@endif
+          @if($row['depth'] < \App\Support\PhaseTree::MAX_DEPTH)<button class="lg-link" type="button" data-add-child="{{ $phase->id }}" data-parent-name="{{ $row['label'] }}">+ {{ $levels[$row['depth'] + 1] }}</button>@endif
           <button class="lg-link" form="move-{{ $phase->id }}" name="direction" value="up" title="Move up">↑</button><button class="lg-link" form="move-{{ $phase->id }}" name="direction" value="down" title="Move down">↓</button>
-          @if(!$row['count'])<button class="lg-link danger" form="delete-{{ $phase->id }}" onclick="return confirm('Delete {{ $row['label'] }} and anything under it?')">Delete</button>@endif
+          @if(!$row['count'])<button class="lg-link danger" form="delete-{{ $phase->id }}" onclick="return confirm('Delete {{ $row['label'] }} and anything under it?')">Delete</button>
+          @elseif($groups)<button class="lg-link danger" type="button" data-delete-group="{{ $phase->id }}" data-group-name="{{ $row['label'] }}" data-records="{{ $row['count'] }}" data-exclude="{{ implode(',', $row['ids']) }}">Delete</button>@endif
         </div></td>@endif
       </tr>
     @empty
-      <tr><td colspan="7" class="lg-empty">No phases yet.@if($canEdit) Add the first phase above.@endif</td></tr>
+      <tr><td colspan="7" class="lg-empty">No {{ $groups ? 'cost groups' : 'phases' }} yet.@if($canEdit) Add the first one above.@endif</td></tr>
     @endforelse
     </tbody>
   </table>
@@ -66,14 +73,45 @@
   @foreach($rows as $row)
     <form method="POST" action="{{ route('ledger.phases.rename', [$project, $row['phase']]) }}" id="rename-{{ $row['phase']->id }}">@csrf @method('PUT')</form>
     <form method="POST" action="{{ route('ledger.phases.move', [$project, $row['phase']]) }}" id="move-{{ $row['phase']->id }}">@csrf</form>
-    <form method="POST" action="{{ route('ledger.phases.destroy', [$project, $row['phase']]) }}" id="delete-{{ $row['phase']->id }}">@csrf @method('DELETE')</form>
+    <form method="POST" action="{{ route('ledger.phases.destroy', [$project, $row['phase']]) }}" id="delete-{{ $row['phase']->id }}">@csrf @method('DELETE')<input type="hidden" name="move_to" value=""></form>
   @endforeach
   <dialog class="lg-dialog" id="childDialog"><form method="POST" action="{{ route('ledger.phases.store', $project) }}">@csrf
     <h3>Add under <span id="childParentName"></span></h3>
     <input type="hidden" name="parent_id" id="childParentId">
-    <div class="field"><label for="child_name">Name <span class="req">*</span></label><input id="child_name" name="phase_name" maxlength="150" required placeholder="e.g. Ground floor, Tiling"></div>
+    <div class="field"><label for="child_name">Name <span class="req">*</span></label><input id="child_name" name="phase_name" maxlength="150" required placeholder="{{ $groups ? 'e.g. Casual staff, Fuel' : 'e.g. Ground floor, Tiling' }}"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn btn-primary" type="submit">Add</button></div>
   </form></dialog>
+  @if($groups)
+  <dialog class="lg-dialog" id="deleteGroupDialog"><div>
+    <h3>Delete <span id="deleteGroupName"></span></h3>
+    <p class="form-context" style="margin:0">This group has <b id="deleteGroupRecords"></b> record(s). They are kept: choose the group they move to. Budget amounts set on this group are removed.</p>
+    <div class="field"><label for="deleteGroupTarget">Move its records to <span class="req">*</span></label><select id="deleteGroupTarget">@foreach($leafGroups as $row)<option value="{{ $row['phase']->id }}">{{ $row['path'] }}</option>@endforeach</select></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn btn-primary" type="button" id="deleteGroupGo" style="background:var(--danger);border-color:var(--danger)">Move records and delete</button></div>
+  </div></dialog>
+  <script>
+    (() => {
+      let current = null;
+      const dialog = document.getElementById('deleteGroupDialog'), target = document.getElementById('deleteGroupTarget');
+      document.querySelectorAll('[data-delete-group]').forEach(b => b.addEventListener('click', () => {
+        current = b.dataset.deleteGroup;
+        const excluded = b.dataset.exclude.split(',');
+        [...target.options].forEach(o => { o.hidden = o.disabled = excluded.includes(o.value); });
+        const first = [...target.options].find(o => !o.disabled);
+        if (!first) { alert('Add another cost group first, so the records have somewhere to go.'); return; }
+        target.value = first.value;
+        document.getElementById('deleteGroupName').textContent = b.dataset.groupName;
+        document.getElementById('deleteGroupRecords').textContent = b.dataset.records;
+        dialog.showModal();
+      }));
+      document.getElementById('deleteGroupGo').addEventListener('click', () => {
+        const form = document.getElementById('delete-' + current);
+        form.querySelector('[name=move_to]').value = target.value;
+        form.submit();
+      });
+    })();
+  </script>
+  <style>.group-note{display:block;width:100%;margin:3px 0 2px;border:1px dashed var(--line);background:transparent;padding:3px 6px;border-radius:6px;font:inherit;font-size:11.5px;color:var(--ink-soft)}.group-note:focus{border-style:solid;border-color:var(--primary);outline:none}</style>
+  @endif
   <script>document.querySelectorAll('[data-add-child]').forEach(b => b.addEventListener('click', () => { document.getElementById('childParentId').value = b.dataset.addChild; document.getElementById('childParentName').textContent = b.dataset.parentName; document.getElementById('childDialog').showModal(); document.getElementById('child_name').focus(); }));</script>
 @endif
 

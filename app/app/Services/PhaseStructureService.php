@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
 use App\Models\InternalBudget;
 use App\Models\InternalBudgetEntry;
 use App\Models\Project;
+use App\Models\ProjectEditLog;
 use App\Models\ProjectPhase;
 use App\Models\User;
 use App\Support\PhaseTree;
@@ -92,17 +94,45 @@ class PhaseStructureService
         });
     }
 
-    public function delete(ProjectPhase $phase, User $actor): void
+    /**
+     * Deletes a phase and everything under it. A used project phase cannot be deleted. In a company
+     * overheads ledger a used cost group can be, when $moveToId names another (lowest-level) group:
+     * its expense lines and payments move there, so no record is lost, and its budget amounts go.
+     */
+    public function delete(ProjectPhase $phase, User $actor, ?int $moveToId = null): void
     {
         Gate::forUser($actor)->authorize('manage-project-structure', $phase->project);
-        $this->database->transaction(function () use ($phase): void {
-            $tree = new PhaseTree(ProjectPhase::query()->where('project_id', $phase->project_id)->get());
+        $this->database->transaction(function () use ($phase, $actor, $moveToId): void {
+            $all = ProjectPhase::query()->where('project_id', $phase->project_id)->get();
+            $tree = new PhaseTree($all);
             $ids = $tree->withDescendants($phase->id);
-            $used = ExpenseRequest::query()->whereIn('project_phase_id', $ids)->exists()
+            $lines = ExpenseRequest::query()->whereIn('project_phase_id', $ids)->count();
+            $used = $lines > 0
                 || InternalBudget::query()->whereIn('project_phase_id', $ids)->exists()
                 || InternalBudgetEntry::query()->whereIn('project_phase_id', $ids)->exists();
             if ($used) {
-                throw ValidationException::withMessages(['phase' => 'This phase (or a part under it) already has expenses or budget amounts, so it cannot be deleted. Rename it instead.']);
+                if (! $phase->project->is_company_overheads) {
+                    throw ValidationException::withMessages(['phase' => 'This phase (or a part under it) already has expenses or budget amounts, so it cannot be deleted. Rename it instead.']);
+                }
+                $target = $moveToId ? $all->firstWhere('id', $moveToId) : null;
+                if ($lines > 0 && (! $target || in_array($target->id, $ids, true) || ! $tree->isLeaf($target->id))) {
+                    throw ValidationException::withMessages(['move_to' => 'Choose the cost group its '.$lines.' record(s) move to.']);
+                }
+                if ($target) {
+                    ExpenseRequest::query()->whereIn('project_phase_id', $ids)->update(['project_phase_id' => $target->id]);
+                    ExpensePayment::query()->whereIn('project_phase_id', $ids)->update(['project_phase_id' => $target->id]);
+                }
+                InternalBudgetEntry::query()->whereIn('project_phase_id', $ids)->delete();
+                InternalBudget::query()->whereIn('project_phase_id', $ids)->get()->each(function (InternalBudget $budget): void {
+                    $budget->entries()->delete();
+                    $budget->delete();
+                });
+                ProjectEditLog::create([
+                    'project_id' => $phase->project_id, 'document_type' => 'phase', 'document_id' => $phase->id, 'document_code' => $phase->stage_code,
+                    'action' => 'cost_group_deleted', 'item_description' => $phase->stage_label, 'reason' => 'Cost group removed by the Director',
+                    'before_snapshot' => ['group' => $phase->stage_label, 'records' => $lines],
+                    'after_snapshot' => ['records_moved_to' => $target?->stage_label], 'edited_by' => $actor->id,
+                ]);
             }
             ProjectPhase::query()->whereIn('id', $ids)->orderByDesc('id')->get()->each->delete();
         });

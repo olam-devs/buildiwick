@@ -38,6 +38,18 @@ class ProjectSetupController extends Controller
         'Roofing', 'Finishing', 'External Works', 'Other / General',
     ];
 
+    /** Starting cost groups of a company overheads ledger (the Director renames, adds or removes them). */
+    public const OFFICE_COST_GROUPS = [
+        'Staff Salaries & Allowances', 'Statutory & Taxes', 'Office Rent & Utilities', 'Transport & Vehicles',
+        'Tools & Equipment', 'Communication & Subscriptions', 'Stationery & Printing', 'Other Office Costs',
+    ];
+
+    /** @return array<int, string> the starting phases (or cost groups) for a new ledger */
+    public static function startingPhases(bool $overheads): array
+    {
+        return $overheads ? self::OFFICE_COST_GROUPS : self::TRACKER_STAGES;
+    }
+
     public function index(Request $request)
     {
         $this->authorize('manageSetup', Project::class);
@@ -73,7 +85,7 @@ class ProjectSetupController extends Controller
                 $project = Project::create(collect($data)->only(['project_code', 'name', 'work_type', 'status', 'location', 'planned_start_date', 'expected_completion_date', 'notes'])->all() + ['is_company_overheads' => $request->boolean('is_company_overheads')] + ['created_by' => $request->user()->id]);
                 $project->assignedUsers()->sync(array_filter($data['project_manager_ids'] ?? []));
                 if ($request->boolean('standard_stages')) {
-                    foreach (self::TRACKER_STAGES as $stage) {
+                    foreach (self::startingPhases($project->is_company_overheads) as $stage) {
                         $phases->create($project, $stage, null, $request->user());
                     }
                 }

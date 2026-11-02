@@ -17,7 +17,7 @@
   @can('record-expense', $workspaceProject)
     <a class="navitem {{ $nav('ledger.expenses.create') }}" href="{{ route('ledger.expenses.create', $workspaceProject) }}">Record Expense</a>
   @endcan
-  @can('view-budget', $workspaceProject)<a class="navitem {{ $nav('ledger.structure') }}" href="{{ route('ledger.structure', $workspaceProject) }}">Phases &amp; Budget</a>@endcan
+  @can('view-budget', $workspaceProject)<a class="navitem {{ $nav('ledger.structure') }}" href="{{ route('ledger.structure', $workspaceProject) }}">{{ $workspaceProject->is_company_overheads ? 'Cost Groups & Budget' : 'Phases & Budget' }}</a>@endcan
   @can('view-workers', $workspaceProject)<a class="navitem {{ $nav('ledger.workers') }}" href="{{ route('ledger.workers', $workspaceProject) }}">Workers</a>@endcan
   @if($isDirector)
     <a class="navitem {{ $nav('director.projects.warnings') }}" href="{{ route('director.projects.warnings', $workspaceProject) }}">Warnings &amp; KPIs</a>

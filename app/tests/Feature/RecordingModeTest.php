@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Web\ProjectSetupController;
 use App\Models\DirectorKpiTarget;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
@@ -691,6 +692,35 @@ class RecordingModeTest extends TestCase
         $this->assertTrue((bool) Project::where('project_code', 'BWG-OFC-OVH-2026-001')->value('is_company_overheads'));
         $this->assertSame(0, ExpenseRequest::count());
         @unlink($file);
+    }
+
+    public function test_office_cost_groups_are_managed_by_the_director_and_keep_their_records(): void
+    {
+        $director = $this->user('director');
+        $this->actingAs($director)->post(route('admin.projects.store'), ['project_code' => 'BWG-OFC-OVH-2026-001', 'name' => 'Office & overheads', 'status' => 'active',
+            'location' => 'Head office', 'is_company_overheads' => '1', 'standard_stages' => '1'])->assertSessionHasNoErrors();
+        $office = Project::where('project_code', 'BWG-OFC-OVH-2026-001')->sole();
+        $groups = $office->phases()->orderBy('phase_order')->get()->keyBy('phase_name');
+        $this->assertSame(ProjectSetupController::OFFICE_COST_GROUPS, $groups->keys()->all());
+
+        $this->actingAs($director)->get(route('ledger.structure', $office))->assertOk()->assertSee('Cost Groups &amp; Budget', false)->assertSee('Note (optional)');
+        $rent = $groups['Office Rent & Utilities'];
+        $this->actingAs($director)->put(route('ledger.phases.rename', [$office, $rent]), ['phase_name' => 'Office Rent', 'notes' => 'Kinondoni office, paid quarterly'])->assertSessionHasNoErrors();
+        $this->assertSame(['Office Rent', 'Kinondoni office, paid quarterly'], [$rent->fresh()->phase_name, $rent->fresh()->notes]);
+
+        $this->actingAs($director)->post(route('ledger.expenses.store', $office), $this->line($rent, ['main_category' => 'preliminaries_overheads', 'item_description' => 'Rent October', 'quantity' => '1', 'unit_cost' => '1500000']));
+        $line = ExpenseRequest::query()->sole();
+        $this->actingAs($director)->delete(route('ledger.phases.destroy', [$office, $rent]))->assertSessionHasErrors('move_to');
+        $other = $groups['Other Office Costs'];
+        $this->actingAs($director)->delete(route('ledger.phases.destroy', [$office, $rent]), ['move_to' => $other->id])->assertSessionHasNoErrors();
+        $this->assertNull(ProjectPhase::find($rent->id));
+        $this->assertSame([$other->id, $other->id], [(int) $line->fresh()->project_phase_id, (int) $line->payments()->sole()->project_phase_id]);
+        $this->assertDatabaseHas('project_edit_logs', ['project_id' => $office->id, 'action' => 'cost_group_deleted']);
+
+        [$project, $phases] = $this->project();
+        $this->actingAs($director)->post(route('ledger.expenses.store', $project), $this->line($phases[0]));
+        $this->actingAs($director)->delete(route('ledger.phases.destroy', [$project, $phases[0]]), ['move_to' => $phases[1]->id])->assertSessionHasErrors('phase');
+        $this->actingAs($this->user('project_manager', $project))->get(route('ledger.structure', $office))->assertForbidden();
     }
 
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
