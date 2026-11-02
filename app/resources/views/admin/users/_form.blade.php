@@ -1,10 +1,13 @@
 @if($errors->any())<div class="flash error">Please correct the highlighted account details.</div>@endif
 <div class="row2">
   <div class="field"><label for="name">Full name <span class="req">*</span></label><input id="name" name="name" value="{{ old('name', $managedUser?->name) }}" required>@error('name')<div class="field-err">{{ $message }}</div>@enderror</div>
-  <div class="field"><label for="email">Email <span class="req">*</span></label><input id="email" name="email" type="email" value="{{ old('email', $managedUser?->email) }}" required>@error('email')<div class="field-err">{{ $message }}</div>@enderror</div>
+  <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" value="{{ old('email', $managedUser?->email) }}" placeholder="Optional if a username is set">@error('email')<div class="field-err">{{ $message }}</div>@enderror</div>
 </div>
 <div class="row2">
+  <div class="field"><label for="username">Username</label><input id="username" name="username" value="{{ old('username', $managedUser?->username) }}" maxlength="40" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="e.g. rehema.m">@error('username')<div class="field-err">{{ $message }}</div>@enderror<small class="form-context">For signing in without an email: small letters, numbers, dots, dashes. Give a username, an email, or both.</small></div>
   <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" value="{{ old('phone', $managedUser?->phone) }}">@error('phone')<div class="field-err">{{ $message }}</div>@enderror</div>
+</div>
+<div class="row2">
   <div class="field"><label for="role_id">Role <span class="req">*</span></label><select id="role_id" name="role_id" required>@foreach($roles as $role)<option value="{{ $role->id }}" @selected((int) old('role_id', $managedUser?->role_id) === $role->id)>{{ ucwords(str_replace('_', ' ', $role->name)) }}</option>@endforeach</select>@error('role_id')<div class="field-err">{{ $message }}</div>@enderror</div>
 </div>
 <div class="row2">
