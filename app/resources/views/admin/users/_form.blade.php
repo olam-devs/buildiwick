@@ -1,10 +1,10 @@
 @if($errors->any())<div class="flash error">Please correct the highlighted account details.</div>@endif
 <div class="row2">
   <div class="field"><label for="name">Full name <span class="req">*</span></label><input id="name" name="name" value="{{ old('name', $managedUser?->name) }}" required>@error('name')<div class="field-err">{{ $message }}</div>@enderror</div>
-  <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" value="{{ old('email', $managedUser?->email) }}" placeholder="Optional if a username is set">@error('email')<div class="field-err">{{ $message }}</div>@enderror</div>
+  <div class="field"><label for="email">Email <span class="req" id="emailReq">*</span></label><input id="email" name="email" type="email" value="{{ old('email', $managedUser?->email) }}">@error('email')<div class="field-err">{{ $message }}</div>@enderror</div>
 </div>
 <div class="row2">
-  <div class="field"><label for="username">Username</label><input id="username" name="username" value="{{ old('username', $managedUser?->username) }}" maxlength="40" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="e.g. rehema.m">@error('username')<div class="field-err">{{ $message }}</div>@enderror<small class="form-context">For signing in without an email: small letters, numbers, dots, dashes. Give a username, an email, or both.</small></div>
+  <div class="field" id="usernameField"><label for="username">Username <span class="req">*</span></label><input id="username" name="username" value="{{ old('username', $managedUser?->username) }}" maxlength="40" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="e.g. rehema.m">@error('username')<div class="field-err">{{ $message }}</div>@enderror<small class="form-context">Data Entry signs in with this: small letters, numbers, dots or dashes. Typing capitals is fine.</small></div>
   <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" value="{{ old('phone', $managedUser?->phone) }}">@error('phone')<div class="field-err">{{ $message }}</div>@enderror</div>
 </div>
 <div class="row2">
@@ -21,3 +21,13 @@
 </div>@error('is_active')<div class="field-err">{{ $message }}</div>@enderror</div>
 @if(\App\Support\Features::recording())@include('admin.users._access')@endif
 <div class="estimate-actions"><button class="btn btn-primary" type="submit">{{ $managedUser ? 'Save Changes' : 'Create User' }}</button><a class="btn btn-ghost" href="{{ route('admin.users.index') }}">Cancel</a></div>
+
+<script>
+  // Username only for Data Entry; every other role signs in with an email.
+  (() => {
+    const role = document.getElementById('role_id'), field = document.getElementById('usernameField'), req = document.getElementById('emailReq'), email = document.getElementById('email');
+    const dataEntry = {{ Js::from($roles->where('name', 'data_entry')->pluck('id')->map(fn ($id) => (string) $id)->values()) }};
+    const sync = () => { const on = dataEntry.includes(role.value); field.hidden = !on; req.hidden = on; email.placeholder = on ? 'Optional' : ''; };
+    role.addEventListener('change', sync); sync();
+  })();
+</script>

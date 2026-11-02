@@ -25,27 +25,35 @@ class UpdateAdminUserRequest extends FormRequest
      *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
-    /** Usernames are stored lowercase and without spaces around them. */
+    /**
+     * Usernames are only for Data Entry accounts (stored lowercase); every other role signs in with
+     * an email, so a username sent for them is dropped.
+     */
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'username' => $this->filled('username') ? mb_strtolower(trim((string) $this->input('username'))) : null,
+            'username' => $this->isDataEntry() && $this->filled('username') ? mb_strtolower(trim((string) $this->input('username'))) : null,
             'email' => $this->filled('email') ? trim((string) $this->input('email')) : null,
         ]);
+    }
+
+    private function isDataEntry(): bool
+    {
+        return Role::whereKey($this->input('role_id'))->value('name') === 'data_entry';
     }
 
     public function rules(): array
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            // Sign-in name: a username, an email, or both; at least one is required.
-            'username' => ['nullable', 'required_without:email', 'string', 'min:3', 'max:40', 'regex:/^[a-z0-9._-]+$/', Rule::unique('users', 'username')->ignore($this->route('user'))],
-            'email' => ['nullable', 'required_without:username', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('user'))],
+            // Data Entry signs in with a username (email optional); other roles sign in with their email.
+            'username' => ['nullable', Rule::requiredIf(fn () => $this->isDataEntry()), 'string', 'min:3', 'max:40', 'regex:/^[a-z0-9._-]+$/', Rule::unique('users', 'username')->ignore($this->route('user'))],
+            'email' => ['nullable', Rule::requiredIf(fn () => ! $this->isDataEntry()), 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('user'))],
             'phone' => ['nullable', 'string', 'max:50'],
             'role_id' => ['required', 'integer', 'exists:roles,id', function ($attribute, $value, $fail) {
                 $name = Role::whereKey($value)->value('name');
                 if ($name === 'admin' || (Features::recording() && in_array($name, ['estimator_qs', 'site_operator'], true))) {
-                    $fail('Choose Director, Project Manager or Accounts.');
+                    $fail('Choose Director, Project Manager, Accounts or Data Entry.');
                 }
             }],
             'password' => ['nullable', 'confirmed', Password::min(8)],
@@ -63,8 +71,8 @@ class UpdateAdminUserRequest extends FormRequest
     {
         return [
             'username.regex' => 'Use small letters, numbers, dots, dashes or underscores (no spaces), e.g. rehema.m',
-            'username.required_without' => 'Give a username or an email address (or both).',
-            'email.required_without' => 'Give a username or an email address (or both).',
+            'username.required' => 'Data Entry accounts sign in with a username.',
+            'email.required' => 'This role signs in with an email address.',
         ];
     }
 }
