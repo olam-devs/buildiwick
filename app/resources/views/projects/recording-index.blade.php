@@ -13,7 +13,7 @@
     @forelse($projects as $project)
       <tr>
         <td class="code">{{ $project->project_code }}</td>
-        <td><b>{{ $project->name }}</b></td>
+        <td><b>{{ $project->name }}</b>@if($project->work_type)<span class="muted" style="display:block">{{ $project->work_type }}</span>@endif</td>
         <td>{{ $project->location ?: '—' }}</td>
         <td style="white-space:nowrap">{{ $project->planned_start_date?->format('d M Y') ?? '—' }} – {{ $project->expected_completion_date?->format('d M Y') ?? '—' }}</td>
         <td><span class="dot-status {{ $project->status === 'active' ? 'active' : 'zero' }}">{{ ucfirst(str_replace('_', ' ', $project->status)) }}</span></td>

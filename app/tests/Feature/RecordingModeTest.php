@@ -648,6 +648,51 @@ class RecordingModeTest extends TestCase
         $this->post('/login', ['login' => $director->email, 'password' => 'password'])->assertRedirect(route('director.index'));
     }
 
+    public function test_completed_projects_are_seen_by_the_director_only(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+        $clerk = $this->user('data_entry', $project);
+        $accounts = $this->user('accounts');
+        $director = $this->user('director');
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0]));
+        $project->update(['status' => 'completed']);
+
+        $this->actingAs($pm)->get(route('ledger.index'))->assertOk()->assertDontSee($project->name);
+        $this->actingAs($pm)->get(route('ledger.expenses', $project))->assertForbidden();
+        $this->actingAs($accounts)->get(route('ledger.expenses', $project))->assertForbidden();
+        $this->actingAs($accounts)->get(route('ledger.to-confirm'))->assertOk()->assertDontSee($project->name);
+        $this->actingAs($clerk)->get(route('entry.form', $project))->assertForbidden();
+        $this->actingAs($director)->get(route('ledger.index'))->assertOk()->assertSee($project->name);
+        $this->actingAs($director)->get(route('ledger.expenses', $project))->assertOk()->assertSee('Floor tiles');
+    }
+
+    public function test_pilot_projects_replace_everything_with_a_clean_start(): void
+    {
+        [$old] = $this->project();
+        $this->user('director');
+        $book = new Spreadsheet;
+        $sheet = $book->getActiveSheet();
+        $sheet->fromArray(['BUILDIWICK - ACTIVE PROJECTS'], null, 'A1');
+        $sheet->fromArray(['#', 'Project Code', 'Project Name', 'Type of Work', 'Location', 'Start Date', 'Status', 'Project Manager', 'Notes'], null, 'A4');
+        $sheet->fromArray([1, 'MSK-FIN', 'Masaki residence, finishing works', 'Finishing works', 'Kinondoni', 46176, 'Active', null, null], null, 'A5');
+        $sheet->fromArray([2, 'MBZ-RES', 'Mbezi residence', 'Construction', null, null, 'Active', null, null], null, 'A6');
+        $sheet->fromArray([18, 'OFC-OVH', 'Office & overheads', 'Overheads', 'Head office', null, 'Active', null, 'Not a project - office running costs'], null, 'A7');
+        $sheet->fromArray(['Start Date: contract start, DD/MM/YYYY.'], null, 'A9');
+        $file = tempnam(sys_get_temp_dir(), 'pilot').'.xlsx';
+        (new Xlsx($book))->save($file);
+
+        $this->artisan('app:pilot-projects', ['file' => $file, '--fresh' => true])->assertSuccessful();
+        $this->assertNull(Project::find($old->id));
+        $this->assertSame(['BWG-MBZ-RES-2026-001', 'BWG-MSK-FIN-2026-001', 'BWG-OFC-OVH-2026-001'], Project::orderBy('project_code')->pluck('project_code')->all());
+        $masaki = Project::where('project_code', 'BWG-MSK-FIN-2026-001')->sole();
+        $this->assertSame(['Finishing works', 'Kinondoni', '2026-06-03', 8], [$masaki->work_type, $masaki->location, $masaki->planned_start_date->toDateString(), $masaki->phases()->count()]);
+        $this->assertNull(Project::where('project_code', 'BWG-MBZ-RES-2026-001')->value('location'), 'A blank district is left blank, not guessed.');
+        $this->assertTrue((bool) Project::where('project_code', 'BWG-OFC-OVH-2026-001')->value('is_company_overheads'));
+        $this->assertSame(0, ExpenseRequest::count());
+        @unlink($file);
+    }
+
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
     {
         $project = Project::create(['project_code' => $code, 'name' => 'Project '.$code, 'status' => 'active', 'location' => 'Dar es Salaam']);
