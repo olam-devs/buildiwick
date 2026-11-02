@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-02 — No "To Confirm" in Company Overheads
+
+- **Company Overheads has no confirmation step.** The Director enters office costs, and those entries are confirmed as they are recorded. The overheads ledger therefore has no To Confirm link or count, no Awaiting confirmation cards, no Confirm buttons or bulk confirm, and no "To confirm" or "Part paid" status filter, and it never appears on the company To Confirm page. Workers is hidden there too, because office staff salaries go under the Staff Salaries group.
+
 ## 2026-11-02 — Office Cost Groups (Company Overheads)
 
 - **A company overheads ledger uses office cost groups instead of construction phases** (`ProjectSetupController::OFFICE_COST_GROUPS`). The groups are: Staff Salaries & Allowances, Statutory & Taxes, Office Rent & Utilities, Transport & Vehicles, Tools & Equipment, Communication & Subscriptions, Stationery & Printing, and Other Office Costs.

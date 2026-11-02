@@ -90,7 +90,7 @@ class LedgerController extends Controller
         if (! $request->user()->can('confirm-payments')) {
             return redirect()->route('ledger.index');
         }
-        $projects = $analytics->projectsFor($request->user(), withOverheads: true)->keyBy('id');
+        $projects = $analytics->projectsFor($request->user())->keyBy('id'); // overheads are confirmed as recorded
         // Open = line total minus what has been paid; under TSh 1 counts as settled (as everywhere in the ledger).
         $paid = DB::table('expense_payments')->selectRaw('expense_request_id, sum(amount) as paid')->groupBy('expense_request_id');
         $open = 'COALESCE(expense_requests.total_amount, expense_requests.approved_amount, expense_requests.commercial_total, 0) - COALESCE(paid.paid, 0)';

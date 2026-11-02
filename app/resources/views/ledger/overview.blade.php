@@ -42,7 +42,7 @@
 
 <div class="lg-cards">
   <div class="lg-card accent"><div class="k">Confirmed spend</div><div class="v" id="cRecorded">TSh {{ $money::format($t['recorded']) }}</div><div class="s"><span id="cLines">{{ number_format($t['lines']) }}</span> lines @if($t['last_entry'])· last {{ \Carbon\Carbon::parse($t['last_entry'])->format('d M Y') }}@endif</div></div>
-  <a class="lg-card warn" id="cConfirmLink" href="{{ route('ledger.expenses', [$project, 'status' => 'to_confirm', 'sort' => 'oldest']) }}"><div class="k">Awaiting confirmation</div><div class="v" id="cConfirm">TSh {{ $money::format($t['to_confirm']) }}</div><div class="s"><span id="cConfirmCount">{{ number_format($t['to_confirm_count']) }}</span> lines, not counted as spend yet</div></a>
+  <a class="lg-card warn" id="cConfirmLink" @if($project->is_company_overheads) hidden @endif href="{{ route('ledger.expenses', [$project, 'status' => 'to_confirm', 'sort' => 'oldest']) }}"><div class="k">Awaiting confirmation</div><div class="v" id="cConfirm">TSh {{ $money::format($t['to_confirm']) }}</div><div class="s"><span id="cConfirmCount">{{ number_format($t['to_confirm_count']) }}</span> lines, not counted as spend yet</div></a>
   <a class="lg-card" href="{{ route('ledger.structure', $project) }}"><div class="k">Budget used</div><div class="v" id="cUsed">—</div><div class="lg-meter" id="cMeterWrap"><span id="cMeter" style="width:0"></span></div><div class="s" id="cBudget"></div></a>
 </div>
 
