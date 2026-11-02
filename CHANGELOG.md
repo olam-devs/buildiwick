@@ -2,6 +2,13 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-02 — Simpler Company Overheads Pages
+
+- **Office lines are paid when recorded, so the overheads Expenditure and Overview drop what no longer means anything.** That is the Status filter, Deny, the Worker filter, the "Paid" amount-and-status column, "Awaiting confirmation" columns and status pills.
+  - The spend card reads **Total spend**.
+  - A **Paid via** column shows each line's payment method and date.
+  - Edit and Delete remain.
+
 ## 2026-11-02 — No "To Confirm" in Company Overheads
 
 - **Company Overheads has no confirmation step.** The Director enters office costs, and those entries are confirmed as they are recorded. The overheads ledger therefore has no To Confirm link or count, no Awaiting confirmation cards, no Confirm buttons or bulk confirm, and no "To confirm" or "Part paid" status filter, and it never appears on the company To Confirm page. Workers is hidden there too, because office staff salaries go under the Staff Salaries group.
