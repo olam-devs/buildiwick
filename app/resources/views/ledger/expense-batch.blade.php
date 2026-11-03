@@ -39,6 +39,10 @@
 <style>
   .rb-head{display:grid;grid-template-columns:150px 1fr 1fr 1.2fr;gap:12px;align-items:end}
   .rb-hint{font-size:12px;color:var(--ink-dim);margin:8px 0 0}
+  .rb-more-head{background:none;border:0;padding:8px 0 0;color:var(--primary-dark);font:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+  .rb-head.rb-head-more{grid-template-columns:1fr 2fr;margin-top:8px}
+  .rb-head.rb-head-more[hidden]{display:none}
+  @media(max-width:900px){.rb-head.rb-head-more{grid-template-columns:1fr}}
   .rb-draft{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--primary-soft);border:1px solid var(--primary);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13.5px}
   .rb-draft .btn{min-height:36px}
   .rb-saved{font-size:12.5px;color:var(--ink-dim);align-self:center}
@@ -125,7 +129,12 @@
       <div class="field" style="margin:0"><label for="default_supplier">Supplier <span style="font-weight:400;color:var(--ink-dim)">(from the invoice)</span></label>
         <input id="default_supplier" name="default_supplier" list="supplierList" maxlength="150" value="{{ old('default_supplier') }}" placeholder="Type a new one or pick a saved one" autocomplete="off"></div>
     </div>
-    <p class="rb-hint">The date, {{ $project->is_company_overheads ? 'cost group' : 'category, phase' }} and supplier above apply to every item below. Change them on a row only if that item is different. New suppliers are saved for next time.</p>
+    <button type="button" class="rb-more-head" id="headMoreToggle" aria-expanded="{{ old('default_receipt') || old('default_notes') ? 'true' : 'false' }}">More details (receipt no., notes) ▾</button>
+    <div class="rb-head rb-head-more" id="headMore" @unless(old('default_receipt') || old('default_notes')) hidden @endunless>
+      <div class="field" style="margin:0"><label for="default_receipt">Receipt / invoice no. <span style="font-weight:400;color:var(--ink-dim)">(optional)</span></label><input id="default_receipt" name="default_receipt" maxlength="255" value="{{ old('default_receipt') }}" autocomplete="off"></div>
+      <div class="field" style="margin:0"><label for="default_notes">Notes <span style="font-weight:400;color:var(--ink-dim)">(optional)</span></label><input id="default_notes" name="default_notes" maxlength="2000" value="{{ old('default_notes') }}" autocomplete="off"></div>
+    </div>
+    <p class="rb-hint">The date, {{ $project->is_company_overheads ? 'cost group' : 'category, phase' }}, supplier, receipt no. and notes above apply to every item below. Change them on a row only if that item is different. New suppliers are saved for next time.</p>
   </section>
 
   <section class="lg-panel" style="padding:0;overflow:hidden">
@@ -182,6 +191,7 @@
   const phaseOptions = document.getElementById('default_phase').innerHTML;
   const body = document.getElementById('rows');
   const headCat = document.getElementById('default_category'), headPhase = document.getElementById('default_phase'), headSup = document.getElementById('default_supplier');
+  const followed = [['sup', 'supplier', headSup], ['rcpt', 'invoice_receipt_no', document.getElementById('default_receipt')], ['note', 'details', document.getElementById('default_notes')]];
   const rowClass = {labour_subcontracts: 'labour', logistics_equipment: 'logistics', preliminaries_overheads: 'prelims', materials: ''};
   let n = 0;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -249,13 +259,16 @@
       <td data-label="Unit"><select data-f="unit" name="rows[${i}][unit]" data-value="${esc(data.unit)}"></select></td>
       <td data-label="Unit cost (TSh)"><input data-f="cost" class="num" type="number" step="0.01" min="0" name="rows[${i}][unit_cost]" value="${esc(data.unit_cost)}"></td>
       <td data-label="Total (TSh)"><input data-f="total" class="num" type="number" step="0.01" min="0" name="rows[${i}][total_amount]" value="${esc(data.total_amount)}"></td>
-      <td class="rb-more" data-label="Receipt no."><input name="rows[${i}][invoice_receipt_no]" maxlength="255" value="${esc(data.invoice_receipt_no)}" placeholder="Optional"></td>
-      <td class="rb-more" data-label="Notes"><input name="rows[${i}][details]" maxlength="2000" value="${esc(data.details)}" placeholder="Optional"></td>
+      <td class="rb-more" data-label="Receipt no."><input data-f="rcpt" name="rows[${i}][invoice_receipt_no]" maxlength="255"></td>
+      <td class="rb-more" data-label="Notes"><input data-f="note" name="rows[${i}][details]" maxlength="2000"></td>
       <td class="rb-del"><button type="button" class="rb-more-toggle">More details ▾</button><button type="button" class="rb-remove" title="Remove row">× <span class="rb-remove-label">Remove</span></button></td>`;
-    const sup = tr.querySelector('[data-f=sup]');
-    sup.value = data.supplier ?? headSup.value; sup.placeholder = 'As above';
-    sup.dataset.follow = (data.supplier === undefined || data.supplier === headSup.value) ? '1' : '0';
-    sup.addEventListener('input', () => { sup.dataset.follow = sup.value.trim() === headSup.value.trim() ? '1' : '0'; });
+    // Supplier, receipt no. and notes follow the header until changed on the row.
+    followed.forEach(([f, key, head]) => {
+      const el = tr.querySelector(`[data-f=${f}]`);
+      el.value = data[key] ?? head.value; el.placeholder = 'As above';
+      el.dataset.follow = (data[key] === undefined || data[key] === head.value) ? '1' : '0';
+      el.addEventListener('input', () => { el.dataset.follow = el.value.trim() === head.value.trim() ? '1' : '0'; });
+    });
     tr.querySelector('.rb-more-toggle').addEventListener('click', e => { const open = tr.classList.toggle('open'); e.currentTarget.textContent = open ? 'Fewer details ▴' : 'More details ▾'; });
     body.appendChild(tr);
     tr.querySelector('[data-f=cat]').value = cat;
@@ -280,14 +293,19 @@
   };
   // Changing the defaults above updates rows that still follow them (rows changed by hand keep their own value).
   headCat.addEventListener('change', () => [...body.children].forEach(tr => { if (!tr.querySelector('[data-f=item]').value.trim()) { tr.querySelector('[data-f=cat]').value = headCat.value; applyCategory(tr, headCat.value, false); } }));
-  headSup.addEventListener('input', () => body.querySelectorAll('[data-f=sup]').forEach(s => { if (s.dataset.follow === '1') s.value = headSup.value; }));
+  followed.forEach(([f, , head]) => head.addEventListener('input', () => body.querySelectorAll(`[data-f=${f}]`).forEach(s => { if (s.dataset.follow === '1') s.value = head.value; })));
+  const headMore = document.getElementById('headMore'), headMoreToggle = document.getElementById('headMoreToggle');
+  const syncHeadMore = () => { const open = headMoreToggle.getAttribute('aria-expanded') === 'true'; headMore.hidden = !open; headMoreToggle.textContent = open ? 'Fewer details ▴' : 'More details (receipt no., notes) ▾'; };
+  headMoreToggle.addEventListener('click', () => { headMoreToggle.setAttribute('aria-expanded', headMoreToggle.getAttribute('aria-expanded') === 'true' ? 'false' : 'true'); syncHeadMore(); });
+  syncHeadMore();
   headPhase.addEventListener('change', () => [...body.children].forEach(tr => { if (!tr.querySelector('[data-f=item]').value.trim()) tr.querySelector('[data-f=phase]').value = headPhase.value; }));
   document.getElementById('addRow').addEventListener('click', () => addRow().querySelector('[data-f=item]').focus());
   document.getElementById('addFive').addEventListener('click', () => { for (let k = 0; k < 5; k++) addRow(); });
   if (C.draft) {
     const h = C.draft.header || {};
     const put = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null && v !== '') el.value = v; };
-    ['expense_date', 'default_category', 'default_phase', 'default_supplier', 'payment_date', 'payment_method', 'transaction_reference'].forEach(id => put(id, h[id]));
+    ['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference'].forEach(id => put(id, h[id]));
+    if (h.default_receipt || h.default_notes) { headMoreToggle.setAttribute('aria-expanded', 'true'); syncHeadMore(); }
     (C.draft.rows || []).forEach(row => addRow(row));
   } else {
     old.forEach(row => addRow(row));
@@ -302,7 +320,7 @@
   let draftTimer = null, submitting = false, lastSent = '';
   const collect = () => {
     const header = {};
-    ['expense_date', 'default_category', 'default_phase', 'default_supplier', 'payment_date', 'payment_method', 'transaction_reference'].forEach(id => { const el = document.getElementById(id); if (el) header[id] = el.value; });
+    ['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference'].forEach(id => { const el = document.getElementById(id); if (el) header[id] = el.value; });
     const rows = [...body.children].map(tr => { const row = {}; tr.querySelectorAll('[name^="rows["]').forEach(el => { const m = el.name.match(/\]\[([a-z_]+)\]$/); if (m && el.value !== '__new') row[m[1]] = el.value; }); return row; });
     return JSON.stringify({header, rows});
   };

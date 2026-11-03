@@ -586,7 +586,7 @@ class RecordingModeTest extends TestCase
             ->assertRedirect(route('entry.form', $project));
         $line = ExpenseRequest::query()->sole();
         $this->assertSame(['unpaid', (int) $clerk->id], [$line->payment_status, (int) $line->requested_by]);
-        $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee($line->request_code)->assertSee('To confirm');
+        $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee($line->request_code)->assertDontSee('To confirm');
         $this->actingAs($this->user('accounts'))->get(route('ledger.expenses', [$project, 'status' => 'to_confirm']))->assertOk()->assertSee('Cement');
     }
 
@@ -694,6 +694,19 @@ class RecordingModeTest extends TestCase
         $this->actingAs($clerk)->put(route('ledger.expenses.update', [$project, $own]), $this->line($phases[0], ['unit_cost' => '24000']))->assertRedirect(route('entry.form', $project));
         $this->assertSame('960000.00', (string) $own->fresh()->total_amount);
         $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $pmLine]))->assertForbidden();
+
+        // Once someone else changes or confirms a line, Data Entry can no longer touch it (shown shaded, no status).
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'Sand']));
+        $sand = ExpenseRequest::query()->where('item_description', 'Sand')->sole();
+        $this->actingAs($clerk)->get(route('entry.today.project', $project))->assertOk()->assertDontSee("Can't be changed", false)->assertDontSee('To confirm');
+        $this->actingAs($this->user('director'))->put(route('ledger.expenses.update', [$project, $sand]), $this->line($phases[0], ['item_description' => 'Sand', 'unit_cost' => '20000']))->assertSessionHasNoErrors();
+        $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $sand]))->assertForbidden();
+        $this->actingAs($clerk)->delete(route('ledger.expenses.destroy', [$project, $sand]))->assertForbidden();
+        $this->actingAs($clerk)->get(route('entry.today.project', $project))->assertOk()->assertSee("Can't be changed", false)->assertSee('today-locked');
+        $this->actingAs($this->user('accounts', $project))->post(route('ledger.expenses.confirm', [$project, $own]), ['amount' => '960000', 'payment_date' => '2026-10-30', 'payment_method' => 'cash'])->assertSessionHasNoErrors();
+        $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $own]))->assertForbidden();
+        $own->payments()->delete();
+        $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $own]))->assertOk();
 
         Carbon::setTestNow('2026-10-31 09:00:00');
         $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $own]))->assertForbidden();
