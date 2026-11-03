@@ -205,14 +205,14 @@ class LedgerController extends Controller
         ]);
         $fields = ['main_category', 'project_phase_id', 'item_description', 'supplier', 'subcategory', 'quantity', 'unit', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details', 'labour_agreement_id'];
         $rows = collect($validated['rows'] ?? [])->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))
-            ->filter(fn (array $row) => collect($row)->only(['item_description', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details'])->filter(fn ($v) => trim((string) $v) !== '')->isNotEmpty())
+            ->filter(fn (array $row) => collect($row)->only(['item_description', 'unit_cost', 'total_amount'])->filter(fn ($v) => trim((string) $v) !== '')->isNotEmpty())
             ->values();
         if ($rows->isEmpty()) {
             ExpenseDraft::clear($request->user(), $project);
 
             return response()->json(['saved' => false]);
         }
-        $header = array_intersect_key($validated['header'] ?? [], array_flip(['expense_date', 'default_category', 'default_phase', 'default_supplier', 'payment_date', 'payment_method', 'transaction_reference']));
+        $header = array_intersect_key($validated['header'] ?? [], array_flip(['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference']));
         $draft = ExpenseDraft::updateOrCreate(['user_id' => $request->user()->id, 'project_id' => $project->id],
             ['data' => ['header' => $header, 'rows' => $rows->all()], 'item_count' => $rows->count()]);
 
@@ -244,7 +244,7 @@ class LedgerController extends Controller
     private function storeRows(Request $request, Project $project, ExpenseLedgerService $ledger)
     {
         $rows = collect($request->input('rows', []))
-            ->filter(fn ($row) => is_array($row) && collect($row)->except(['main_category', 'project_phase_id', 'supplier', 'quantity', 'unit'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
+            ->filter(fn ($row) => is_array($row) && collect($row)->except(['main_category', 'project_phase_id', 'supplier', 'quantity', 'unit', 'invoice_receipt_no', 'details'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
             ->values()->all();
         $request->merge(['rows' => $rows]);
         if ($request->user()->hasRole('admin')) {

@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-03 — Data Entry Locks, One Receipt and Notes for All Items
+
+- **Data Entry no longer sees statuses.** On Entered Today they see only their lines, with Edit/Delete while a line can still be changed. A line becomes **locked** (shaded, "🔒 Can't be changed") once Accounts confirms it, or once anyone else (Director, PM, Accounts) edits it. The `edit-ledger-line` gate now also checks that there is no payment, and no `project_edit_logs` entry for the line by another user. Other roles still see the Status column.
+- **One receipt no. and notes for the whole invoice.** Under the header there is now **More details (receipt no., notes)**. Both are optional and apply to every item row, like the supplier. A row only keeps its own value if it is changed on that row. Drafts keep them too.
+- Blank rows that only carry header receipt/notes values are ignored on save and in drafts.
+
 ## 2026-11-03 — Unfinished Entries Kept as Drafts (Any Device)
 
 - The Record Expense form is now **saved as a draft while you type**: about 1.5 s after a change, and again when the page goes to the background. The draft is stored on the account, so it can be continued later on any phone or computer after signing in again.

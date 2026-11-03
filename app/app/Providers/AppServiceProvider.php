@@ -11,6 +11,7 @@ use App\Models\InternalBudgetEntry;
 use App\Models\LabourAgreement;
 use App\Models\Lookup;
 use App\Models\Project;
+use App\Models\ProjectEditLog;
 use App\Models\ProjectEstimate;
 use App\Models\ProjectPhase;
 use App\Models\User;
@@ -118,9 +119,12 @@ class AppServiceProvider extends ServiceProvider
             if (! $ledgerUser($user) || ! $user->canAccessProject($line->project_id)) {
                 return false;
             }
-            // Data Entry may fix or remove only their own lines, the same day, before Accounts confirms.
+            // Data Entry may fix or remove only their own lines, the same day, until Accounts confirms them
+            // or someone else (Director, PM, Accounts) changes them.
             if ($dataEntry($user)) {
-                return (int) $line->requested_by === (int) $user->id && $line->created_at?->isToday() && $line->status === 'approved';
+                return (int) $line->requested_by === (int) $user->id && $line->created_at?->isToday() && $line->status === 'approved'
+                    && $line->payments()->doesntExist()
+                    && ProjectEditLog::query()->where('document_type', 'expense')->where('document_id', $line->id)->where('edited_by', '!=', $user->id)->doesntExist();
             }
 
             return $user->permits('edit_any_line') || ($user->permits('record_expenses') && (int) $line->requested_by === (int) $user->id);
