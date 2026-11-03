@@ -30,11 +30,18 @@
       'phaseWord' => $project->is_company_overheads ? 'Cost group' : 'Phase',
       'phases' => $phases->mapWithKeys(fn ($node) => [$node['phase']->id => $node['label']]),
       'unitLabels' => $units->pluck('label', 'code'),
+      // An unsubmitted form saved earlier (any device) is restored, unless the page is showing a failed save.
+      'draft' => (($draft ?? null) && ! old('rows')) ? $draft->data : null,
+      'draftUrl' => route('ledger.draft.save', $project),
   ];
+  $restoring = ($draft ?? null) && ! old('rows');
 @endphp
 <style>
   .rb-head{display:grid;grid-template-columns:150px 1fr 1fr 1.2fr;gap:12px;align-items:end}
   .rb-hint{font-size:12px;color:var(--ink-dim);margin:8px 0 0}
+  .rb-draft{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--primary-soft);border:1px solid var(--primary);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13.5px}
+  .rb-draft .btn{min-height:36px}
+  .rb-saved{font-size:12.5px;color:var(--ink-dim);align-self:center}
   /* Preview before saving */
   .pv-dialog{border:0;border-radius:16px;padding:0;width:min(720px,calc(100vw - 24px));max-height:calc(100vh - 40px);background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.3)}
   .pv-dialog::backdrop{background:rgba(10,16,24,.55)}
@@ -103,6 +110,10 @@
 @if ($errors->any())<div class="flash error"><ul style="margin:0;padding-left:20px;">@foreach(collect($errors->all())->unique()->take(12) as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 @if($leafPhases->isEmpty())<div class="flash error">This project has no phases yet. @if($entryMode ?? false)Ask the Director to add them.@else The Director adds them under <a href="{{ route('ledger.structure', $project) }}">Phases &amp; Budget</a>.@endif</div>@endif
 
+@if($restoring)
+  <div class="rb-draft" id="draftBar"><span><b>Unfinished entry restored</b> · {{ $draft->item_count }} item{{ $draft->item_count === 1 ? '' : 's' }}, last saved {{ $draft->updated_at->isToday() ? 'today at '.$draft->updated_at->format('H:i') : $draft->updated_at->format('d M Y, H:i') }}. Continue where you left off, or start again.</span>
+    <form method="POST" action="{{ route('ledger.draft.discard', $project) }}" onsubmit="return confirm('Discard this unfinished entry? The items in it will be removed.');">@csrf @method('DELETE')<button class="btn btn-ghost" type="submit">Discard draft</button></form></div>
+@endif
 <form method="POST" action="{{ route('ledger.expenses.store', $project) }}" id="batchForm" @class(['ovh-form' => $project->is_company_overheads])>@csrf
   <section class="lg-panel" style="margin-bottom:12px">
     <div class="rb-head">
@@ -153,6 +164,7 @@
       <p class="form-context" style="margin:0">Lines are saved as <b>To confirm</b>; Accounts confirms the payments.</p>
     @endif
     <div class="rb-actions" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-ghost" type="button" id="previewButton">Preview</button><button class="btn btn-primary" type="submit" id="saveButton">Save Expenses</button>@unless($entryMode ?? false)<button class="btn btn-ghost rb-another" type="submit" name="after" value="another">Save &amp; Record More</button>@endunless</div>
+    <p class="rb-hint" id="draftStatus">Your entry is kept as a draft while you type, so you can continue later on any device.</p>
   </section>
 </form>
 
@@ -272,11 +284,44 @@
   headPhase.addEventListener('change', () => [...body.children].forEach(tr => { if (!tr.querySelector('[data-f=item]').value.trim()) tr.querySelector('[data-f=phase]').value = headPhase.value; }));
   document.getElementById('addRow').addEventListener('click', () => addRow().querySelector('[data-f=item]').focus());
   document.getElementById('addFive').addEventListener('click', () => { for (let k = 0; k < 5; k++) addRow(); });
-  old.forEach(row => addRow(row)); if (!old.length) addRow();
+  if (C.draft) {
+    const h = C.draft.header || {};
+    const put = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null && v !== '') el.value = v; };
+    ['expense_date', 'default_category', 'default_phase', 'default_supplier', 'payment_date', 'payment_method', 'transaction_reference'].forEach(id => put(id, h[id]));
+    (C.draft.rows || []).forEach(row => addRow(row));
+  } else {
+    old.forEach(row => addRow(row));
+  }
+  if (!body.children.length) addRow();
   // Enter in the last row's notes adds a new row instead of submitting.
   body.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); const tr = e.target.closest('tr'); if (tr === body.lastElementChild) addRow().querySelector('[data-f=item]').focus(); } });
   const paid = document.getElementById('paidFields');
   if (paid) { const sync = () => paid.hidden = document.querySelector('input[name=status]:checked')?.value !== 'paid'; document.querySelectorAll('input[name=status]').forEach(r => r.addEventListener('change', sync)); sync(); }
+  // Draft: the form is saved to the account as you type, and removed once the expenses are saved.
+  const token = document.querySelector('#batchForm input[name=_token]').value, statusLine = document.getElementById('draftStatus');
+  let draftTimer = null, submitting = false, lastSent = '';
+  const collect = () => {
+    const header = {};
+    ['expense_date', 'default_category', 'default_phase', 'default_supplier', 'payment_date', 'payment_method', 'transaction_reference'].forEach(id => { const el = document.getElementById(id); if (el) header[id] = el.value; });
+    const rows = [...body.children].map(tr => { const row = {}; tr.querySelectorAll('[name^="rows["]').forEach(el => { const m = el.name.match(/\]\[([a-z_]+)\]$/); if (m && el.value !== '__new') row[m[1]] = el.value; }); return row; });
+    return JSON.stringify({header, rows});
+  };
+  const saveDraft = (keepalive = false) => {
+    if (submitting) return;
+    const payload = collect();
+    if (payload === lastSent) return;
+    lastSent = payload;
+    fetch(C.draftUrl, {method: 'POST', keepalive, headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token}, body: payload})
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => { statusLine.textContent = d.saved ? `Draft saved at ${d.at}. You can continue later on any device.` : 'Your entry is kept as a draft while you type, so you can continue later on any device.'; })
+      .catch(() => { lastSent = ''; statusLine.textContent = 'Draft not saved (no connection?). Keep the page open and save when you can.'; });
+  };
+  const queueDraft = () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 1500); };
+  ['input', 'change'].forEach(type => document.getElementById('batchForm').addEventListener(type, queueDraft));
+  body.addEventListener('click', e => { if (e.target.closest('.rb-remove')) queueDraft(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(draftTimer); saveDraft(true); } });
+  document.getElementById('batchForm').addEventListener('submit', e => { submitting = true; clearTimeout(draftTimer); setTimeout(() => { if (e.defaultPrevented) submitting = false; }, 0); });
+  lastSent = C.draft ? collect() : '';
   // Preview: everything entered, as it will be saved, before submitting.
   const form = document.getElementById('batchForm'), dialog = document.getElementById('previewDialog');
   const fmt = v => (v || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});

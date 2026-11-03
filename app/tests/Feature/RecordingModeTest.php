@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\Web\ProjectSetupController;
 use App\Models\DirectorKpiTarget;
+use App\Models\ExpenseDraft;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
 use App\Models\LabourAgreement;
@@ -587,6 +588,45 @@ class RecordingModeTest extends TestCase
         $this->assertSame(['unpaid', (int) $clerk->id], [$line->payment_status, (int) $line->requested_by]);
         $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee($line->request_code)->assertSee('To confirm');
         $this->actingAs($this->user('accounts'))->get(route('ledger.expenses', [$project, 'status' => 'to_confirm']))->assertOk()->assertSee('Cement');
+    }
+
+    public function test_an_unsubmitted_entry_is_kept_as_a_draft_and_continued_later(): void
+    {
+        [$project, $phases] = $this->project();
+        [$other] = $this->project('BWG-TST-B-2026-001');
+        $clerk = $this->user('data_entry', $project);
+        $clerk->assignedProjects()->attach($other->id);
+        $draft = ['header' => ['expense_date' => '2026-11-02', 'default_category' => 'materials', 'default_phase' => (string) $phases[0]->id, 'default_supplier' => 'ABC Hardware'],
+            'rows' => [
+                ['main_category' => 'materials', 'project_phase_id' => (string) $phases[0]->id, 'item_description' => 'Cement 42.5', 'supplier' => 'ABC Hardware', 'quantity' => '50', 'unit' => 'bag', 'unit_cost' => '18500'],
+                ['main_category' => 'materials', 'project_phase_id' => (string) $phases[0]->id, 'item_description' => '', 'quantity' => '1', 'unit' => 'pc'],
+            ]];
+
+        $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), $draft)->assertOk()->assertJson(['saved' => true]);
+        $saved = ExpenseDraft::query()->sole();
+        $this->assertSame([1, 'Cement 42.5', 'ABC Hardware'], [$saved->item_count, $saved->data['rows'][0]['item_description'], $saved->data['header']['default_supplier']]);
+
+        // Later (any device): the form opens with the draft, and the project list marks it.
+        $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee('Unfinished entry · 1 item');
+        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('Unfinished entry restored')->assertSee('Cement 42.5');
+        $this->actingAs($clerk)->get(route('entry.form', $other))->assertOk()->assertDontSee('Unfinished entry restored');
+        $this->actingAs($this->user('project_manager', $project))->get(route('ledger.expenses.create', $project))->assertOk()->assertDontSee('Cement 42.5');
+        $this->actingAs($this->user('accounts', $project))->postJson(route('ledger.draft.save', $project), $draft)->assertForbidden();
+        [$foreign] = $this->project('BWG-TST-C-2026-001');
+        $this->actingAs($clerk)->postJson(route('ledger.draft.save', $foreign), $draft)->assertForbidden();
+
+        // Saving the expenses removes the draft.
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), ['expense_date' => now()->toDateString(), 'status' => 'to_confirm',
+            'rows' => [['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Cement 42.5', 'quantity' => '50', 'unit_cost' => '18500']]])->assertSessionHasNoErrors();
+        $this->assertSame(0, ExpenseDraft::count());
+
+        // A form emptied again removes its draft; Discard removes it too.
+        $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), $draft)->assertJson(['saved' => true]);
+        $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), ['header' => $draft['header'], 'rows' => [$draft['rows'][1]]])->assertJson(['saved' => false]);
+        $this->assertSame(0, ExpenseDraft::count());
+        $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), $draft);
+        $this->actingAs($clerk)->delete(route('ledger.draft.discard', $project))->assertRedirect(route('entry.form', $project));
+        $this->assertSame(0, ExpenseDraft::count());
     }
 
     public function test_suppliers_are_recorded_per_item_reused_and_shown_on_entered_today(): void

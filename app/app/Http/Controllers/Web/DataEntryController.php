@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\ExpenseDraft;
 use App\Models\ExpenseRequest;
 use App\Models\Project;
 use App\Models\User;
@@ -26,6 +27,7 @@ class DataEntryController extends Controller
 
         return view('entry.index', [
             'projects' => $projects,
+            'drafts' => ExpenseDraft::query()->where('user_id', $user->id)->pluck('item_count', 'project_id'),
             'today' => $this->todaysLines($request),
         ]);
     }

@@ -14,6 +14,7 @@
     @foreach($projects as $project)
       <a class="entry-project" href="{{ route('entry.form', $project) }}" data-search="{{ strtolower($project->name.' '.$project->project_code.' '.$project->location) }}">
         <b>{{ $project->name }}</b><span>{{ $project->project_code }}@if($project->location) · {{ $project->location }}@endif</span>
+        @if($drafts->has($project->id))<em class="entry-draft">Unfinished entry · {{ $drafts[$project->id] }} item{{ $drafts[$project->id] == 1 ? '' : 's' }}</em>@endif
       </a>
     @endforeach
   </div>
@@ -27,6 +28,7 @@
   .entry-project{display:flex;flex-direction:column;gap:3px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);text-decoration:none;color:var(--ink)}
   .entry-project:hover{border-color:var(--primary);background:var(--primary-soft)}
   .entry-project b{font-size:14px}.entry-project span{font-size:12px;color:var(--ink-dim)}
+  .entry-draft{font-style:normal;font-size:12.5px;font-weight:600;color:var(--primary-dark);margin-top:4px}
 </style>
 <script>
 (() => {

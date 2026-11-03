@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\ExpenseDraft;
 use App\Models\ExpenseRequest;
 use App\Models\LabourAgreement;
 use App\Models\Lookup;
@@ -185,7 +186,46 @@ class LedgerController extends Controller
     {
         $this->authorize('record-expense', $project);
 
-        return view('ledger.expense-batch', $this->formData($project));
+        return view('ledger.expense-batch', $this->formData($project) + ['draft' => ExpenseDraft::for($request->user(), $project)]);
+    }
+
+    /**
+     * Keeps the unsubmitted Record Expense form (sent by the page as you type) so it can be continued
+     * later, on any device. A form with no item filled in removes the draft.
+     */
+    public function saveDraft(Request $request, Project $project)
+    {
+        $this->authorize('record-expense', $project);
+        $validated = $request->validate([
+            'header' => ['nullable', 'array'],
+            'header.*' => ['nullable', 'string', 'max:255'],
+            'rows' => ['nullable', 'array', 'max:100'],
+            'rows.*' => ['array'],
+            'rows.*.*' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $fields = ['main_category', 'project_phase_id', 'item_description', 'supplier', 'subcategory', 'quantity', 'unit', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details', 'labour_agreement_id'];
+        $rows = collect($validated['rows'] ?? [])->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))
+            ->filter(fn (array $row) => collect($row)->only(['item_description', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details'])->filter(fn ($v) => trim((string) $v) !== '')->isNotEmpty())
+            ->values();
+        if ($rows->isEmpty()) {
+            ExpenseDraft::clear($request->user(), $project);
+
+            return response()->json(['saved' => false]);
+        }
+        $header = array_intersect_key($validated['header'] ?? [], array_flip(['expense_date', 'default_category', 'default_phase', 'default_supplier', 'payment_date', 'payment_method', 'transaction_reference']));
+        $draft = ExpenseDraft::updateOrCreate(['user_id' => $request->user()->id, 'project_id' => $project->id],
+            ['data' => ['header' => $header, 'rows' => $rows->all()], 'item_count' => $rows->count()]);
+
+        return response()->json(['saved' => true, 'at' => $draft->updated_at->format('H:i')]);
+    }
+
+    public function discardDraft(Request $request, Project $project)
+    {
+        $this->authorize('record-expense', $project);
+        ExpenseDraft::clear($request->user(), $project);
+
+        return $request->expectsJson() ? response()->json(['saved' => false])
+            : redirect($request->user()->role?->name === 'data_entry' ? route('entry.form', $project) : route('ledger.expenses.create', $project))->with('success', 'Draft discarded.');
     }
 
     public function store(Request $request, Project $project, ExpenseLedgerService $ledger)
@@ -242,6 +282,7 @@ class LedgerController extends Controller
             'expense_date' => $header['expense_date'], 'status' => $header['status'], 'payment_date' => $header['payment_date'] ?? null,
             'payment_method' => $header['payment_method'] ?? null, 'transaction_reference' => $header['transaction_reference'] ?? null,
         ], $request->user())));
+        ExpenseDraft::clear($request->user(), $project);
         $total = LedgerAnalyticsService::money((int) $lines->sum(fn ($line) => LedgerAnalyticsService::cents($line->total_amount)));
         $next = $this->afterSave($request, $project);
 
