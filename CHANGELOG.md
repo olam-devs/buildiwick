@@ -2,6 +2,15 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-03 — Suppliers on Entries, Preview, Back to Top, Entered Today
+
+- **Supplier on every entry.** The Record Expense form has a **Supplier** box in the header ("from the invoice"). It applies to every row, like the date, category and phase. A row only gets its own supplier if it is changed on that row (desktop column, or "More details" on a phone). Suppliers are stored in the existing free-text `expense_requests.supplier_fundi_client` column, so there is no migration.
+- **Saved suppliers.** The picker suggests the suppliers already used on that project, most recent first (`ExpenseLedgerService::suppliers()`). A name typed with different spacing or case reuses the spelling first saved on the project, so "abc hardware" becomes "ABC Hardware". The single-line edit form also has the field. The Expenditure register shows "Supplier: …" under the item, and its search covers suppliers. In the Excel export, the "Worker" column is now **"Supplier / Worker"**.
+- **Preview before saving.** A **Preview** button next to **Save Expenses** shows every item as it will be saved: supplier, phase, qty × unit cost and total, plus warnings for rows missing an item, phase or amount. From there, Submit or go back to edit. Direct save still works.
+- **Back-to-top button** on every page: a round ↑ appears bottom-right after scrolling down a long page, such as many item rows on a phone.
+- **Entered Today** in the sidebar for anyone who records (Data Entry, PM, Director), with a count badge. It opens `/entry/today` (`entry.today`), which lists the person's own lines entered today on every project, with the supplier and total.
+- Blank extra rows that only carry the default qty, unit or supplier are ignored on save. Phone item cards show "Item #6" on one line.
+
 ## 2026-11-02 — Company Overheads Pages Reviewed
 
 Every page of the Company Overheads ledger now fits office costs, which are organised by **cost group** only:

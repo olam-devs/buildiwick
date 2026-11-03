@@ -35,7 +35,7 @@ class LedgerWorkbookService
 
     private const DATE = 'dd mmm yyyy';
 
-    private const LINE_HEADERS = ['Transaction ID', 'Date', 'Main Category', 'Subcategory', 'Item / Description', 'Worker', 'Invoice / Receipt No.',
+    private const LINE_HEADERS = ['Transaction ID', 'Date', 'Main Category', 'Subcategory', 'Item / Description', 'Supplier / Worker', 'Invoice / Receipt No.',
         'Quantity', 'Unit', 'Unit Cost (TSh)', 'Total Amount (TSh)', 'Amount Paid (TSh)', 'Payment Status', 'Payment Method', 'Paid On', 'Phase', 'Recorded By', 'Notes'];
 
     private const LINE_WIDTHS = [17, 12, 20, 22, 40, 20, 16, 10, 8, 15, 17, 17, 13, 15, 12, 30, 18, 40];
@@ -368,7 +368,8 @@ class LedgerWorkbookService
 
         return [
             $line->request_code, $line->requested_at, LedgerAnalyticsService::CATEGORIES[$line->main_category] ?? $line->main_category,
-            $this->label('subcategory', $line->subcategory), $line->item_description, $line->labourAgreement?->fundi_subcontractor, $line->invoice_receipt_no,
+            $this->label('subcategory', $line->subcategory), $line->item_description,
+            collect([$line->supplier_fundi_client, $line->labourAgreement?->fundi_subcontractor])->filter()->unique()->implode(' · ') ?: null, $line->invoice_receipt_no,
             $line->quantity === null ? null : (float) $line->quantity, $this->label('unit', $line->unit),
             $line->unit_cost === null ? null : (float) $line->unit_cost, (float) $line->total_amount, (float) $line->paid_to_date,
             ['paid' => 'Paid', 'part_paid' => 'Part paid', 'unpaid' => 'To confirm'][$status] ?? 'To confirm',

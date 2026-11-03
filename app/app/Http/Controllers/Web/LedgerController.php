@@ -204,7 +204,7 @@ class LedgerController extends Controller
     private function storeRows(Request $request, Project $project, ExpenseLedgerService $ledger)
     {
         $rows = collect($request->input('rows', []))
-            ->filter(fn ($row) => is_array($row) && collect($row)->except(['main_category', 'project_phase_id'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
+            ->filter(fn ($row) => is_array($row) && collect($row)->except(['main_category', 'project_phase_id', 'supplier', 'quantity', 'unit'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
             ->values()->all();
         $request->merge(['rows' => $rows]);
         if ($request->user()->hasRole('admin')) {
@@ -223,6 +223,7 @@ class LedgerController extends Controller
             'rows.*.main_category' => ['required', Rule::in(array_keys(LedgerAnalyticsService::CATEGORIES))],
             'rows.*.project_phase_id' => ['required', 'integer', $phaseRule],
             'rows.*.item_description' => ['required', 'string', 'max:255'],
+            'rows.*.supplier' => ['nullable', 'string', 'max:150'],
             'rows.*.subcategory' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'subcategory')],
             'rows.*.quantity' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
             'rows.*.unit' => ['nullable', 'string', 'max:30'],
@@ -543,7 +544,7 @@ class LedgerController extends Controller
             ->when($filters['from'] ?? null, fn ($query, $from) => $query->whereDate('requested_at', '>=', $from))
             ->when($filters['to'] ?? null, fn ($query, $to) => $query->whereDate('requested_at', '<=', $to))
             ->when($filters['q'] ?? null, fn ($query, $search) => $query->where(fn ($inner) => $inner->where('item_description', 'like', '%'.$search.'%')
-                ->orWhere('request_code', 'like', '%'.$search.'%')->orWhere('notes', 'like', '%'.$search.'%')->orWhere('invoice_receipt_no', 'like', '%'.$search.'%')))
+                ->orWhere('request_code', 'like', '%'.$search.'%')->orWhere('notes', 'like', '%'.$search.'%')->orWhere('invoice_receipt_no', 'like', '%'.$search.'%')->orWhere('supplier_fundi_client', 'like', '%'.$search.'%')))
             ->get()
             ->pipe(fn ($rows) => LedgerAnalyticsService::normalize($rows))
             ->when(! $denied && ($filters['status'] ?? null), fn ($rows) => $rows->filter(fn ($line) => $line->ledger_status === match ($filters['status']) {
@@ -584,6 +585,7 @@ class LedgerController extends Controller
             'methods' => Lookup::ofType('payment_method')->pluck('label', 'code'),
             'workers' => LabourAgreement::query()->where('project_id', $project->id)->where('status', '!=', 'cancelled')->orderBy('fundi_subcontractor')->get(),
             'suggestions' => $suggestions,
+            'suppliers' => ExpenseLedgerService::suppliers($project),
             'canMarkPaid' => ExpenseLedgerService::canMarkPaid(request()->user()),
         ];
     }
@@ -596,6 +598,7 @@ class LedgerController extends Controller
             'project_phase_id' => ['required', 'integer', Rule::exists('project_phases', 'id')->where('project_id', $project->id)],
             'subcategory' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'subcategory')],
             'item_description' => ['required', 'string', 'max:255'],
+            'supplier' => ['nullable', 'string', 'max:150'],
             'details' => ['nullable', 'string', 'max:2000'],
             'quantity' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
             'unit' => ['nullable', 'string', 'max:30'],

@@ -335,6 +335,20 @@
 })();
 </script>
 @include('partials.page-loader')
+<button type="button" class="to-top" id="toTop" aria-label="Back to top" title="Back to top" hidden>&#8593;</button>
+<style>
+  .to-top{position:fixed;right:16px;bottom:18px;z-index:70;width:48px;height:48px;border-radius:50%;border:0;background:var(--primary);color:#fff;font-size:22px;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .to-top[hidden]{display:none}
+  @media print{.to-top{display:none}}
+</style>
+<script>
+  (function () {
+    var button = document.getElementById('toTop');
+    var sync = function () { button.hidden = window.scrollY < 700; };
+    window.addEventListener('scroll', sync, {passive: true}); sync();
+    button.addEventListener('click', function () { window.scrollTo({top: 0, behavior: 'smooth'}); });
+  })();
+</script>
 <script>
   // Close the account menu when clicking elsewhere.
   document.addEventListener('click', function (e) { document.querySelectorAll('details.profile[open]').forEach(function (d) { if (!d.contains(e.target)) { d.removeAttribute('open'); } }); });

@@ -2,7 +2,7 @@
 @php($money = \App\Support\Money::class)
 <section class="lg-panel" style="margin-top:16px">
   <h3>Entered today ({{ $today->count() }})</h3>
-  <p class="hint">You can edit or delete your own lines today until Accounts confirms them. After that, ask the Project Manager.</p>
+  @if(auth()->user()->role?->name === 'data_entry')<p class="hint">You can edit or delete your own lines today until Accounts confirms them. After that, ask the Project Manager.</p>@endif
   <div class="tablewrap" style="border:0;margin-top:8px"><table class="lg-table lg-cards-sm">
     <thead><tr><th>ID</th>@if($showProject ?? false)<th>Project</th>@endif<th>Item</th><th class="amt">Amount</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -11,7 +11,7 @@
       <tr>
         <td data-label="ID" class="code">{{ $line->request_code }}<span class="muted">{{ $line->created_at?->format('H:i') }}</span></td>
         @if($showProject ?? false)<td data-label="Project">{{ $line->project?->name }}</td>@endif
-        <td data-label="Item">{{ $line->item_description }}<span class="muted">{{ \App\Services\LedgerAnalyticsService::CATEGORIES[$line->main_category] ?? $line->main_category }}</span></td>
+        <td data-label="Item">{{ $line->item_description }}<span class="muted">@if($line->supplier_fundi_client){{ $line->supplier_fundi_client }} · @endif{{ $line->project?->is_company_overheads ? $line->phase?->name : (\App\Services\LedgerAnalyticsService::CATEGORIES[$line->main_category] ?? $line->main_category) }}</span></td>
         <td data-label="Amount" class="amt">{{ $money::format($line->total_amount) }}</td>
         <td data-label="Status"><span class="lg-pill {{ ['Denied' => 'denied', 'Confirmed' => 'paid', 'To confirm' => 'unpaid'][$state] }}">{{ $state }}</span></td>
         <td class="lg-btn-cell"><div class="lg-btns">
