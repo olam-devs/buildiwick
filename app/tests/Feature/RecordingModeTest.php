@@ -621,9 +621,19 @@ class RecordingModeTest extends TestCase
         $this->assertSame('Kariakoo Sand', $sand->fresh()->supplier_fundi_client);
 
         // Entered Today lists the person's own lines with the supplier; the register can be searched by supplier.
-        $this->actingAs($clerk)->get(route('entry.today'))->assertOk()->assertSee('Kariakoo Sand')->assertSee('Cement')->assertSee('TSh 162,000.00');
+        // Outside a project: choose the project first (with today's count and total per project).
+        $this->actingAs($clerk)->get(route('entry.today'))->assertOk()->assertSee($project->name)->assertSee($other->name)
+            ->assertSee('4 lines · TSh 162,000.00')->assertSee('Nothing today')->assertDontSee('Kariakoo Sand');
+        // Inside a project: only that project's lines, and the sidebar stays in the project.
+        $this->actingAs($clerk)->get(route('entry.today.project', $project))->assertOk()->assertSee('Kariakoo Sand')->assertSee('Cement')
+            ->assertSee('Entering for')->assertSee('Enter expenses');
+        $this->actingAs($clerk)->get(route('entry.today.project', $other))->assertOk()->assertDontSee('Cement')->assertSee('Nothing entered yet today.');
+        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee(route('entry.today.project', $project), false);
+        [$foreign] = $this->project('BWG-TST-C-2026-001');
+        $this->actingAs($clerk)->get(route('entry.today.project', $foreign))->assertForbidden();
         $pm = $this->user('project_manager', $project);
-        $this->actingAs($pm)->get(route('entry.today'))->assertOk()->assertDontSee('Cement');
+        $this->actingAs($pm)->get(route('entry.today'))->assertRedirect(route('entry.today.project', $project));
+        $this->actingAs($pm)->get(route('entry.today.project', $project))->assertOk()->assertDontSee('Cement');
         $this->actingAs($pm)->get(route('ledger.expenses', [$project, 'q' => 'Kariakoo']))->assertOk()->assertSee('Supplier: Kariakoo Sand')->assertDontSee('>Cement<', false);
     }
 

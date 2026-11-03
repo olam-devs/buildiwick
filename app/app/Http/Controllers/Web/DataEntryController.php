@@ -43,16 +43,43 @@ class DataEntryController extends Controller
         ]);
     }
 
-    /** Everything this person entered today, on any project (linked from the sidebar). */
-    public function today(Request $request)
+    /**
+     * "Entered Today" outside a project: choose the project first (each shows what was entered on it today).
+     * With a single project it opens that project's list straight away.
+     */
+    public function today(Request $request, LedgerAnalyticsService $analytics)
     {
-        return view('entry.today', ['today' => $this->todaysLines($request)]);
+        $user = $request->user();
+        $lines = $this->todaysLines($request);
+        $projects = $analytics->projectsFor($user, $user->hasRole('admin'))->filter(fn (Project $project) => $user->can('record-expense', $project))
+            ->concat($lines->pluck('project')->filter())->unique('id')->values();
+        if ($projects->count() === 1) {
+            return redirect()->route('entry.today.project', $projects->first());
+        }
+        $byProject = $lines->groupBy('project_id');
+
+        return view('entry.today-pick', [
+            // Projects with entries today first, then by name.
+            'projects' => $projects->sortBy(fn (Project $project) => ($byProject->has($project->id) ? '0' : '1').mb_strtolower((string) $project->name))->values(),
+            'byProject' => $byProject,
+            'lines' => $lines,
+        ]);
     }
 
-    /** Number of lines this person entered today (sidebar badge). */
-    public static function todayCount(User $user): int
+    /** "Entered Today" inside a project: only that project's lines, and the sidebar stays in the project. */
+    public function todayForProject(Request $request, Project $project)
     {
-        return ExpenseRequest::query()->where('requested_by', $user->id)->whereDate('created_at', today())->whereIn('status', ['approved', 'rejected'])->count();
+        $user = $request->user();
+        abort_unless($user->can('record-expense', $project) || $user->can('view-ledger', $project), 403);
+
+        return view('entry.today', ['today' => $this->todaysLines($request)->where('project_id', $project->id)->values(), 'project' => $project]);
+    }
+
+    /** Number of lines this person entered today, on one project or on all (sidebar badge). */
+    public static function todayCount(User $user, ?Project $project = null): int
+    {
+        return ExpenseRequest::query()->where('requested_by', $user->id)->whereDate('created_at', today())->whereIn('status', ['approved', 'rejected'])
+            ->when($project, fn ($query) => $query->where('project_id', $project->id))->count();
     }
 
     /** What this person entered today, newest first. */
