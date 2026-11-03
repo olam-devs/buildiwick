@@ -66,6 +66,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::post('/ledger/projects/{project}/workers/quick', [LedgerController::class, 'quickWorker'])->name('ledger.workers.quick');
     Route::get('/entry', [DataEntryController::class, 'index'])->name('entry.index');
     Route::get('/entry/today', [DataEntryController::class, 'today'])->name('entry.today');
+    Route::get('/entry/projects/{project}/today', [DataEntryController::class, 'todayForProject'])->name('entry.today.project');
     Route::get('/entry/projects/{project}', [DataEntryController::class, 'form'])->name('entry.form');
     Route::post('/ledger/projects/{project}/workers', [LedgerController::class, 'storeWorker'])->name('ledger.workers.store');
     Route::put('/ledger/projects/{project}/workers/{worker}', [LedgerController::class, 'updateWorker'])->name('ledger.workers.update');
