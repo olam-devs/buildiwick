@@ -42,12 +42,12 @@ class ExpenseLedgerService
         return $user->permits('mark_paid');
     }
 
-    /**
-     * @param  array{expense_date: string, project_phase_id: int, main_category: string, subcategory?: ?string, item_description: string, details?: ?string, quantity?: mixed, unit?: ?string, unit_cost?: mixed, total_amount?: mixed, invoice_receipt_no?: ?string, labour_agreement_id?: ?int, status?: string, payment_date?: ?string, payment_method?: ?string, transaction_reference?: ?string}  $data
-     */
     /** Office costs are organised by cost group, so every overheads line is filed under one category. */
     public const OVERHEADS_CATEGORY = 'preliminaries_overheads';
 
+    /**
+     * @param  array{expense_date: string, project_phase_id: int, main_category: string, subcategory?: ?string, item_description: string, supplier?: ?string, details?: ?string, quantity?: mixed, unit?: ?string, unit_cost?: mixed, total_amount?: mixed, invoice_receipt_no?: ?string, labour_agreement_id?: ?int, status?: string, payment_date?: ?string, payment_method?: ?string, transaction_reference?: ?string}  $data
+     */
     public function record(Project $project, array $data, User $actor): ExpenseRequest
     {
         if ($project->is_company_overheads) {
@@ -87,6 +87,7 @@ class ExpenseLedgerService
                 'main_category' => $data['main_category'],
                 'subcategory' => $data['subcategory'] ?? null,
                 'item_description' => trim($data['item_description']),
+                'supplier_fundi_client' => $this->supplierName($locked->id, $data['supplier'] ?? null),
                 'invoice_receipt_no' => $data['invoice_receipt_no'] ?? null,
                 'quantity' => $quantity,
                 'unit' => $data['unit'] ?? null,
@@ -129,6 +130,31 @@ class ExpenseLedgerService
         });
     }
 
+    /**
+     * Suppliers already used on a project, most recently used first, for the "Supplier" picker.
+     *
+     * @return array<int, string>
+     */
+    public static function suppliers(Project $project, int $limit = 300): array
+    {
+        return ExpenseRequest::query()->where('project_id', $project->id)->whereNotNull('supplier_fundi_client')->where('supplier_fundi_client', '!=', '')
+            ->selectRaw('supplier_fundi_client, max(id) as last_id')->groupBy('supplier_fundi_client')->orderByDesc('last_id')->limit($limit)
+            ->pluck('supplier_fundi_client')->unique(fn ($name) => mb_strtolower($name))->values()->all();
+    }
+
+    /** Tidies a typed supplier name and reuses the spelling already saved on the project ("abc hardware" -> "ABC Hardware"). */
+    private function supplierName(int $projectId, ?string $name): ?string
+    {
+        $name = trim(preg_replace('/\s+/u', ' ', (string) $name));
+        if ($name === '') {
+            return null;
+        }
+        $known = ExpenseRequest::query()->where('project_id', $projectId)->whereRaw('lower(supplier_fundi_client) = ?', [mb_strtolower($name)])
+            ->orderBy('id')->value('supplier_fundi_client');
+
+        return $known ?: mb_substr($name, 0, 150);
+    }
+
     /** Edits a line that has no payment yet. */
     public function update(ExpenseRequest $line, array $data, User $actor): ExpenseRequest
     {
@@ -153,7 +179,7 @@ class ExpenseLedgerService
             if ((int) $phase->id !== (int) $locked->project_phase_id) {
                 $this->assertLowestLevel($phase);
             }
-            $before = $locked->only(['project_phase_id', 'main_category', 'subcategory', 'item_description', 'quantity', 'unit', 'unit_cost', 'total_amount', 'requested_at']);
+            $before = $locked->only(['project_phase_id', 'main_category', 'subcategory', 'item_description', 'supplier_fundi_client', 'quantity', 'unit', 'unit_cost', 'total_amount', 'requested_at']);
             $locked->update([
                 'project_phase_id' => $data['project_phase_id'],
                 'labour_agreement_id' => $data['labour_agreement_id'] ?? null,
@@ -161,6 +187,7 @@ class ExpenseLedgerService
                 'request_type' => ($data['main_category'] === 'labour_subcontracts') ? 'labour' : 'item',
                 'subcategory' => $data['subcategory'] ?? null,
                 'item_description' => trim($data['item_description']),
+                'supplier_fundi_client' => array_key_exists('supplier', $data) ? $this->supplierName($locked->project_id, $data['supplier']) : $locked->supplier_fundi_client,
                 'invoice_receipt_no' => $data['invoice_receipt_no'] ?? null,
                 'quantity' => $quantity,
                 'unit' => $data['unit'] ?? null,

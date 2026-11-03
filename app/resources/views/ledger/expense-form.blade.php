@@ -8,6 +8,7 @@
   $value = fn (string $field, $default = null) => old($field, $line ? match ($field) {
       'expense_date' => $line->requested_at?->toDateString(),
       'details' => $line->notes,
+      'supplier' => $line->supplier_fundi_client,
       default => $line->{$field},
   } : $default);
 @endphp
@@ -36,6 +37,8 @@
   <div class="grid">
     <div class="field" style="grid-column:span 2"><label for="item_description">{{ $project->is_company_overheads ? 'Item / description' : 'Material / item name' }} <span class="req">*</span></label><input id="item_description" name="item_description" list="itemSuggestions" maxlength="255" value="{{ $value('item_description') }}" placeholder="e.g. Cement, Sand, Binding wire, Fundi labour" required>
       <datalist id="itemSuggestions">@foreach($suggestions->flatten() as $suggestion)<option value="{{ $suggestion }}"></option>@endforeach</datalist></div>
+    <div class="field"><label for="supplier">Supplier</label><input id="supplier" name="supplier" list="supplierList" maxlength="150" value="{{ $value('supplier') }}" placeholder="Type or pick a saved one" autocomplete="off">
+      <datalist id="supplierList">@foreach($suppliers as $supplier)<option value="{{ $supplier }}"></option>@endforeach</datalist></div>
     <div class="field" @if($project->is_company_overheads) hidden @endif><label for="subcategory">Subcategory (optional)</label><select id="subcategory" name="subcategory"><option value="">—</option>@foreach($subcategories->unique('code') as $sub)<option value="{{ $sub->code }}" @selected($value('subcategory') === $sub->code)>{{ $sub->label }}</option>@endforeach</select></div>
     <div class="field" id="workerField" style="grid-column:span 2"><label for="labour_agreement_id">Worker (labour)</label><select id="labour_agreement_id" name="labour_agreement_id"><option value="">— Not a registered worker —</option>@foreach($workers as $worker)<option value="{{ $worker->id }}" @selected((string) $value('labour_agreement_id', request('worker')) === (string) $worker->id)>{{ $worker->fundi_subcontractor }}@if((float) $worker->agreed_value > 0) · contract TSh {{ \App\Support\Money::format($worker->agreed_value) }}@endif</option>@endforeach</select>
       <small class="form-context">@can('view-workers', $project)Workers are registered under <a href="{{ route('ledger.workers', $project) }}">Workers</a>.@else New workers can be added from the entry form.@endcan</small></div>

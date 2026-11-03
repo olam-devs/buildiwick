@@ -12,6 +12,7 @@ use App\Models\ProjectPhase;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\DirectorKpiService;
+use App\Services\ExpenseLedgerService;
 use App\Services\LedgerAnalyticsService;
 use App\Services\ProjectWarningService;
 use Carbon\Carbon;
@@ -586,6 +587,44 @@ class RecordingModeTest extends TestCase
         $this->assertSame(['unpaid', (int) $clerk->id], [$line->payment_status, (int) $line->requested_by]);
         $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee($line->request_code)->assertSee('To confirm');
         $this->actingAs($this->user('accounts'))->get(route('ledger.expenses', [$project, 'status' => 'to_confirm']))->assertOk()->assertSee('Cement');
+    }
+
+    public function test_suppliers_are_recorded_per_item_reused_and_shown_on_entered_today(): void
+    {
+        [$project, $phases] = $this->project();
+        [$other] = $this->project('BWG-TST-B-2026-001');
+        $clerk = $this->user('data_entry', $project);
+        $clerk->assignedProjects()->attach($other->id);
+
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), ['expense_date' => now()->toDateString(), 'status' => 'to_confirm', 'default_supplier' => 'ABC Hardware',
+            'rows' => [
+                ['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Cement', 'supplier' => '  ABC   Hardware ', 'total_amount' => '100000'],
+                ['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Sand', 'supplier' => 'Mama Sand', 'total_amount' => '50000'],
+                ['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Nails', 'total_amount' => '5000'],
+                ['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'supplier' => 'ABC Hardware', 'quantity' => '1', 'unit' => 'pc'],
+            ]])->assertSessionHasNoErrors();
+        $this->assertSame(['ABC Hardware', 'Mama Sand', null], ExpenseRequest::query()->orderBy('id')->pluck('supplier_fundi_client')->all());
+
+        // A differently typed name reuses the spelling saved on the project; the picker lists the project's suppliers.
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), ['expense_date' => now()->toDateString(), 'status' => 'to_confirm',
+            'rows' => [['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Lime', 'supplier' => 'abc hardware', 'total_amount' => '7000']]]);
+        $this->assertSame('ABC Hardware', ExpenseRequest::query()->latest('id')->value('supplier_fundi_client'));
+        $this->assertSame(['ABC Hardware', 'Mama Sand'], ExpenseLedgerService::suppliers($project));
+        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('<option value="Mama Sand">', false)->assertSee('Preview')->assertSee('Entered Today');
+        $this->actingAs($clerk)->get(route('entry.form', $other))->assertOk()->assertDontSee('<option value="Mama Sand">', false);
+
+        // Editing keeps or changes the supplier.
+        $sand = ExpenseRequest::query()->where('item_description', 'Sand')->sole();
+        $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $sand]))->assertOk()->assertSee('value="Mama Sand"', false);
+        $this->actingAs($clerk)->put(route('ledger.expenses.update', [$project, $sand]), ['expense_date' => now()->toDateString(), 'main_category' => 'materials',
+            'project_phase_id' => $phases[0]->id, 'item_description' => 'Sand', 'supplier' => 'Kariakoo Sand', 'total_amount' => '50000'])->assertSessionHasNoErrors();
+        $this->assertSame('Kariakoo Sand', $sand->fresh()->supplier_fundi_client);
+
+        // Entered Today lists the person's own lines with the supplier; the register can be searched by supplier.
+        $this->actingAs($clerk)->get(route('entry.today'))->assertOk()->assertSee('Kariakoo Sand')->assertSee('Cement')->assertSee('TSh 162,000.00');
+        $pm = $this->user('project_manager', $project);
+        $this->actingAs($pm)->get(route('entry.today'))->assertOk()->assertDontSee('Cement');
+        $this->actingAs($pm)->get(route('ledger.expenses', [$project, 'q' => 'Kariakoo']))->assertOk()->assertSee('Supplier: Kariakoo Sand')->assertDontSee('>Cement<', false);
     }
 
     public function test_data_entry_fixes_own_lines_only_the_same_day_and_adds_workers_by_name(): void

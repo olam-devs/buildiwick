@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\ExpenseRequest;
 use App\Models\Project;
+use App\Models\User;
 use App\Services\LedgerAnalyticsService;
 use Illuminate\Http\Request;
 
@@ -40,6 +41,18 @@ class DataEntryController extends Controller
             'canChangeProject' => app(LedgerAnalyticsService::class)->projectsFor($user)->filter(fn (Project $p) => $user->can('record-expense', $p))->count() > 1,
             'today' => $this->todaysLines($request)->where('project_id', $project->id)->values(),
         ]);
+    }
+
+    /** Everything this person entered today, on any project (linked from the sidebar). */
+    public function today(Request $request)
+    {
+        return view('entry.today', ['today' => $this->todaysLines($request)]);
+    }
+
+    /** Number of lines this person entered today (sidebar badge). */
+    public static function todayCount(User $user): int
+    {
+        return ExpenseRequest::query()->where('requested_by', $user->id)->whereDate('created_at', today())->whereIn('status', ['approved', 'rejected'])->count();
     }
 
     /** What this person entered today, newest first. */

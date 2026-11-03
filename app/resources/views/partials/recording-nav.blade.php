@@ -4,6 +4,9 @@
   $isDirector = $user->hasRole('admin');
   $canConfirm = $user->can('confirm-payments');
   $nav = fn (string $pattern) => request()->routeIs($pattern) ? 'active' : '';
+  $records = $isDirector || $user->permits('record_expenses');
+  $todayCount = $records ? \App\Http\Controllers\Web\DataEntryController::todayCount($user) : 0;
+  $todayLink = fn () => '<a class="navitem '.$nav('entry.today').'" href="'.e(route('entry.today')).'">Entered Today'.($todayCount ? '<span class="badge" style="margin-left:auto">'.$todayCount.'</span>' : '').'</a>';
 @endphp
 @if($workspaceProject ?? null)
   <div class="project-workspace-card"><div class="label">{{ $workspaceProject->is_company_overheads ? 'Company overheads' : 'Project' }}</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
@@ -16,6 +19,7 @@
   @endif
   @can('record-expense', $workspaceProject)
     <a class="navitem {{ $nav('ledger.expenses.create') }}" href="{{ route('ledger.expenses.create', $workspaceProject) }}">Record Expense</a>
+    {!! $todayLink() !!}
   @endcan
   @can('view-budget', $workspaceProject)<a class="navitem {{ $nav('ledger.structure') }}" href="{{ route('ledger.structure', $workspaceProject) }}">{{ $workspaceProject->is_company_overheads ? 'Cost Groups & Budget' : 'Phases & Budget' }}</a>@endcan
   @if(! $workspaceProject->is_company_overheads && auth()->user()->can('view-workers', $workspaceProject))<a class="navitem {{ $nav('ledger.workers') }}" href="{{ route('ledger.workers', $workspaceProject) }}">Workers</a>@endif
@@ -33,6 +37,7 @@
     <a class="navitem {{ $nav('ledger.to-confirm') }}" href="{{ route('ledger.to-confirm') }}">To Confirm</a>
   @endif
   <a class="navitem {{ $nav('ledger.index') }}" href="{{ route('ledger.index') }}">Projects</a>
+  @if($records){!! $todayLink() !!}@endif
   @if($isDirector)<a class="navitem {{ $nav('ledger.overheads') }}" href="{{ route('ledger.overheads') }}">Company Overheads</a>@endif
   @if($isDirector)
     <div class="label">Company Targets</div>
