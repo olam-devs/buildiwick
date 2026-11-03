@@ -7,19 +7,19 @@
   $sumOf = fn ($lines) => \App\Services\LedgerAnalyticsService::money((int) $lines->where('status', '!=', 'rejected')->sum(fn ($line) => \App\Services\LedgerAnalyticsService::cents($line->total_amount)));
 @endphp
 <div class="lg-head">
-  <div><h2>Entered Today</h2><p>{{ now()->format('l, d M Y') }} · choose the project to see what you entered on it today.</p></div>
+  <div><h2>Entered Today</h2><p>{{ now()->format('l, d M Y') }} · the projects you entered on today. Choose one to see the lines.</p></div>
   @if($projects->count() > 6)<div class="lg-actions"><input type="search" id="entrySearch" class="lg-search" placeholder="Search project…"></div>@endif
 </div>
 <p class="hint" style="margin:0 0 10px">Today in total: <b>{{ $lines->count() }}</b> line{{ $lines->count() === 1 ? '' : 's' }} · TSh {{ $money::format($sumOf($lines)) }}</p>
 @if($projects->isEmpty())
-  <div class="flash error">You have no projects yet.</div>
+  <section class="lg-panel"><p class="lg-empty" style="margin:0">Nothing entered yet today.</p></section>
 @else
   <div class="entry-projects" id="entryProjects">
     @foreach($projects as $project)
       @php($mine = $byProject->get($project->id, collect()))
-      <a @class(['entry-project', 'has' => $mine->isNotEmpty()]) href="{{ route('entry.today.project', $project) }}" data-search="{{ strtolower($project->name.' '.$project->project_code.' '.$project->location) }}">
+      <a class="entry-project has" href="{{ route('entry.today.project', $project) }}" data-search="{{ strtolower($project->name.' '.$project->project_code.' '.$project->location) }}">
         <b>{{ $project->name }}</b><span>{{ $project->project_code }}</span>
-        <em>@if($mine->isNotEmpty()){{ $mine->count() }} line{{ $mine->count() === 1 ? '' : 's' }} · TSh {{ $money::format($sumOf($mine)) }}@else Nothing today @endif</em>
+        <em>{{ $mine->count() }} line{{ $mine->count() === 1 ? '' : 's' }} · TSh {{ $money::format($sumOf($mine)) }}</em>
       </a>
     @endforeach
   </div>

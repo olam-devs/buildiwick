@@ -622,8 +622,12 @@ class RecordingModeTest extends TestCase
 
         // Entered Today lists the person's own lines with the supplier; the register can be searched by supplier.
         // Outside a project: choose the project first (with today's count and total per project).
-        $this->actingAs($clerk)->get(route('entry.today'))->assertOk()->assertSee($project->name)->assertSee($other->name)
-            ->assertSee('4 lines · TSh 162,000.00')->assertSee('Nothing today')->assertDontSee('Kariakoo Sand');
+        $this->actingAs($clerk)->get(route('entry.today'))->assertOk()->assertSee($project->name)->assertDontSee($other->name)
+            ->assertSee('4 lines · TSh 162,000.00')->assertDontSee('Kariakoo Sand');
+        $this->actingAs($this->user('data_entry', $other))->get(route('entry.today'))->assertRedirect(route('entry.today.project', $other));
+        $second = $this->user('project_manager', $other);
+        $second->assignedProjects()->attach($project->id);
+        $this->actingAs($second)->get(route('entry.today'))->assertOk()->assertSee('Nothing entered yet today.')->assertDontSee($project->name);
         // Inside a project: only that project's lines, and the sidebar stays in the project.
         $this->actingAs($clerk)->get(route('entry.today.project', $project))->assertOk()->assertSee('Kariakoo Sand')->assertSee('Cement')
             ->assertSee('Entering for')->assertSee('Enter expenses');
