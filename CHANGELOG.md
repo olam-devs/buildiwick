@@ -2,6 +2,14 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-03 — Unfinished Entries Kept as Drafts (Any Device)
+
+- The Record Expense form is now **saved as a draft while you type**: about 1.5 s after a change, and again when the page goes to the background. The draft is stored on the account, so it can be continued later on any phone or computer after signing in again.
+- Opening Record Expense for that project restores the header (date, category, phase, supplier and payment fields) and every row, with a bar: "Unfinished entry restored · N items, last saved …", plus **Discard draft**. Under the save buttons a line shows "Draft saved at HH:MM".
+- Saving the expenses removes the draft. So does emptying the form, or Discard draft. A failed save still shows the submitted rows, not the draft.
+- The Data Entry project list marks projects with an "Unfinished entry · N items".
+- New table `expense_drafts` (one per user and project: JSON `data`, `item_count`), with model `ExpenseDraft` and routes `ledger.draft.save` (POST JSON) and `ledger.draft.discard` (DELETE). Both need `record-expense` on the project. A draft is private to the person who typed it.
+
 ## 2026-11-03 — Suppliers on Entries, Preview, Back to Top, Entered Today
 
 - **Supplier on every entry.** The Record Expense form has a **Supplier** box in the header ("from the invoice"). It applies to every row, like the date, category and phase. A row only gets its own supplier if it is changed on that row (desktop column, or "More details" on a phone). Suppliers are stored in the existing free-text `expense_requests.supplier_fundi_client` column, so there is no migration.

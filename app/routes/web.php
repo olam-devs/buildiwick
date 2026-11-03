@@ -49,6 +49,8 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/ledger/projects/{project}/expenses.xlsx', [LedgerController::class, 'export'])->name('ledger.expenses.export');
     Route::get('/ledger/projects/{project}/expenses/create', [LedgerController::class, 'create'])->name('ledger.expenses.create');
     Route::post('/ledger/projects/{project}/expenses', [LedgerController::class, 'store'])->name('ledger.expenses.store');
+    Route::post('/ledger/projects/{project}/draft', [LedgerController::class, 'saveDraft'])->name('ledger.draft.save');
+    Route::delete('/ledger/projects/{project}/draft', [LedgerController::class, 'discardDraft'])->name('ledger.draft.discard');
     Route::get('/ledger/projects/{project}/expenses/{line}/edit', [LedgerController::class, 'edit'])->name('ledger.expenses.edit');
     Route::put('/ledger/projects/{project}/expenses/{line}', [LedgerController::class, 'update'])->name('ledger.expenses.update');
     Route::delete('/ledger/projects/{project}/expenses/{line}', [LedgerController::class, 'destroy'])->name('ledger.expenses.destroy');
