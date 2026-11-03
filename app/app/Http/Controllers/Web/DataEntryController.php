@@ -44,7 +44,7 @@ class DataEntryController extends Controller
     }
 
     /**
-     * "Entered Today" outside a project: choose the project first (each shows what was entered on it today).
+     * "Entered Today" outside a project: the projects entered on today, each with its lines and total; choose one to see them.
      * With a single project it opens that project's list straight away.
      */
     public function today(Request $request, LedgerAnalyticsService $analytics)
@@ -59,8 +59,8 @@ class DataEntryController extends Controller
         $byProject = $lines->groupBy('project_id');
 
         return view('entry.today-pick', [
-            // Projects with entries today first, then by name.
-            'projects' => $projects->sortBy(fn (Project $project) => ($byProject->has($project->id) ? '0' : '1').mb_strtolower((string) $project->name))->values(),
+            // Only the projects something was entered on today.
+            'projects' => $projects->filter(fn (Project $project) => $byProject->has($project->id))->sortBy(fn (Project $project) => mb_strtolower((string) $project->name))->values(),
             'byProject' => $byProject,
             'lines' => $lines,
         ]);
