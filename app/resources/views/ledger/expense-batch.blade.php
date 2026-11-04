@@ -14,7 +14,7 @@
       'subcategories' => $subcategories->unique('code')->map(fn ($s) => ['code' => $s->code, 'label' => $s->label, 'parent' => $s->parent_code])->values(),
       'units' => $units->map(fn ($u) => ['code' => $u->code, 'label' => $u->label])->values(),
       'unitsFirst' => [
-          'materials' => ['bag', 'pc', 'kg', 'tonne', 'm', 'm2', 'm3', 'l', 'roll', 'sheet', 'box', 'bundle', 'no', 'ls'],
+          'materials' => ['bag', 'pc', 'item', 'kg', 'tonne', 'm', 'm2', 'm3', 'l', 'roll', 'sheet', 'box', 'pkt', 'pairs', 'bundle', 'no', 'ls'],
           'labour_subcontracts' => ['ls', 'day', 'worker_day', 'week', 'month', 'hour', 'm2', 'm', 'no'],
           'logistics_equipment' => ['trip', 'load', 'day', 'hour', 'km', 'l', 'ls'],
           'preliminaries_overheads' => ['ls', 'month', 'week', 'day', 'l', 'no', 'person'],
