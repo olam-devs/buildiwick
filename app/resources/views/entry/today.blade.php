@@ -1,14 +1,15 @@
 @extends('layouts.app')
-@section('title', 'Entered Today · Buildiwick')
+@section('title', 'My Entries · Buildiwick')
 @section('content')
 @include('partials.ledger.styles')
 <div class="lg-head">
-  <div><h2>Entered Today</h2><p>{{ $project->name }} · {{ now()->format('l, d M Y') }} · what you entered today on this project.</p></div>
+  <div><h2>My Entries</h2><p>{{ $project->name }} · what you entered on this project.</p></div>
   <div class="lg-actions">@can('record-expense', $project)<a class="btn btn-primary" href="{{ auth()->user()->role?->name === 'data_entry' ? route('entry.form', $project) : route('ledger.expenses.create', $project) }}">+ Enter more</a>@endcan</div>
 </div>
+@include('entry._period', ['route' => fn (array $q) => route('entry.today.project', [$project] + $q)])
 <div class="lg-cards" style="margin-bottom:4px">
   <div class="lg-card"><div class="k">Lines</div><div class="v">{{ $today->count() }}</div></div>
   <div class="lg-card"><div class="k">Total</div><div class="v">TSh {{ \App\Support\Money::format(\App\Services\LedgerAnalyticsService::money((int) $today->where('status', '!=', 'rejected')->sum(fn ($line) => \App\Services\LedgerAnalyticsService::cents($line->total_amount)))) }}</div></div>
 </div>
-@include('entry._today', ['today' => $today])
+@include('entry._today', ['today' => $today, 'title' => $period['key'] === 'today' ? 'Entered today' : 'Entered', 'showDate' => ! $period['from']->isToday()])
 @endsection

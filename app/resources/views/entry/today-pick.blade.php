@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Entered Today · Buildiwick')
+@section('title', 'My Entries · Buildiwick')
 @section('content')
 @include('partials.ledger.styles')
 @php
@@ -7,17 +7,18 @@
   $sumOf = fn ($lines) => \App\Services\LedgerAnalyticsService::money((int) $lines->where('status', '!=', 'rejected')->sum(fn ($line) => \App\Services\LedgerAnalyticsService::cents($line->total_amount)));
 @endphp
 <div class="lg-head">
-  <div><h2>Entered Today</h2><p>{{ now()->format('l, d M Y') }} · the projects you entered on today. Choose one to see the lines.</p></div>
+  <div><h2>My Entries</h2><p>The projects you entered on. Choose one to see the lines.</p></div>
 </div>
+@include('entry._period', ['route' => fn (array $q) => route('entry.today', $q)])
 @if($projects->count() > 6)<div class="entry-search-bar"><input type="search" id="entrySearch" class="lg-search" placeholder="Search project or place…" aria-label="Search project" autocomplete="off" enterkeyhint="search"></div>@endif
-<p class="hint" style="margin:0 0 10px">Today in total: <b>{{ $lines->count() }}</b> line{{ $lines->count() === 1 ? '' : 's' }} · TSh {{ $money::format($sumOf($lines)) }}</p>
+<p class="hint" style="margin:0 0 10px">In total: <b>{{ $lines->count() }}</b> line{{ $lines->count() === 1 ? '' : 's' }} · TSh {{ $money::format($sumOf($lines)) }}</p>
 @if($projects->isEmpty())
-  <section class="lg-panel"><p class="lg-empty" style="margin:0">Nothing entered yet today.</p></section>
+  <section class="lg-panel"><p class="lg-empty" style="margin:0">{{ $period['key'] === 'today' ? 'Nothing entered yet today.' : 'Nothing entered in this period.' }}</p></section>
 @else
   <div class="entry-projects" id="entryProjects">
     @foreach($projects as $project)
       @php($mine = $byProject->get($project->id, collect()))
-      <a class="entry-project has" href="{{ route('entry.today.project', $project) }}" data-search="{{ strtolower($project->name.' '.$project->project_code.' '.$project->location) }}">
+      <a class="entry-project has" href="{{ route('entry.today.project', [$project] + $period['query']) }}" data-search="{{ strtolower($project->name.' '.$project->project_code.' '.$project->location) }}">
         <b>{{ $project->name }}</b><span>{{ $project->project_code }}</span>
         <em>{{ $mine->count() }} line{{ $mine->count() === 1 ? '' : 's' }} · TSh {{ $money::format($sumOf($mine)) }}</em>
       </a>
