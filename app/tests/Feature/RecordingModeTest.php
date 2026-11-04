@@ -249,7 +249,7 @@ class RecordingModeTest extends TestCase
         $this->assertNull($project->client_id);
         $this->assertSame(9, $project->phases()->count());
         $this->assertSame('Service', $project->phases()->orderByDesc('phase_order')->value('phase_name'));
-        $this->assertSame(['sand' => 'materials', 'hardcore_stones' => 'materials', 'demolition' => 'labour_subcontracts'], \App\Models\Lookup::where('type', 'subcategory')->whereIn('code', ['sand', 'hardcore_stones', 'demolition'])->orderBy('sort_order')->pluck('parent_code', 'code')->all());
+        $this->assertSame(['sand' => 'materials', 'hardcore_stones' => 'materials', 'materials_tools' => 'materials', 'demolition' => 'labour_subcontracts'], \App\Models\Lookup::where('type', 'subcategory')->whereIn('code', ['sand', 'hardcore_stones', 'materials_tools', 'demolition'])->orderBy('sort_order')->pluck('parent_code', 'code')->all());
         $this->assertTrue($pm->assignedProjects()->whereKey($project->id)->exists());
         $this->actingAs($pm)->get(route('ledger.index'))->assertSee('New residence');
     }
