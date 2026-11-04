@@ -70,12 +70,12 @@ class LookupSeeder extends Seeder
         ], parentType: 'main_category', parentCode: 'preliminaries_overheads', startOrder: 300);
 
         $this->seedType('unit', [
-            ['pc', 'PIECE'], ['bag', 'BAG'], ['kg', 'KG'], ['tonne', 'TONNE'], ['bundle', 'BUNDLE'],
+            ['pc', 'PIECE'], ['bag', 'BAG'], ['kg', 'KG'], ['tonne', 'TON'], ['bundle', 'BUNDLE'],
             ['m', 'M'], ['m2', 'M²'], ['m3', 'M³'], ['l', 'L'], ['sheet', 'SHEET'], ['roll', 'ROLL'],
             ['box', 'BOX'], ['trip', 'TRIP'], ['load', 'LOAD'], ['km', 'KM'], ['day', 'DAY'],
             ['worker_day', 'WORKER-DAY'], ['week', 'WEEK'], ['month', 'MONTH'], ['hour', 'HOUR'],
             ['worker_hour', 'WORKER-HOUR'], ['job', 'JOB'], ['task', 'TASK'], ['service', 'SERVICE'],
-            ['point', 'POINT'], ['person', 'PERSON'], ['ls', 'LS'], ['no', 'NO.'],
+            ['point', 'POINT'], ['person', 'PERSON'], ['ls', 'LS'], ['no', 'NO.'], ['item', 'ITEM'], ['pkt', 'PKT'], ['pairs', 'PAIRS'],
         ]);
 
         $this->seedType('payment_status', [

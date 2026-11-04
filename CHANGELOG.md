@@ -5,6 +5,7 @@ Every session or PR adds an entry here — dated, plain language, written for a 
 ## 2026-11-04 — Sand, Hardcore Stones, Demolition and a Service Phase
 
 - **New subcategories:** Sand and Hardcore Stones under Materials (a Materials copy of Tools & Small Equipment was added and removed the same day: any category can already pick any subcategory from the form's "Other" group); Demolition under Labour & Subcontracts (next to "Other" — there is no "Other" main category).
+- **New units:** TON (the `tonne` code, relabelled), ITEM, BOX, PKT, PAIRS — added to whatever unit list a database has (the sandbox's was trimmed to the tracker's 14). ITEM, BOX, PKT and PAIRS also sit near the top for Materials lines.
 - **"Service" is now a standard phase.** Migration `2026_11_04_090000_…` adds a Service phase at the end of every construction project (not the company overheads ledger) and the `service` construction stage; new projects get it from `ProjectSetupController::TRACKER_STAGES`. Tracker workbook imports still use the workbook's own stages.
 
 ## 2026-11-04 — My Entries: Data Entry Sees Their History, Not Only Today
