@@ -36,7 +36,6 @@ class LookupSeeder extends Seeder
             ['other_materials', 'Other Materials'],
             ['sand', 'Sand'],
             ['hardcore_stones', 'Hardcore Stones'],
-            ['materials_tools', 'Tools & Small Equipment'],
         ], parentType: 'main_category', parentCode: 'materials');
 
         $this->seedType('subcategory', [
