@@ -35,7 +35,7 @@ class ProjectSetupController extends Controller
     /** The tracker's standard stages, offered as starting phases for a new project in recording mode. */
     public const TRACKER_STAGES = [
         'Preliminaries', 'Substructure (Foundation)', 'Superstructure', 'Walling',
-        'Roofing', 'Finishing', 'External Works', 'Other / General',
+        'Roofing', 'Finishing', 'External Works', 'Other / General', 'Service',
     ];
 
     /** Starting cost groups of a company overheads ledger (the Director renames, adds or removes them). */

@@ -34,6 +34,8 @@ class LookupSeeder extends Seeder
             ['finishes', 'Finishes'],
             ['tax_on_materials', 'Tax on Materials'],
             ['other_materials', 'Other Materials'],
+            ['sand', 'Sand'],
+            ['hardcore_stones', 'Hardcore Stones'],
         ], parentType: 'main_category', parentCode: 'materials');
 
         $this->seedType('subcategory', [
@@ -44,6 +46,7 @@ class LookupSeeder extends Seeder
             ['casual_labour', 'Casual Labour'],
             ['professional_services', 'Professional Services'],
             ['other', 'Other'],
+            ['demolition', 'Demolition'],
         ], parentType: 'main_category', parentCode: 'labour_subcontracts', startOrder: 100);
 
         $this->seedType('subcategory', [
@@ -100,6 +103,7 @@ class LookupSeeder extends Seeder
             ['superstructure', 'Superstructure'], ['walling', 'Walling'],
             ['roofing', 'Roofing'], ['finishing', 'Finishing'],
             ['external_works', 'External Works'], ['other_general', 'Other / General'],
+            ['service', 'Service'],
         ]);
 
         $this->seedType('transaction_type', [

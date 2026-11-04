@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-04 — Sand, Hardcore Stones, Demolition and a Service Phase
+
+- **New subcategories:** Sand and Hardcore Stones under Materials; Demolition under Labour & Subcontracts (next to "Other" — there is no "Other" main category).
+- **"Service" is now a standard phase.** Migration `2026_11_04_090000_…` adds a Service phase at the end of every construction project (not the company overheads ledger) and the `service` construction stage; new projects get it from `ProjectSetupController::TRACKER_STAGES`. Tracker workbook imports still use the workbook's own stages.
+
 ## 2026-11-04 — My Entries: Data Entry Sees Their History, Not Only Today
 
 - **"Entered Today" is now "My Entries"** (sidebar and page, routes unchanged: `entry.today`, `entry.today.project`). It still opens on today, with quick filters Today / Yesterday / This week / This month and **Pick dates** (from–to, the phone's own calendar). Dates are the day the lines were entered; picked ranges are capped at one year and never run into the future (`DataEntryController::period()`).
