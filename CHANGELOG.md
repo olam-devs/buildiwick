@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-04 — My Entries: Data Entry Sees Their History, Not Only Today
+
+- **"Entered Today" is now "My Entries"** (sidebar and page, routes unchanged: `entry.today`, `entry.today.project`). It still opens on today, with quick filters Today / Yesterday / This week / This month and **Pick dates** (from–to, the phone's own calendar). Dates are the day the lines were entered; picked ranges are capped at one year and never run into the future (`DataEntryController::period()`).
+- Still only the person's own lines, with no analytics: the list, a line count and the sum of the lines shown. Edit/Delete is unchanged: only own lines entered today and not yet checked; earlier days show locked.
+
 ## 2026-11-03 — Project Search That Works on the Phone
 
 - **The project search on New Entry and Entered Today now filters.** The cards were `display:flex`, which beat the `hidden` attribute, so typing never hid anything. Every word typed must match the name, code or location, in any order ("mbezi airbnb").

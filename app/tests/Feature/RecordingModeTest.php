@@ -650,7 +650,7 @@ class RecordingModeTest extends TestCase
             'rows' => [['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Lime', 'supplier' => 'abc hardware', 'total_amount' => '7000']]]);
         $this->assertSame('ABC Hardware', ExpenseRequest::query()->latest('id')->value('supplier_fundi_client'));
         $this->assertSame(['ABC Hardware', 'Mama Sand'], ExpenseLedgerService::suppliers($project));
-        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('<option value="Mama Sand">', false)->assertSee('Preview')->assertSee('Entered Today');
+        $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('<option value="Mama Sand">', false)->assertSee('Preview')->assertSee('My Entries');
         $this->actingAs($clerk)->get(route('entry.form', $other))->assertOk()->assertDontSee('<option value="Mama Sand">', false);
 
         // Editing keeps or changes the supplier.
@@ -679,6 +679,32 @@ class RecordingModeTest extends TestCase
         $this->actingAs($pm)->get(route('entry.today'))->assertRedirect(route('entry.today.project', $project));
         $this->actingAs($pm)->get(route('entry.today.project', $project))->assertOk()->assertDontSee('Cement');
         $this->actingAs($pm)->get(route('ledger.expenses', [$project, 'q' => 'Kariakoo']))->assertOk()->assertSee('Supplier: Kariakoo Sand')->assertDontSee('>Cement<', false);
+    }
+
+    public function test_data_entry_sees_their_earlier_entries_by_period_or_picked_dates(): void
+    {
+        [$project, $phases] = $this->project();
+        $clerk = $this->user('data_entry', $project);
+        $pm = $this->user('project_manager', $project);
+        Carbon::setTestNow('2026-10-30 10:00:00');
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'October Cement']));
+        Carbon::setTestNow('2026-11-03 10:00:00');
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'Monday Sand']));
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'PM Gravel']));
+        Carbon::setTestNow('2026-11-04 09:00:00');
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'Today Nails']));
+
+        $page = fn (array $q = []) => $this->actingAs($clerk)->get(route('entry.today.project', [$project] + $q))->assertOk();
+        $page()->assertSee('Today Nails')->assertDontSee('Monday Sand')->assertSee('Pick dates');
+        $page(['period' => 'yesterday'])->assertSee('Monday Sand')->assertDontSee('Today Nails')->assertDontSee('PM Gravel');
+        $page(['period' => 'week'])->assertSee('Monday Sand')->assertSee('Today Nails')->assertDontSee('October Cement');
+        $page(['period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-31'])->assertSee('October Cement')->assertDontSee('Monday Sand')->assertSee('01 Oct 2026 – 31 Oct 2026');
+        // Only today's own lines can still be changed; earlier days are shown locked. Bad or future dates fall back safely.
+        $page(['period' => 'week'])->assertSee("Can't be changed", false);
+        $page(['period' => 'custom', 'from' => 'x', 'to' => '2030-01-01'])->assertSee('Today Nails');
+        $this->actingAs($clerk)->get(route('entry.today', ['period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-31']))
+            ->assertRedirect(route('entry.today.project', [$project, 'period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-31']));
+        Carbon::setTestNow();
     }
 
     public function test_data_entry_fixes_own_lines_only_the_same_day_and_adds_workers_by_name(): void

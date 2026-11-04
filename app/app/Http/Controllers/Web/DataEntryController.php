@@ -8,6 +8,7 @@ use App\Models\ExpenseRequest;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\LedgerAnalyticsService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 
 /**
@@ -46,17 +47,18 @@ class DataEntryController extends Controller
     }
 
     /**
-     * "Entered Today" outside a project: the projects entered on today, each with its lines and total; choose one to see them.
-     * With a single project it opens that project's list straight away.
+     * "My Entries" outside a project: the projects entered on in the chosen period (today by default), each with its
+     * lines; choose one to see them. With a single project it opens that project's list straight away.
      */
     public function today(Request $request, LedgerAnalyticsService $analytics)
     {
         $user = $request->user();
-        $lines = $this->todaysLines($request);
+        $period = self::period($request);
+        $lines = $this->linesIn($request, $period);
         $projects = $analytics->projectsFor($user, $user->hasRole('admin'))->filter(fn (Project $project) => $user->can('record-expense', $project))
             ->concat($lines->pluck('project')->filter())->unique('id')->values();
         if ($projects->count() === 1) {
-            return redirect()->route('entry.today.project', $projects->first());
+            return redirect()->route('entry.today.project', [$projects->first()] + $period['query']);
         }
         $byProject = $lines->groupBy('project_id');
 
@@ -65,16 +67,68 @@ class DataEntryController extends Controller
             'projects' => $projects->filter(fn (Project $project) => $byProject->has($project->id))->sortBy(fn (Project $project) => mb_strtolower((string) $project->name))->values(),
             'byProject' => $byProject,
             'lines' => $lines,
+            'period' => $period,
         ]);
     }
 
-    /** "Entered Today" inside a project: only that project's lines, and the sidebar stays in the project. */
+    /** "My Entries" inside a project: only that project's lines in the chosen period, and the sidebar stays in the project. */
     public function todayForProject(Request $request, Project $project)
     {
         $user = $request->user();
         abort_unless($user->can('record-expense', $project) || $user->can('view-ledger', $project), 403);
+        $period = self::period($request);
 
-        return view('entry.today', ['today' => $this->todaysLines($request)->where('project_id', $project->id)->values(), 'project' => $project]);
+        return view('entry.today', ['today' => $this->linesIn($request, $period, $project), 'project' => $project, 'period' => $period]);
+    }
+
+    /**
+     * The period chosen on My Entries: today (default), yesterday, this week, this month, or picked dates (at most a year,
+     * never in the future). Dates are when the lines were entered.
+     *
+     * @return array{key: string, from: CarbonImmutable, to: CarbonImmutable, label: string, query: array<string, string>}
+     */
+    public static function period(Request $request): array
+    {
+        $today = CarbonImmutable::today();
+        $key = (string) $request->query('period', 'today');
+        [$from, $to] = match ($key) {
+            'yesterday' => [$today->subDay(), $today->subDay()],
+            'week' => [$today->startOfWeek(), $today],
+            'month' => [$today->startOfMonth(), $today],
+            'custom' => [self::date($request->query('from')) ?? $today, self::date($request->query('to')) ?? $today],
+            default => [$today, $today],
+        };
+        if (! in_array($key, ['yesterday', 'week', 'month', 'custom'], true)) {
+            $key = 'today';
+        }
+        $to = $to->min($today);
+        $from = $from->min($to)->max($to->subYear());
+        $label = match ($key) {
+            'today' => 'Today, '.$today->format('d M Y'),
+            'yesterday' => 'Yesterday, '.$from->format('d M Y'),
+            'week' => 'This week, '.$from->format('d M').' – '.$to->format('d M Y'),
+            'month' => 'This month, '.$from->format('d M').' – '.$to->format('d M Y'),
+            default => $from->equalTo($to) ? $from->format('l, d M Y') : $from->format('d M Y').' – '.$to->format('d M Y'),
+        };
+        $query = match ($key) {
+            'today' => [],
+            'custom' => ['period' => 'custom', 'from' => $from->toDateString(), 'to' => $to->toDateString()],
+            default => ['period' => $key],
+        };
+
+        return ['key' => $key, 'from' => $from, 'to' => $to, 'label' => $label, 'query' => $query];
+    }
+
+    private static function date(mixed $value): ?CarbonImmutable
+    {
+        if (! is_string($value) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return null;
+        }
+        try {
+            return CarbonImmutable::createFromFormat('!Y-m-d', $value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /** Number of lines this person entered today, on one project or on all (sidebar badge). */
@@ -82,6 +136,15 @@ class DataEntryController extends Controller
     {
         return ExpenseRequest::query()->where('requested_by', $user->id)->whereDate('created_at', today())->whereIn('status', ['approved', 'rejected'])
             ->when($project, fn ($query) => $query->where('project_id', $project->id))->count();
+    }
+
+    /** What this person entered in a period (optionally on one project), newest first. */
+    private function linesIn(Request $request, array $period, ?Project $project = null)
+    {
+        return ExpenseRequest::query()->where('requested_by', $request->user()->id)
+            ->whereBetween('created_at', [$period['from']->startOfDay(), $period['to']->endOfDay()])
+            ->when($project, fn ($query) => $query->where('project_id', $project->id))
+            ->whereIn('status', ['approved', 'rejected'])->with(['project', 'payments', 'phase'])->latest('id')->get();
     }
 
     /** What this person entered today, newest first. */

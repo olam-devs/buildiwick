@@ -7,7 +7,7 @@
   $records = $isDirector || $user->permits('record_expenses');
   $todayProject = $workspaceProject ?? null;
   $todayCount = $records ? \App\Http\Controllers\Web\DataEntryController::todayCount($user, $todayProject) : 0;
-  $todayLink = fn () => '<a class="navitem '.$nav($todayProject ? 'entry.today.project' : 'entry.today').'" href="'.e($todayProject ? route('entry.today.project', $todayProject) : route('entry.today')).'">Entered Today'.($todayCount ? '<span class="badge" style="margin-left:auto">'.$todayCount.'</span>' : '').'</a>';
+  $todayLink = fn () => '<a class="navitem '.$nav($todayProject ? 'entry.today.project' : 'entry.today').'" href="'.e($todayProject ? route('entry.today.project', $todayProject) : route('entry.today')).'">My Entries'.($todayCount ? '<span class="badge" style="margin-left:auto">'.$todayCount.'</span>' : '').'</a>';
 @endphp
 @if($workspaceProject ?? null)
   <div class="project-workspace-card"><div class="label">{{ $workspaceProject->is_company_overheads ? 'Company overheads' : 'Project' }}</div><strong>{{ $workspaceProject->name }}</strong><small>{{ $workspaceProject->project_code }}</small></div>
