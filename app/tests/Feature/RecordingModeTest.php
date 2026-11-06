@@ -8,6 +8,7 @@ use App\Models\ExpenseDraft;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
 use App\Models\LabourAgreement;
+use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectPhase;
 use App\Models\Role;
@@ -249,8 +250,8 @@ class RecordingModeTest extends TestCase
         $this->assertNull($project->client_id);
         $this->assertSame(9, $project->phases()->count());
         $this->assertSame('Service', $project->phases()->orderByDesc('phase_order')->value('phase_name'));
-        $this->assertSame(['sand' => 'materials', 'hardcore_stones' => 'materials', 'demolition' => 'labour_subcontracts'], \App\Models\Lookup::where('type', 'subcategory')->whereIn('code', ['sand', 'hardcore_stones', 'demolition'])->orderBy('sort_order')->pluck('parent_code', 'code')->all());
-        $this->assertEqualsCanonicalizing(['TON', 'ITEM', 'BOX', 'PKT', 'PAIRS'], \App\Models\Lookup::where('type', 'unit')->whereIn('code', ['tonne', 'item', 'box', 'pkt', 'pairs'])->pluck('label')->all());
+        $this->assertSame(['sand' => 'materials', 'hardcore_stones' => 'materials', 'demolition' => 'labour_subcontracts'], Lookup::where('type', 'subcategory')->whereIn('code', ['sand', 'hardcore_stones', 'demolition'])->orderBy('sort_order')->pluck('parent_code', 'code')->all());
+        $this->assertEqualsCanonicalizing(['TON', 'ITEM', 'BOX', 'PKT', 'PAIRS'], Lookup::where('type', 'unit')->whereIn('code', ['tonne', 'item', 'box', 'pkt', 'pairs'])->pluck('label')->all());
         $this->assertTrue($pm->assignedProjects()->whereKey($project->id)->exists());
         $this->actingAs($pm)->get(route('ledger.index'))->assertSee('New residence');
     }
@@ -303,6 +304,24 @@ class RecordingModeTest extends TestCase
         $this->actingAs($pm)->post(route('ledger.expenses.store', $project), ['expense_date' => '2026-10-29', 'status' => 'to_confirm',
             'rows' => [['main_category' => 'materials', 'item_description' => 'Nails']]])->assertSessionHasErrors('rows.0.project_phase_id');
         $this->assertSame(2, ExpenseRequest::count());
+    }
+
+    public function test_a_long_entry_is_sent_packed_and_each_row_keeps_its_own_date(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+        $row = fn (string $item, ?string $date = null) => ['expense_date' => $date ?? '', 'main_category' => 'materials', 'project_phase_id' => (string) $phases[0]->id, 'item_description' => $item, 'quantity' => '1', 'unit' => 'pc', 'total_amount' => '1000', 'labour_agreement_id' => '', 'subcategory' => ' '];
+        $rows = array_merge([$row('Sand', '2026-10-03'), $row('Cement')], array_map(fn ($i) => $row('Nail '.$i), range(1, 118)));
+
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), ['expense_date' => '2026-10-29', 'status' => 'to_confirm', 'rows_json' => json_encode($rows)])
+            ->assertRedirect(route('ledger.expenses', $project))->assertSessionHasNoErrors();
+
+        $this->assertSame(120, ExpenseRequest::count());
+        $this->assertSame(['2026-10-03', '2026-10-29'], ExpenseRequest::query()->whereIn('item_description', ['Sand', 'Cement'])->orderBy('id')->get()->map(fn ($l) => $l->requested_at->toDateString())->all());
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), ['expense_date' => '2026-10-29', 'status' => 'to_confirm', 'rows_json' => json_encode([$row('Late', now()->addDay()->toDateString())])])
+            ->assertSessionHasErrors('rows.0.expense_date');
+        $this->actingAs($pm)->postJson(route('ledger.draft.save', $project), ['header' => ['expense_date' => '2026-10-29'], 'rows' => [$row('Sand', '2026-10-03')]])->assertOk();
+        $this->assertSame('2026-10-03', ExpenseDraft::query()->sole()->data['rows'][0]['expense_date']);
     }
 
     public function test_accounts_denies_an_expense_and_can_restore_it(): void
