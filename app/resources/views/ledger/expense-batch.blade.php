@@ -33,6 +33,7 @@
       // An unsubmitted form saved earlier (any device) is restored, unless the page is showing a failed save.
       'draft' => (($draft ?? null) && ! old('rows')) ? $draft->data : null,
       'draftUrl' => route('ledger.draft.save', $project),
+      'today' => now()->toDateString(),
   ];
   $restoring = ($draft ?? null) && ! old('rows');
 @endphp
@@ -60,7 +61,8 @@
   .pv-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;border-top:1px solid var(--line);position:sticky;bottom:0;background:var(--surface)}
   .pv-total{font-size:17px;font-weight:700}
   @media(max-width:760px){.pv-dialog{width:100vw;max-width:100vw;max-height:100dvh;height:100dvh;border-radius:0;margin:0}.pv-foot .btn{flex:1;justify-content:center;min-height:48px}.pv-foot .pv-total{width:100%;text-align:center}}
-  .rb-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:1320px}
+  .rb-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:1450px}
+  .rb-table tr.own-date [data-f=date]{border-color:var(--primary);background:var(--primary-soft)}
   .rb-table th{background:var(--head);color:var(--head-ink);font-size:11px;font-weight:600;text-align:left;padding:8px 6px;white-space:nowrap}
   .rb-table td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
   .rb-table input,.rb-table select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:12.5px;background:var(--input-bg);color:var(--ink)}
@@ -92,6 +94,7 @@
     .rb-table td.rb-item,.rb-table td.rb-catcell,.rb-table td.rb-del{grid-column:1/-1}
     .rb-table td.rb-more{display:none;grid-column:1/-1}
     .rb-table tr.open td.rb-more{display:block}
+    .rb-table tr.own-date td.rb-datecell{display:block}
     .rb-cat{border-left:0!important}
     .rb-table input,.rb-table select{font-size:16px;padding:10px 12px;min-height:44px;border-radius:10px}
     .rb-table td.rb-del::before{content:none}
@@ -140,7 +143,7 @@
   <section class="lg-panel" style="padding:0;overflow:hidden">
     <div style="overflow:auto">
       <table class="rb-table">
-        <thead><tr><th></th><th style="width:150px" class="rb-cat-th">Category</th><th style="width:170px">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:160px">Supplier</th><th style="width:150px" class="rb-sub-th">Subcategory</th><th style="width:80px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
+        <thead><tr><th></th><th style="width:130px">Date</th><th style="width:150px" class="rb-cat-th">Category</th><th style="width:170px">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:160px">Supplier</th><th style="width:150px" class="rb-sub-th">Subcategory</th><th style="width:80px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -191,7 +194,10 @@
   const phaseOptions = document.getElementById('default_phase').innerHTML;
   const body = document.getElementById('rows');
   const headCat = document.getElementById('default_category'), headPhase = document.getElementById('default_phase'), headSup = document.getElementById('default_supplier');
-  const followed = [['sup', 'supplier', headSup], ['rcpt', 'invoice_receipt_no', document.getElementById('default_receipt')], ['note', 'details', document.getElementById('default_notes')]];
+  const headDate = document.getElementById('expense_date');
+  // A row's date follows the date above unless changed on the row (past data can mix days in one entry).
+  const markDate = tr => { const d = tr.querySelector('[data-f=date]'); tr.classList.toggle('own-date', !!d.value && d.value !== headDate.value); };
+  const followed = [['date', 'expense_date', headDate], ['sup', 'supplier', headSup], ['rcpt', 'invoice_receipt_no', document.getElementById('default_receipt')], ['note', 'details', document.getElementById('default_notes')]];
   const rowClass = {labour_subcontracts: 'labour', logistics_equipment: 'logistics', preliminaries_overheads: 'prelims', materials: ''};
   let n = 0;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -232,7 +238,7 @@
   });
 
   const applyCategory = (tr, cat, keepValues) => {
-    tr.className = rowClass[cat] || '';
+    Object.values(rowClass).filter(Boolean).forEach(c => tr.classList.remove(c)); if (rowClass[cat]) tr.classList.add(rowClass[cat]);
     tr.querySelector('.rb-cat').style.borderLeftColor = C.colors[cat];
     const item = tr.querySelector('[data-f=item]');
     item.setAttribute('list', listFor(cat)); item.placeholder = C.placeholders[cat];
@@ -249,6 +255,7 @@
     const phase = data.project_phase_id || (prev ? prev.querySelector('[data-f=phase]').value : headPhase.value);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="idx"></td>
+      <td class="rb-more rb-datecell" data-label="Date"><input data-f="date" type="date" name="rows[${i}][expense_date]" max="${C.today}"></td>
       <td class="rb-cat rb-catcell" data-label="Category"><select data-f="cat" name="rows[${i}][main_category]">${Object.entries(C.categories).map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('')}</select></td>
       <td class="rb-more rb-phasecell" data-label="${C.phaseWord}"><select data-f="phase" name="rows[${i}][project_phase_id]">${phaseOptions}</select></td>
       <td class="rb-item" data-label="Item"><input data-f="item" name="rows[${i}][item_description]" maxlength="255" value="${esc(data.item_description)}" autocomplete="off">
@@ -269,6 +276,8 @@
       el.dataset.follow = (data[key] === undefined || data[key] === head.value) ? '1' : '0';
       el.addEventListener('input', () => { el.dataset.follow = el.value.trim() === head.value.trim() ? '1' : '0'; });
     });
+    tr.querySelector('[data-f=date]').addEventListener('input', () => markDate(tr));
+    markDate(tr);
     tr.querySelector('.rb-more-toggle').addEventListener('click', e => { const open = tr.classList.toggle('open'); e.currentTarget.textContent = open ? 'Fewer details ▴' : 'More details ▾'; });
     body.appendChild(tr);
     tr.querySelector('[data-f=cat]').value = cat;
@@ -294,6 +303,7 @@
   // Changing the defaults above updates rows that still follow them (rows changed by hand keep their own value).
   headCat.addEventListener('change', () => [...body.children].forEach(tr => { if (!tr.querySelector('[data-f=item]').value.trim()) { tr.querySelector('[data-f=cat]').value = headCat.value; applyCategory(tr, headCat.value, false); } }));
   followed.forEach(([f, , head]) => head.addEventListener('input', () => body.querySelectorAll(`[data-f=${f}]`).forEach(s => { if (s.dataset.follow === '1') s.value = head.value; })));
+  headDate.addEventListener('input', () => [...body.children].forEach(markDate));
   const headMore = document.getElementById('headMore'), headMoreToggle = document.getElementById('headMoreToggle');
   const syncHeadMore = () => { const open = headMoreToggle.getAttribute('aria-expanded') === 'true'; headMore.hidden = !open; headMoreToggle.textContent = open ? 'Fewer details ▴' : 'More details (receipt no., notes) ▾'; };
   headMoreToggle.addEventListener('click', () => { headMoreToggle.setAttribute('aria-expanded', headMoreToggle.getAttribute('aria-expanded') === 'true' ? 'false' : 'true'); syncHeadMore(); });
@@ -353,6 +363,7 @@
       const unitCode = v('unit'), qty = v('qty') || '1', cost = v('cost');
       const bits = [v('sup') || 'No supplier', C.phases[v('phase')] || (C.phaseWord + ' not chosen')];
       if (!C.phaseWord.startsWith('Cost')) bits.unshift(C.categories[v('cat')]);
+      if (v('date') && v('date') !== headDate.value) bits.unshift(dateText(v('date')));
       const worker = tr.querySelector('select[name$="[labour_agreement_id]"]');
       if (v('cat') === 'labour_subcontracts' && worker && worker.value && worker.value !== '__new') bits.push('Worker: ' + worker.selectedOptions[0].textContent.split(' · ')[0]);
       const amount = cost ? `${qty} ${C.unitLabels[unitCode] || unitCode} × ${fmt(parseFloat(cost))}` : `${qty} ${C.unitLabels[unitCode] || unitCode}`;
@@ -363,7 +374,8 @@
       if (problems.length) warnings.push(`Item ${k + 1}: ${problems.join(', ')}`);
       return `<div class="pv-item ${problems.length ? 'bad' : ''}"><div><b>${k + 1}. ${esc(v('item') || '(no item name)')}</b><small>${esc(bits.join(' · '))}</small><small>${esc(amount)}${tr.querySelector('[name$="[invoice_receipt_no]"]').value.trim() ? ' · Receipt ' + esc(tr.querySelector('[name$="[invoice_receipt_no]"]').value.trim()) : ''}</small></div><div class="amt">${isNaN(total) ? '—' : fmt(total)}</div></div>`;
     }).join('');
-    document.getElementById('pvMeta').textContent = `${dateText(document.getElementById('expense_date').value)} · ${rows.length} item${rows.length === 1 ? '' : 's'}${headSup.value.trim() ? ' · ' + headSup.value.trim() : ''}`;
+    const ownDates = rows.filter(tr => { const d = tr.querySelector('[data-f=date]').value; return d && d !== headDate.value; }).length;
+    document.getElementById('pvMeta').textContent = `${dateText(headDate.value)}${ownDates ? ` (${ownDates} with their own date)` : ''} · ${rows.length} item${rows.length === 1 ? '' : 's'}${headSup.value.trim() ? ' · ' + headSup.value.trim() : ''}`;
     document.getElementById('pvBody').innerHTML = (warnings.length ? `<div class="pv-warn"><b>Please check:</b><br>${warnings.map(esc).join('<br>')}</div>` : '') + (html || '<p class="hint" style="padding:14px 0">Nothing entered yet.</p>');
     document.getElementById('pvTotal').textContent = fmt(cents / 100);
     document.getElementById('pvSubmit').disabled = rows.length === 0;
@@ -373,6 +385,18 @@
   document.getElementById('pvSubmit').addEventListener('click', () => { dialog.close(); form.requestSubmit(document.getElementById('saveButton')); });
   // Phases with subphases (▸) cannot take expenses: block them in each row too.
   document.getElementById('batchForm').addEventListener('submit', e => { const bad = [...body.children].find(tr => tr.querySelector('[data-f=item]').value.trim() && !tr.querySelector('[data-f=phase]').value); if (bad) { e.preventDefault(); bad.querySelector('[data-f=phase]').focus(); alert('Choose a phase for every item.'); } });
+  // The rows are sent packed in one field: the server drops form fields past its limit (about 75 rows' worth).
+  const rowInputs = () => body.querySelectorAll('[name^="rows["]');
+  const unpack = () => { form.querySelector('input[name=rows_json]')?.remove(); rowInputs().forEach(el => el.disabled = false); };
+  form.addEventListener('submit', e => {
+    if (e.defaultPrevented) return;
+    const packed = JSON.parse(collect()).rows;
+    unpack();
+    const field = document.createElement('input'); field.type = 'hidden'; field.name = 'rows_json'; field.value = JSON.stringify(packed);
+    form.appendChild(field);
+    rowInputs().forEach(el => el.disabled = true);
+  });
+  window.addEventListener('pageshow', unpack);
 })();
 </script>
 @if($entryMode ?? false)@include('entry._today', ['today' => $today])@endif

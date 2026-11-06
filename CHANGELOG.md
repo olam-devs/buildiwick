@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-06 — Record Expense: Each Row Can Have Its Own Date; Long Forms Save Safely
+
+- **A row's date** (new Date column; on the phone it shows under "More details", or straight away when it differs) follows the date above until changed, so past data from several days can be entered and saved in one go. The preview lists rows with their own date. Saved as `rows.*.expense_date` (draft too); empty means the date above.
+- **Long forms no longer lose rows.** The host's PHP drops form fields past `max_input_vars` (1000, about 75 rows), silently cutting off the rest. The form now sends its rows packed in one `rows_json` field, which `LedgerController::store` unpacks and cleans like normal fields (trimmed, empty to null). A form and its draft hold up to 300 rows (`MAX_ROWS`).
+- Sandbox data (no code): the ADA Estate register's 144 past lines were appended to the Data Entry user's ADA Estate draft with their own dates (her own draft rows kept), for her to check, give phases and save.
+
 ## 2026-11-04 — Sand, Hardcore Stones, Demolition and a Service Phase
 
 - **New subcategories:** Sand and Hardcore Stones under Materials (a Materials copy of Tools & Small Equipment was added and removed the same day: any category can already pick any subcategory from the form's "Other" group); Demolition under Labour & Subcontracts (next to "Other" — there is no "Other" main category).

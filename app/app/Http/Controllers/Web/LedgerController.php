@@ -35,6 +35,9 @@ use Illuminate\Validation\ValidationException;
  */
 class LedgerController extends Controller
 {
+    /** Most items one Record Expense form (and its draft) can hold. */
+    private const MAX_ROWS = 300;
+
     public function index(Request $request, LedgerAnalyticsService $analytics)
     {
         $user = $request->user();
@@ -199,11 +202,11 @@ class LedgerController extends Controller
         $validated = $request->validate([
             'header' => ['nullable', 'array'],
             'header.*' => ['nullable', 'string', 'max:255'],
-            'rows' => ['nullable', 'array', 'max:100'],
+            'rows' => ['nullable', 'array', 'max:'.self::MAX_ROWS],
             'rows.*' => ['array'],
             'rows.*.*' => ['nullable', 'string', 'max:2000'],
         ]);
-        $fields = ['main_category', 'project_phase_id', 'item_description', 'supplier', 'subcategory', 'quantity', 'unit', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details', 'labour_agreement_id'];
+        $fields = ['expense_date', 'main_category', 'project_phase_id', 'item_description', 'supplier', 'subcategory', 'quantity', 'unit', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details', 'labour_agreement_id'];
         $rows = collect($validated['rows'] ?? [])->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))
             ->filter(fn (array $row) => collect($row)->only(['item_description', 'unit_cost', 'total_amount'])->filter(fn ($v) => trim((string) $v) !== '')->isNotEmpty())
             ->values();
@@ -231,6 +234,14 @@ class LedgerController extends Controller
     public function store(Request $request, Project $project, ExpenseLedgerService $ledger)
     {
         $this->authorize('record-expense', $project);
+        // Long forms arrive packed in one field, because the server drops fields past PHP's max_input_vars (1000 on the host).
+        if ($request->filled('rows_json')) {
+            $packed = json_decode((string) $request->input('rows_json'), true);
+            // Cleaned like ordinary form fields (trimmed, empty to null), which the middleware does not do for this field's contents.
+            $clean = fn (array $row) => array_map(fn ($value) => is_string($value) ? (trim($value) === '' ? null : trim($value)) : $value, $row);
+            $request->merge(['rows' => is_array($packed) ? array_map($clean, array_values(array_filter($packed, 'is_array'))) : []]);
+            $request->request->remove('rows_json');
+        }
         if ($request->has('rows')) {
             return $this->storeRows($request, $project, $ledger);
         }
@@ -244,7 +255,7 @@ class LedgerController extends Controller
     private function storeRows(Request $request, Project $project, ExpenseLedgerService $ledger)
     {
         $rows = collect($request->input('rows', []))
-            ->filter(fn ($row) => is_array($row) && collect($row)->except(['main_category', 'project_phase_id', 'supplier', 'quantity', 'unit', 'invoice_receipt_no', 'details'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
+            ->filter(fn ($row) => is_array($row) && collect($row)->except(['expense_date', 'main_category', 'project_phase_id', 'supplier', 'quantity', 'unit', 'invoice_receipt_no', 'details'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
             ->values()->all();
         $request->merge(['rows' => $rows]);
         if ($request->user()->hasRole('admin')) {
@@ -259,7 +270,8 @@ class LedgerController extends Controller
             'payment_date' => ['nullable', 'required_if:status,paid', 'date', 'before_or_equal:today'],
             'payment_method' => ['nullable', Rule::exists('lookups', 'code')->where('type', 'payment_method')],
             'transaction_reference' => ['nullable', 'string', 'max:255'],
-            'rows' => ['required', 'array', 'min:1', 'max:100'],
+            'rows' => ['required', 'array', 'min:1', 'max:'.self::MAX_ROWS],
+            'rows.*.expense_date' => ['nullable', 'date', 'before_or_equal:today'],
             'rows.*.main_category' => ['required', Rule::in(array_keys(LedgerAnalyticsService::CATEGORIES))],
             'rows.*.project_phase_id' => ['required', 'integer', $phaseRule],
             'rows.*.item_description' => ['required', 'string', 'max:255'],
@@ -277,9 +289,12 @@ class LedgerController extends Controller
             'rows.*.item_description.required' => 'Row :position needs an item name.',
             'rows.*.project_phase_id.required' => 'Row :position needs a phase.',
             'rows.*.main_category.required' => 'Row :position needs a category.',
+            'rows.*.expense_date.before_or_equal' => 'Row :position has a date in the future.',
+            'rows.max' => 'Save at most '.self::MAX_ROWS.' items at a time.',
         ]);
-        $lines = DB::transaction(fn () => collect($header['rows'])->map(fn (array $row) => $ledger->record($project, $row + [
-            'expense_date' => $header['expense_date'], 'status' => $header['status'], 'payment_date' => $header['payment_date'] ?? null,
+        // A row keeps its own date when it has one (past data entered in one go); otherwise it takes the date above.
+        $lines = DB::transaction(fn () => collect($header['rows'])->map(fn (array $row) => $ledger->record($project, ['expense_date' => ($row['expense_date'] ?? null) ?: $header['expense_date']] + $row + [
+            'status' => $header['status'], 'payment_date' => $header['payment_date'] ?? null,
             'payment_method' => $header['payment_method'] ?? null, 'transaction_reference' => $header['transaction_reference'] ?? null,
         ], $request->user())));
         ExpenseDraft::clear($request->user(), $project);
