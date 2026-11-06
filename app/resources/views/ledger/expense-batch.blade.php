@@ -8,7 +8,10 @@
   $leafPhases = $phases->where('leaf', true);
   $defaultPhase = old('default_phase', request('phase', $leafPhases->count() === 1 ? $leafPhases->first()['phase']->id : ''));
   $defaultCategory = $project->is_company_overheads ? \App\Services\ExpenseLedgerService::OVERHEADS_CATEGORY : old('default_category', request('worker') ? 'labour_subcontracts' : 'materials');
-  $oldRows = old('rows', [[]]);
+  $oldRows = array_values(old('rows', [[]]));
+  // A failed save of one date's rows also brings back the rows that were kept aside for later.
+  $keptRows = json_decode((string) old('keep_json', '[]'), true);
+  if (is_array($keptRows) && $keptRows !== []) { $oldRows = array_merge($oldRows, array_values(array_filter($keptRows, 'is_array'))); }
   $config = [
       'suggestions' => $suggestions,
       'subcategories' => $subcategories->unique('code')->map(fn ($s) => ['code' => $s->code, 'label' => $s->label, 'parent' => $s->parent_code])->values(),
@@ -47,6 +50,11 @@
   .rb-draft{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--primary-soft);border:1px solid var(--primary);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13.5px}
   .rb-draft .btn{min-height:36px}
   .rb-saved{font-size:12.5px;color:var(--ink-dim);align-self:center}
+  .rb-table tr[hidden]{display:none!important}
+  .rb-filter{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--primary-soft);font-size:13.5px}
+  .rb-filter[hidden]{display:none}
+  .rb-filter select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--input-bg);color:var(--ink);min-height:40px}
+  .rb-filter-note{color:var(--ink-dim)}
   .rb-apply{background:none;border:0;padding:6px 0 0;color:var(--primary-dark);font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left}
   /* Preview before saving */
   .pv-dialog{border:0;border-radius:16px;padding:0;width:min(720px,calc(100vw - 24px));max-height:calc(100vh - 40px);background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -143,6 +151,7 @@
   </section>
 
   <section class="lg-panel" style="padding:0;overflow:hidden">
+    <div class="rb-filter" id="dateFilterBar" hidden><label for="dateFilter"><b>Show date</b></label><select id="dateFilter"></select><span class="rb-filter-note" id="dateFilterNote"></span></div>
     <div style="overflow:auto">
       <table class="rb-table">
         <thead><tr><th></th><th style="width:130px">Date</th><th style="width:150px" class="rb-cat-th">Category</th><th style="width:170px">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:160px">Supplier</th><th style="width:150px" class="rb-sub-th">Subcategory</th><th style="width:80px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
@@ -278,7 +287,9 @@
       el.dataset.follow = (data[key] === undefined || data[key] === head.value) ? '1' : '0';
       el.addEventListener('input', () => { el.dataset.follow = el.value.trim() === head.value.trim() ? '1' : '0'; });
     });
-    tr.querySelector('[data-f=date]').addEventListener('input', () => markDate(tr));
+    tr.querySelector('[data-f=date]').addEventListener('input', () => { markDate(tr); refreshFilter(); sum(); });
+    // A row added while one date is shown gets that date, so it stays in view.
+    if (filterSelect.value && data.expense_date === undefined) { const d = tr.querySelector('[data-f=date]'); d.value = filterSelect.value; d.dataset.follow = d.value === headDate.value ? '1' : '0'; markDate(tr); }
     markDate(tr);
     tr.querySelector('.rb-more-toggle').addEventListener('click', e => { const open = tr.classList.toggle('open'); e.currentTarget.textContent = open ? 'Fewer details ▴' : 'More details ▾'; });
     body.appendChild(tr);
@@ -295,17 +306,37 @@
     number(); sum();
     return tr;
   };
-  const number = () => [...body.children].forEach((tr, i) => tr.querySelector('.idx').textContent = i + 1);
+  const number = () => { [...body.children].forEach((tr, i) => tr.querySelector('.idx').textContent = i + 1); refreshFilter(); };
+  const rowData = tr => { const row = {}; tr.querySelectorAll('[name^="rows["]').forEach(el => { const m = el.name.match(/\]\[([a-z_]+)\]$/); if (m && el.value !== '__new') row[m[1]] = el.value; }); return row; };
+  // "Show date": with rows from several days, show one day at a time. Only the rows shown are saved; the rest stay in the draft.
+  const filterSelect = document.getElementById('dateFilter'), filterBar = document.getElementById('dateFilterBar'), filterNote = document.getElementById('dateFilterNote');
+  const rowDate = tr => tr.querySelector('[data-f=date]').value || headDate.value;
+  const shownRows = () => [...body.children].filter(tr => !tr.hidden);
+  const shortDate = v => new Date(v + 'T00:00').toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
+  function refreshFilter() {
+    const counts = {};
+    [...body.children].forEach(tr => { const d = rowDate(tr); counts[d] = (counts[d] || 0) + 1; });
+    const dates = Object.keys(counts).sort();
+    let pick = filterSelect.value;
+    if (pick && !counts[pick]) pick = '';
+    filterSelect.innerHTML = `<option value="">All dates (${body.children.length})</option>` + dates.map(d => `<option value="${d}">${shortDate(d)} (${counts[d]})</option>`).join('');
+    filterSelect.value = pick;
+    filterBar.hidden = dates.length < 2 && !pick;
+    [...body.children].forEach(tr => { tr.hidden = !!pick && rowDate(tr) !== pick; });
+    const hiddenCount = [...body.children].filter(tr => tr.hidden).length, shown = body.children.length - hiddenCount;
+    filterNote.textContent = pick ? `Only these ${shown} item${shown === 1 ? '' : 's'} are saved; the other ${hiddenCount} stay in your draft.` : 'Pick a date to save one day at a time.';
+  }
+  filterSelect.addEventListener('change', () => { refreshFilter(); sum(); window.scrollTo({top: filterBar.getBoundingClientRect().top + window.scrollY - 70}); });
   const sum = () => {
     let cents = 0, filled = 0;
-    [...body.children].forEach(tr => { const v = parseFloat(tr.querySelector('[data-f=total]').value); if (!isNaN(v)) { cents += Math.round(v * 100); } if (tr.querySelector('[data-f=item]').value.trim()) filled++; });
+    shownRows().forEach(tr => { const v = parseFloat(tr.querySelector('[data-f=total]').value); if (!isNaN(v)) { cents += Math.round(v * 100); } if (tr.querySelector('[data-f=item]').value.trim()) filled++; });
     document.getElementById('grandTotal').textContent = (cents / 100).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     document.getElementById('rowCount').textContent = filled ? `· ${filled} item${filled > 1 ? 's' : ''}` : '';
   };
   // Changing the defaults above updates rows that still follow them (rows changed by hand keep their own value).
   headCat.addEventListener('change', () => [...body.children].forEach(tr => { if (!tr.querySelector('[data-f=item]').value.trim()) { tr.querySelector('[data-f=cat]').value = headCat.value; applyCategory(tr, headCat.value, false); } }));
   followed.forEach(([f, , head]) => head.addEventListener('input', () => body.querySelectorAll(`[data-f=${f}]`).forEach(s => { if (s.dataset.follow === '1') s.value = head.value; })));
-  headDate.addEventListener('input', () => [...body.children].forEach(markDate));
+  headDate.addEventListener('input', () => { [...body.children].forEach(markDate); refreshFilter(); sum(); });
   const headMore = document.getElementById('headMore'), headMoreToggle = document.getElementById('headMoreToggle');
   const syncHeadMore = () => { const open = headMoreToggle.getAttribute('aria-expanded') === 'true'; headMore.hidden = !open; headMoreToggle.textContent = open ? 'Fewer details ▴' : 'More details (receipt no., notes) ▾'; };
   headMoreToggle.addEventListener('click', () => { headMoreToggle.setAttribute('aria-expanded', headMoreToggle.getAttribute('aria-expanded') === 'true' ? 'false' : 'true'); syncHeadMore(); });
@@ -315,9 +346,9 @@
   document.getElementById('applyPhase').addEventListener('click', () => {
     const word = C.phaseWord.toLowerCase();
     if (!headPhase.value) { alert(`Choose the ${word} above first.`); headPhase.focus(); return; }
-    const selects = [...body.querySelectorAll('[data-f=phase]')];
+    const selects = shownRows().map(tr => tr.querySelector('[data-f=phase]'));
     const other = selects.filter(s => s.value && s.value !== headPhase.value).length;
-    if (!confirm(`Set ${word} "${C.phases[headPhase.value]}" on all ${selects.length} item${selects.length === 1 ? '' : 's'}?` + (other ? `
+    if (!confirm(`Set ${word} "${C.phases[headPhase.value]}" on all ${selects.length}${filterSelect.value ? ' shown' : ''} item${selects.length === 1 ? '' : 's'}?` + (other ? `
 ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be changed.` : ''))) return;
     selects.forEach(s => s.value = headPhase.value);
     queueDraft();
@@ -344,8 +375,7 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
   const collect = () => {
     const header = {};
     ['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference'].forEach(id => { const el = document.getElementById(id); if (el) header[id] = el.value; });
-    const rows = [...body.children].map(tr => { const row = {}; tr.querySelectorAll('[name^="rows["]').forEach(el => { const m = el.name.match(/\]\[([a-z_]+)\]$/); if (m && el.value !== '__new') row[m[1]] = el.value; }); return row; });
-    return JSON.stringify({header, rows});
+    return JSON.stringify({header, rows: [...body.children].map(rowData)});
   };
   const saveDraft = (keepalive = false) => {
     if (submitting) return;
@@ -368,7 +398,7 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
   const fmt = v => (v || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const dateText = v => v ? new Date(v + 'T00:00').toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'}) : '—';
   document.getElementById('previewButton').addEventListener('click', () => {
-    const rows = [...body.children].filter(tr => tr.querySelector('[data-f=item]').value.trim() || tr.querySelector('[data-f=total]').value || tr.querySelector('[data-f=cost]').value);
+    const rows = shownRows().filter(tr => tr.querySelector('[data-f=item]').value.trim() || tr.querySelector('[data-f=total]').value || tr.querySelector('[data-f=cost]').value);
     let cents = 0; const warnings = [];
     const html = rows.map((tr, k) => {
       const v = f => tr.querySelector(`[data-f=${f}]`).value.trim();
@@ -388,7 +418,9 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
       return `<div class="pv-item ${problems.length ? 'bad' : ''}"><div><b>${k + 1}. ${esc(v('item') || '(no item name)')}</b><small>${esc(bits.join(' · '))}</small><small>${esc(amount)}${tr.querySelector('[name$="[invoice_receipt_no]"]').value.trim() ? ' · Receipt ' + esc(tr.querySelector('[name$="[invoice_receipt_no]"]').value.trim()) : ''}</small></div><div class="amt">${isNaN(total) ? '—' : fmt(total)}</div></div>`;
     }).join('');
     const ownDates = rows.filter(tr => { const d = tr.querySelector('[data-f=date]').value; return d && d !== headDate.value; }).length;
-    document.getElementById('pvMeta').textContent = `${dateText(headDate.value)}${ownDates ? ` (${ownDates} with their own date)` : ''} · ${rows.length} item${rows.length === 1 ? '' : 's'}${headSup.value.trim() ? ' · ' + headSup.value.trim() : ''}`;
+    document.getElementById('pvMeta').textContent = `${filterSelect.value ? dateText(filterSelect.value) : dateText(headDate.value) + (ownDates ? ` (${ownDates} with their own date)` : '')} · ${rows.length} item${rows.length === 1 ? '' : 's'}${headSup.value.trim() ? ' · ' + headSup.value.trim() : ''}`;
+    const left = body.children.length - shownRows().length;
+    if (left) warnings.unshift(`Only the ${rows.length} item(s) for ${shortDate(filterSelect.value)} are saved now; the other ${left} stay in your draft.`);
     document.getElementById('pvBody').innerHTML = (warnings.length ? `<div class="pv-warn"><b>Please check:</b><br>${warnings.map(esc).join('<br>')}</div>` : '') + (html || '<p class="hint" style="padding:14px 0">Nothing entered yet.</p>');
     document.getElementById('pvTotal').textContent = fmt(cents / 100);
     document.getElementById('pvSubmit').disabled = rows.length === 0;
@@ -397,16 +429,17 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
   document.getElementById('pvBack').addEventListener('click', () => dialog.close());
   document.getElementById('pvSubmit').addEventListener('click', () => { dialog.close(); form.requestSubmit(document.getElementById('saveButton')); });
   // Phases with subphases (▸) cannot take expenses: block them in each row too.
-  document.getElementById('batchForm').addEventListener('submit', e => { const bad = [...body.children].find(tr => tr.querySelector('[data-f=item]').value.trim() && !tr.querySelector('[data-f=phase]').value); if (bad) { e.preventDefault(); bad.querySelector('[data-f=phase]').focus(); alert('Choose a phase for every item.'); } });
+  document.getElementById('batchForm').addEventListener('submit', e => { const bad = shownRows().find(tr => tr.querySelector('[data-f=item]').value.trim() && !tr.querySelector('[data-f=phase]').value); if (bad) { e.preventDefault(); bad.querySelector('[data-f=phase]').focus(); alert('Choose a phase for every item.'); } });
   // The rows are sent packed in one field: the server drops form fields past its limit (about 75 rows' worth).
   const rowInputs = () => body.querySelectorAll('[name^="rows["]');
-  const unpack = () => { form.querySelector('input[name=rows_json]')?.remove(); rowInputs().forEach(el => el.disabled = false); };
+  const unpack = () => { form.querySelectorAll('input[name=rows_json], input[name=keep_json]').forEach(el => el.remove()); rowInputs().forEach(el => el.disabled = false); };
   form.addEventListener('submit', e => {
     if (e.defaultPrevented) return;
-    const packed = JSON.parse(collect()).rows;
     unpack();
-    const field = document.createElement('input'); field.type = 'hidden'; field.name = 'rows_json'; field.value = JSON.stringify(packed);
-    form.appendChild(field);
+    [['rows_json', shownRows()], ['keep_json', [...body.children].filter(tr => tr.hidden)]].forEach(([name, rows]) => {
+      const field = document.createElement('input'); field.type = 'hidden'; field.name = name; field.value = JSON.stringify(rows.map(rowData));
+      form.appendChild(field);
+    });
     rowInputs().forEach(el => el.disabled = true);
   });
   window.addEventListener('pageshow', unpack);

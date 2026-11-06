@@ -322,6 +322,16 @@ class RecordingModeTest extends TestCase
             ->assertSessionHasErrors('rows.0.expense_date');
         $this->actingAs($pm)->postJson(route('ledger.draft.save', $project), ['header' => ['expense_date' => '2026-10-29'], 'rows' => [$row('Sand', '2026-10-03')]])->assertOk();
         $this->assertSame('2026-10-03', ExpenseDraft::query()->sole()->data['rows'][0]['expense_date']);
+
+        // One date at a time: only the rows shown are saved, the others stay in the draft until they are saved too.
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), ['expense_date' => '2026-10-29', 'status' => 'to_confirm',
+            'rows_json' => json_encode([$row('Gravel', '2026-10-05')]), 'keep_json' => json_encode([$row('Blocks', '2026-10-06'), $row('Wire', '2026-10-07')])])
+            ->assertSessionHasNoErrors()->assertSessionHas('success', fn ($message) => str_contains($message, '2 item(s) are still in your draft'));
+        $this->assertSame(['Blocks', 'Wire'], array_column(ExpenseDraft::query()->sole()->data['rows'], 'item_description'));
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), ['expense_date' => '2026-10-29', 'status' => 'to_confirm',
+            'rows_json' => json_encode([$row('Blocks', '2026-10-06'), $row('Wire', '2026-10-07')]), 'keep_json' => '[]'])->assertSessionHasNoErrors();
+        $this->assertSame(0, ExpenseDraft::count());
+        $this->assertSame(123, ExpenseRequest::count());
     }
 
     public function test_accounts_denies_an_expense_and_can_restore_it(): void
@@ -716,7 +726,7 @@ class RecordingModeTest extends TestCase
         Carbon::setTestNow('2026-11-04 09:00:00');
         $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['item_description' => 'Today Nails']));
 
-        $page = fn (array $q = []) => $this->actingAs($clerk)->get(route('entry.today.project', [$project] + $q))->assertOk();
+        $page = fn (array $q = []) => $this->actingAs($clerk)->get(route('entry.today.project', [$project] + $q))->assertOk()->assertDontSee('<div class="k">Lines</div>', false);
         $page()->assertSee('Today Nails')->assertDontSee('Monday Sand')->assertSee('Pick dates');
         $page(['period' => 'yesterday'])->assertSee('Monday Sand')->assertDontSee('Today Nails')->assertDontSee('PM Gravel');
         $page(['period' => 'week'])->assertSee('Monday Sand')->assertSee('Today Nails')->assertDontSee('October Cement');
