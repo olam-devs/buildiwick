@@ -47,6 +47,7 @@
   .rb-draft{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--primary-soft);border:1px solid var(--primary);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13.5px}
   .rb-draft .btn{min-height:36px}
   .rb-saved{font-size:12.5px;color:var(--ink-dim);align-self:center}
+  .rb-apply{background:none;border:0;padding:6px 0 0;color:var(--primary-dark);font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left}
   /* Preview before saving */
   .pv-dialog{border:0;border-radius:16px;padding:0;width:min(720px,calc(100vw - 24px));max-height:calc(100vh - 40px);background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.3)}
   .pv-dialog::backdrop{background:rgba(10,16,24,.55)}
@@ -128,7 +129,8 @@
       <div class="field" style="margin:0" @if($project->is_company_overheads) hidden @endif><label for="default_category">Main category <span class="req">*</span></label>
         <select id="default_category" name="default_category">@foreach($categories as $code => $label)<option value="{{ $code }}" @selected($defaultCategory === $code)>{{ $label }}</option>@endforeach</select></div>
       <div class="field" style="margin:0"><label for="default_phase">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }} <span class="req">*</span></label>
-        <select id="default_phase" name="default_phase"><option value="">Choose…</option>@foreach($phases as $node)<option value="{{ $node['phase']->id }}" @selected((string) $defaultPhase === (string) $node['phase']->id) @disabled(! $node['leaf'])>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}{{ $node['leaf'] ? '' : ' ▸' }}</option>@endforeach</select></div>
+        <select id="default_phase" name="default_phase"><option value="">Choose…</option>@foreach($phases as $node)<option value="{{ $node['phase']->id }}" @selected((string) $defaultPhase === (string) $node['phase']->id) @disabled(! $node['leaf'])>{{ str_repeat('— ', $node['depth'] - 1) }}{{ $node['label'] }}{{ $node['leaf'] ? '' : ' ▸' }}</option>@endforeach</select>
+          <button type="button" class="rb-apply" id="applyPhase">Set on every item ↓</button></div>
       <div class="field" style="margin:0"><label for="default_supplier">Supplier <span style="font-weight:400;color:var(--ink-dim)">(from the invoice)</span></label>
         <input id="default_supplier" name="default_supplier" list="supplierList" maxlength="150" value="{{ old('default_supplier') }}" placeholder="Type a new one or pick a saved one" autocomplete="off"></div>
     </div>
@@ -309,6 +311,17 @@
   headMoreToggle.addEventListener('click', () => { headMoreToggle.setAttribute('aria-expanded', headMoreToggle.getAttribute('aria-expanded') === 'true' ? 'false' : 'true'); syncHeadMore(); });
   syncHeadMore();
   headPhase.addEventListener('change', () => [...body.children].forEach(tr => { if (!tr.querySelector('[data-f=item]').value.trim()) tr.querySelector('[data-f=phase]').value = headPhase.value; }));
+  // Puts the phase chosen above on every row at once (long entries such as past data).
+  document.getElementById('applyPhase').addEventListener('click', () => {
+    const word = C.phaseWord.toLowerCase();
+    if (!headPhase.value) { alert(`Choose the ${word} above first.`); headPhase.focus(); return; }
+    const selects = [...body.querySelectorAll('[data-f=phase]')];
+    const other = selects.filter(s => s.value && s.value !== headPhase.value).length;
+    if (!confirm(`Set ${word} "${C.phases[headPhase.value]}" on all ${selects.length} item${selects.length === 1 ? '' : 's'}?` + (other ? `
+${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be changed.` : ''))) return;
+    selects.forEach(s => s.value = headPhase.value);
+    queueDraft();
+  });
   document.getElementById('addRow').addEventListener('click', () => addRow().querySelector('[data-f=item]').focus());
   document.getElementById('addFive').addEventListener('click', () => { for (let k = 0; k < 5; k++) addRow(); });
   if (C.draft) {
