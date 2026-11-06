@@ -206,20 +206,33 @@ class LedgerController extends Controller
             'rows.*' => ['array'],
             'rows.*.*' => ['nullable', 'string', 'max:2000'],
         ]);
+        $draft = $this->keepDraft($request->user(), $project, $validated['header'] ?? [], $validated['rows'] ?? []);
+
+        return response()->json($draft ? ['saved' => true, 'at' => $draft->updated_at->format('H:i')] : ['saved' => false]);
+    }
+
+    /**
+     * Stores the user's unsaved rows (and the header above them) as the project's draft; with no filled-in row
+     * the draft is removed instead.
+     *
+     * @param  array<string, mixed>  $header
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    private function keepDraft(User $user, Project $project, array $header, array $rows): ?ExpenseDraft
+    {
         $fields = ['expense_date', 'main_category', 'project_phase_id', 'item_description', 'supplier', 'subcategory', 'quantity', 'unit', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details', 'labour_agreement_id'];
-        $rows = collect($validated['rows'] ?? [])->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))
+        $rows = collect($rows)->filter(fn ($row) => is_array($row))->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))
             ->filter(fn (array $row) => collect($row)->only(['item_description', 'unit_cost', 'total_amount'])->filter(fn ($v) => trim((string) $v) !== '')->isNotEmpty())
             ->values();
         if ($rows->isEmpty()) {
-            ExpenseDraft::clear($request->user(), $project);
+            ExpenseDraft::clear($user, $project);
 
-            return response()->json(['saved' => false]);
+            return null;
         }
-        $header = array_intersect_key($validated['header'] ?? [], array_flip(['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference']));
-        $draft = ExpenseDraft::updateOrCreate(['user_id' => $request->user()->id, 'project_id' => $project->id],
-            ['data' => ['header' => $header, 'rows' => $rows->all()], 'item_count' => $rows->count()]);
+        $header = array_intersect_key($header, array_flip(['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference']));
 
-        return response()->json(['saved' => true, 'at' => $draft->updated_at->format('H:i')]);
+        return ExpenseDraft::updateOrCreate(['user_id' => $user->id, 'project_id' => $project->id],
+            ['data' => ['header' => $header, 'rows' => $rows->all()], 'item_count' => $rows->count()]);
     }
 
     public function discardDraft(Request $request, Project $project)
@@ -297,11 +310,14 @@ class LedgerController extends Controller
             'status' => $header['status'], 'payment_date' => $header['payment_date'] ?? null,
             'payment_method' => $header['payment_method'] ?? null, 'transaction_reference' => $header['transaction_reference'] ?? null,
         ], $request->user())));
-        ExpenseDraft::clear($request->user(), $project);
+        // Rows left out of this save (another date shown) stay in the draft for later; otherwise the draft is done.
+        $kept = json_decode((string) $request->input('keep_json', '[]'), true);
+        $left = $this->keepDraft($request->user(), $project, $request->only(['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference']), is_array($kept) ? $kept : []);
         $total = LedgerAnalyticsService::money((int) $lines->sum(fn ($line) => LedgerAnalyticsService::cents($line->total_amount)));
         $next = $this->afterSave($request, $project);
 
-        return redirect($next)->with('success', $lines->count().' line(s) recorded ('.$lines->first()->request_code.($lines->count() > 1 ? ' – '.$lines->last()->request_code : '').') · TSh '.Money::format($total).'.');
+        return redirect($next)->with('success', $lines->count().' line(s) recorded ('.$lines->first()->request_code.($lines->count() > 1 ? ' – '.$lines->last()->request_code : '').') · TSh '.Money::format($total).'.'
+            .($left ? ' '.$left->item_count.' item(s) are still in your draft.' : ''));
     }
 
     public function edit(Project $project, ExpenseRequest $line)

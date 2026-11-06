@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-06 — Save a Draft One Date at a Time; No Totals in My Entries for Data Entry
+
+- **"Show date"** above the items (shown when the rows span more than one date) lists each date with its count. Picking one shows only that day's rows; Save, Preview, the total and "Set on every item" then cover only the rows shown, and the other rows **stay in the draft** (sent as `keep_json`, stored through `LedgerController::keepDraft`, the same cleaning as autosave). The success message says how many items are still in the draft. A failed save brings back the kept rows too.
+- **My Entries no longer shows the Lines / Total cards to Data Entry** (other roles keep them).
+
 ## 2026-11-06 — Record Expense: Each Row Can Have Its Own Date; Long Forms Save Safely
 
 - **A row's date** (new Date column; on the phone it shows under "More details", or straight away when it differs) follows the date above until changed, so past data from several days can be entered and saved in one go. The preview lists rows with their own date. Saved as `rows.*.expense_date` (draft too); empty means the date above.
