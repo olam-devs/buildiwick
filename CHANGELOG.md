@@ -2,6 +2,13 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-09 — Sandbox Data: Makongo Draft, TTCL Site and Sinza Site
+
+- No code change. On the sandbox (database backed up first), created **TTCL Site** (BWG-TTCL-2026-001) and **Sinza Site** (BWG-SNZ-2026-001, location Sinza) with the standard phases; Data Entry (all projects) can pick both.
+- Put the 67 lines of the MAKONGO sheet (tracker workbook v4) into Data Entry's Makongo draft (project 74), total TSh 74,896,673.70, same as the sheet. The draft is not saved expenses; she reviews and saves.
+- Dates: the sheet's Excel dates were typed day/month but stored month/day, so dates with a day of 12 or less were swapped back (e.g. Excel 2026-03-01 -> 3 Jan 2026, 2026-12-06 -> 12 Jun 2026). This makes the register run from 30 Dec 2025 to 21 Aug 2026 in order. One small dip remains: MAK-TXN-0013–0015 read 11 Mar, then 0016–0020 read 6 Mar.
+- Left as written for her to check: MAK-TXN-0020 (1 × 5,000 but total 50,000); MAK-TXN-0050–0053 steel filed under Tools & Small Equipment; MAK-TXN-0036–0042 repeat 1,000 blocks / 50 cement three times. The last six lines are coded MWN-TXN-0001–0006 (29–31 Oct, plaster ya fence/panel); they were in the Makongo sheet, so they went to Makongo, and are not in Galco Mwenge Gate.
+
 ## 2026-11-09 — Money Fields Show Commas (4,500,000)
 
 - **Every money field** (unit cost, total, amount paid, agreed value, budgets, invoice/claim amounts, prices) now shows thousands commas while typing, e.g. 4500000 shows as 4,500,000, so big amounts are easy to read on a phone. Quantities, percentages and thresholds stay plain number fields.
