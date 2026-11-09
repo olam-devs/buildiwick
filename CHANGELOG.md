@@ -2,6 +2,13 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-09 — Sandbox Data: Six More Drafts From Tracker v5
+
+- No code change. Database backed up first. Data Entry's drafts now hold the register lines from tracker workbook v5: Mikocheni (211 lines, TSh 66,643,859.00), Kimbiji zoo (58, TSh 23,904,000.00), Oysterbay mosque/Oyster Masjeed (30, TSh 2,462,500.00), Mbweni JKT (58, TSh 35,177,649.48), Sinza Site (21, TSh 10,402,299.99), TTCL Site (56, TSh 12,385,350.00). Drafts are not saved expenses.
+- Dates: Mikocheni, Kimbiji, Oyster Masjeed and TTCL run in order as stored, so they are unchanged. Sinza's Excel read dates month/day (24/3/2026 stayed text), so its other dates were flipped (5 Mar, 9 Apr, 10 Apr). Mbweni JKT-TXN-0029–0032 were stored 9 Aug between 18 Aug and 14 Sep lines, so they were read as 8 Sep.
+- Left out: JKT-TXN-0059–0062 (tepu umeme, sportlight W30/W50, wire), the same four lines already saved on 2 Nov as MBJ-LAB-TXN-0001–0004.
+- "Concrete & Masonry" (not in the list) became Concrete & Cement for cement and Masonry for blocks. Other categories kept as written, including a few whose subcategory belongs to another category.
+
 ## 2026-11-09 — Sandbox Data: Makongo Draft, TTCL Site and Sinza Site
 
 - No code change. On the sandbox (database backed up first), created **TTCL Site** (BWG-TTCL-2026-001) and **Sinza Site** (BWG-SNZ-2026-001, location Sinza) with the standard phases; Data Entry (all projects) can pick both.
