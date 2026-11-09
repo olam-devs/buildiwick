@@ -62,7 +62,7 @@
   <div class="row2"><div class="field"><label for="w_type">Type</label><select id="w_type" name="labour_type"><option value="">—</option>@foreach($labourTypes as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</select></div>
   <div class="field"><label for="w_contact">Phone / contact</label><input id="w_contact" name="contact" maxlength="100"></div></div>
   <div class="field"><label for="w_scope">Scope of work</label><input id="w_scope" name="scope_of_work" maxlength="1000" placeholder="e.g. Blockwork ground floor"></div>
-  <div class="field"><label for="w_value">Contract amount (TSh) — leave empty if paid per job</label><input type="number" step="0.01" min="0" id="w_value" name="agreed_value"></div>
+  <div class="field"><label for="w_value">Contract amount (TSh) — leave empty if paid per job</label><input type="text" inputmode="decimal" data-money step="0.01" min="0" id="w_value" name="agreed_value"></div>
   <div class="row2"><div class="field"><label for="w_start">Start</label><input type="date" id="w_start" name="start_date"></div><div class="field"><label for="w_end">Expected completion</label><input type="date" id="w_end" name="expected_completion"></div></div>
   <div class="field" id="w_status_field" hidden><label for="w_status">Status</label><select id="w_status" name="status"><option value="active">Active</option><option value="completed">Completed</option></select></div>
   <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button><button class="btn btn-primary" type="submit">Save</button></div>

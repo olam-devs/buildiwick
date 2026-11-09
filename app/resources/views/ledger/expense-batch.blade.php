@@ -275,8 +275,8 @@
       <td class="rb-more rb-subcell" data-label="Subcategory"><select data-f="sub" name="rows[${i}][subcategory]" data-value="${esc(data.subcategory)}"></select></td>
       <td data-label="Qty"><input data-f="qty" class="num" type="number" step="0.01" min="0" name="rows[${i}][quantity]" value="${esc(data.quantity ?? '1')}"></td>
       <td data-label="Unit"><select data-f="unit" name="rows[${i}][unit]" data-value="${esc(data.unit)}"></select></td>
-      <td data-label="Unit cost (TSh)"><input data-f="cost" class="num" type="number" step="0.01" min="0" name="rows[${i}][unit_cost]" value="${esc(data.unit_cost)}"></td>
-      <td data-label="Total (TSh)"><input data-f="total" class="num" type="number" step="0.01" min="0" name="rows[${i}][total_amount]" value="${esc(data.total_amount)}"></td>
+      <td data-label="Unit cost (TSh)"><input data-f="cost" class="num" type="text" inputmode="decimal" data-money step="0.01" min="0" name="rows[${i}][unit_cost]" value="${esc(data.unit_cost)}"></td>
+      <td data-label="Total (TSh)"><input data-f="total" class="num" type="text" inputmode="decimal" data-money step="0.01" min="0" name="rows[${i}][total_amount]" value="${esc(data.total_amount)}"></td>
       <td class="rb-more" data-label="Receipt no."><input data-f="rcpt" name="rows[${i}][invoice_receipt_no]" maxlength="255"></td>
       <td class="rb-more" data-label="Notes"><input data-f="note" name="rows[${i}][details]" maxlength="2000"></td>
       <td class="rb-del"><button type="button" class="rb-more-toggle">More details ▾</button><button type="button" class="rb-remove" title="Remove row">× <span class="rb-remove-label">Remove</span></button></td>`;

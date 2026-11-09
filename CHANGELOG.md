@@ -2,6 +2,13 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-09 — Money Fields Show Commas (4,500,000)
+
+- **Every money field** (unit cost, total, amount paid, agreed value, budgets, invoice/claim amounts, prices) now shows thousands commas while typing, e.g. 4500000 shows as 4,500,000, so big amounts are easy to read on a phone. Quantities, percentages and thresholds stay plain number fields.
+- How: these inputs are `type="text" inputmode="decimal" data-money` (numeric keypad on phones). `partials/money-inputs.blade.php` (in the layout) formats them, keeps the cursor in place, and makes `.value` read and write plain numbers, so page scripts (totals, preview, packed `rows_json`) work unchanged. Commas are removed whenever form data is built, so the server gets plain numbers. Rows added later are picked up automatically.
+- Safety net: `StripMoneyCommas` middleware (web group) turns a money field sent as "4,500,000" into 4500000 (only for known money field names and budgets; other text like an item called "1,000" is left alone).
+- Sandbox data (no code), 2026-11-06: Galco Bandari (BWG-BND-2026-001) and Galco Mbozi (BWG-MBO-2026-001) created with the standard phases. Coastal resort renamed "Sakla Beach - Coastal resort, 5 cottages" and its 86 register lines put in Data Entry's draft. Dates follow her note: Excel rows 7–41 were typed day/month/year and Excel flipped those with a day of 12 or less (shown 10/09 = 9 Oct, 10/12 = 12 Oct).
+
 ## 2026-11-06 — Save a Draft One Date at a Time; No Totals in My Entries for Data Entry
 
 - **"Show date"** above the items (shown when the rows span more than one date) lists each date with its count. Picking one shows only that day's rows; Save, Preview, the total and "Set on every item" then cover only the rows shown, and the other rows **stay in the draft** (sent as `keep_json`, stored through `LedgerController::keepDraft`, the same cleaning as autosave). The success message says how many items are still in the draft. A failed save brings back the kept rows too.

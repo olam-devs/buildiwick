@@ -906,6 +906,22 @@ class RecordingModeTest extends TestCase
         $this->actingAs($this->user('project_manager', $project))->get(route('ledger.structure', $office))->assertForbidden();
     }
 
+    public function test_money_fields_show_commas_and_amounts_typed_with_commas_still_save(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+
+        $this->actingAs($pm)->get(route('ledger.expenses.create', $project))->assertOk()
+            ->assertSee('data-f="cost" class="num" type="text" inputmode="decimal" data-money', false)
+            ->assertSee('data-f="qty" class="num" type="number"', false)
+            ->assertSee('window.BuildiwickMoney', false);
+
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['quantity' => '1', 'unit_cost' => '4,500,000', 'total_amount' => '4,500,000.50', 'item_description' => '1,000']))
+            ->assertSessionHasNoErrors();
+        $line = ExpenseRequest::query()->sole();
+        $this->assertSame(['4500000.50', '1,000'], [$line->total_amount, $line->item_description]);
+    }
+
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
     {
         $project = Project::create(['project_code' => $code, 'name' => 'Project '.$code, 'status' => 'active', 'location' => 'Dar es Salaam']);

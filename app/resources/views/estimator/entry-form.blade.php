@@ -31,7 +31,7 @@
     <div class="row3">
       <div class="field"><label for="quantity">Quantity</label><input type="number" min="0" step="0.01" name="quantity" id="quantity" value="{{ old('quantity', $entry?->quantity ?? '1.00') }}"><div class="field-err">Leave blank or use 1 for a genuine lump-sum line.</div></div>
       <div class="field"><label for="unit">Unit</label><select name="unit" id="unit"><option value="">No unit</option>@foreach($lookups['units'] as $item)<option value="{{ $item->code }}" @selected(old('unit', $entry?->unit ?? 'ls') === $item->code)>{{ $item->label }}</option>@endforeach</select><div class="field-err">Suggested units move to the top by category; all valid units remain available.</div></div>
-      <div class="field"><label for="base_unit_cost">Base Unit Cost (TSh) <span class="req">*</span></label><input type="number" min="0" step="0.01" name="base_unit_cost" id="base_unit_cost" value="{{ old('base_unit_cost', $entry?->base_unit_cost) }}" required></div>
+      <div class="field"><label for="base_unit_cost">Base Unit Cost (TSh) <span class="req">*</span></label><input type="text" inputmode="decimal" data-money min="0" step="0.01" name="base_unit_cost" id="base_unit_cost" value="{{ old('base_unit_cost', $entry?->base_unit_cost) }}" required></div>
     </div>
     <div class="field"><label for="markup_percent">Markup % <span class="req">*</span></label><input type="number" min="0" max="1000" step="0.0001" name="markup_percent" id="markup_percent" value="{{ old('markup_percent', $entry?->markup_percent ?? '0.0000') }}" required></div>
     <div class="tablewrap"><table class="calculation-preview" style="min-width:500px;"><thead><tr><th>Calculated value</th><th>Preview (TSh)</th></tr></thead><tbody>

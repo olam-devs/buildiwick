@@ -187,7 +187,7 @@
     tbody.innerHTML = open.map(b => `<tr>
       <td data-label="Line"><span class="code">${esc(b.dataset.code)}</span><span class="muted">${esc(b.dataset.item)}</span></td>
       <td data-label="Open" class="amt">${fmt(b.dataset.open)}</td>
-      <td data-label="Pay now" class="amt"><input form="bulkForm" type="number" step="0.01" min="0.01" max="${b.dataset.open}" name="rows[${b.value}][amount]" value="${b.dataset.open}" data-pay required></td>
+      <td data-label="Pay now" class="amt"><input form="bulkForm" type="text" inputmode="decimal" data-money step="0.01" min="0.01" max="${b.dataset.open}" name="rows[${b.value}][amount]" value="${b.dataset.open}" data-pay required></td>
       <td data-label="Method"><select form="bulkForm" name="rows[${b.value}][payment_method]">${options}</select></td>
       <td data-label="Receipt no."><input form="bulkForm" name="rows[${b.value}][invoice_receipt_no]" value="${esc(b.dataset.receipt)}" maxlength="255"></td>
       <td data-label="Reference"><input form="bulkForm" name="rows[${b.value}][transaction_reference]" maxlength="255"></td></tr>`).join('');

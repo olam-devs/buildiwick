@@ -69,11 +69,11 @@
       <div class="row3" id="txn_qty_row">
         <div class="field"><label for="txn_qty">Quantity</label><input type="number" step="0.01" name="quantity" id="txn_qty" oninput="Buildiwick.calcTotal()"></div>
         <div class="field"><label for="txn_unit">Unit</label><select name="unit" id="txn_unit"><option value="">&mdash;</option></select></div>
-        <div class="field"><label for="txn_unit_cost">Unit cost</label><input type="number" step="0.01" name="unit_cost" id="txn_unit_cost" oninput="Buildiwick.calcTotal()"></div>
+        <div class="field"><label for="txn_unit_cost">Unit cost</label><input type="text" inputmode="decimal" data-money step="0.01" name="unit_cost" id="txn_unit_cost" oninput="Buildiwick.calcTotal()"></div>
       </div>
 
       <div class="row2">
-        <div class="field"><label for="txn_total">Total (TSh) <span class="req">*</span></label><input type="number" step="0.01" name="total_amount" id="txn_total" value="{{ old('total_amount') }}"></div>
+        <div class="field"><label for="txn_total">Total (TSh) <span class="req">*</span></label><input type="text" inputmode="decimal" data-money step="0.01" name="total_amount" id="txn_total" value="{{ old('total_amount') }}"></div>
         <div class="field"><label for="txn_date">Date <span class="req">*</span></label><input type="date" name="transaction_date" id="txn_date" value="{{ old('transaction_date', date('Y-m-d')) }}"></div>
       </div>
 
@@ -114,7 +114,7 @@
           <label for="agr_type">Labour type</label>
           <select name="labour_type" id="agr_type"><option value="">&mdash; none &mdash;</option></select>
         </div>
-        <div class="field"><label for="agr_value">Agreed value (TSh) <span class="req">*</span></label><input type="number" step="0.01" name="agreed_value" id="agr_value"></div>
+        <div class="field"><label for="agr_value">Agreed value (TSh) <span class="req">*</span></label><input type="text" inputmode="decimal" data-money step="0.01" name="agreed_value" id="agr_value"></div>
       </div>
       <div class="row2">
         <div class="field"><label for="agr_date">Agreement date <span class="req">*</span></label><input type="date" name="agreement_date" id="agr_date" value="{{ date('Y-m-d') }}"></div>
