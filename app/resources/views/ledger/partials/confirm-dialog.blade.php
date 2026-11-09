@@ -3,8 +3,8 @@
   <form method="POST" id="confirmForm">@csrf
     <h3>Confirm payment</h3>
     <p class="form-context" id="confirmWhat" style="margin:0"></p>
-    <div class="field" id="totalField"><label for="confirm_total_amount">Line amount (TSh) — correct it if the final price differs</label><input type="number" step="0.01" min="0" id="confirm_total_amount" name="total_amount"></div>
-    <div class="field"><label for="confirm_amount">Amount paid now (TSh) <span class="req">*</span></label><input type="number" step="0.01" min="0.01" id="confirm_amount" name="amount" required></div>
+    <div class="field" id="totalField"><label for="confirm_total_amount">Line amount (TSh) — correct it if the final price differs</label><input type="text" inputmode="decimal" data-money step="0.01" min="0" id="confirm_total_amount" name="total_amount"></div>
+    <div class="field"><label for="confirm_amount">Amount paid now (TSh) <span class="req">*</span></label><input type="text" inputmode="decimal" data-money step="0.01" min="0.01" id="confirm_amount" name="amount" required></div>
     <div class="row2"><div class="field"><label for="confirm_payment_date">Payment date <span class="req">*</span></label><input type="date" id="confirm_payment_date" name="payment_date" value="{{ now()->toDateString() }}" max="{{ now()->toDateString() }}" required></div>
     <div class="field"><label for="confirm_payment_method">Method</label><select id="confirm_payment_method" name="payment_method"><option value="">Not recorded</option>@foreach($methods as $code => $label)<option value="{{ $code }}">{{ $label }}</option>@endforeach</select></div></div>
     <div class="row2"><div class="field"><label for="confirm_receipt">Receipt no. (optional)</label><input id="confirm_receipt" name="invoice_receipt_no" maxlength="255"></div>

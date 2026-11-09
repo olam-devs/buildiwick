@@ -335,6 +335,7 @@
 })();
 </script>
 @include('partials.page-loader')
+@include('partials.money-inputs')
 <button type="button" class="to-top" id="toTop" aria-label="Back to top" title="Back to top" hidden>&#8593;</button>
 <style>
   .to-top{position:fixed;right:16px;bottom:18px;z-index:70;width:48px;height:48px;border-radius:50%;border:0;background:var(--primary);color:#fff;font-size:22px;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;justify-content:center}
