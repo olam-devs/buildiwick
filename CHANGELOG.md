@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-10 — New Unit: BKT (Bucket)
+
+- **BKT** added to the units list (code `bkt`) by migration `2026_11_10_090000_add_bkt_unit`, so it reaches databases whose unit list was trimmed, and in `LookupSeeder` for fresh builds. On the Record Expense form it sits near the top for Materials lines (after PKT); every other category still has it in the full list.
+
 ## 2026-11-10 — Sandbox Data: Mbweni Duplex Draft From Tracker v6
 
 - No code change. Database backed up first. Data Entry's draft for **Duplex residence** (BWG-MWN-DPX-2026-001, project 57) now holds the 43 lines of the MBWENI DUPLEXES sheet (DUP-TXN-0001–0043, 15 Jun to 30 Oct), total TSh 33,843,649.48. None match the 14 lines already saved there (all November).

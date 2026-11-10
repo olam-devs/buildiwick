@@ -75,7 +75,7 @@ class LookupSeeder extends Seeder
             ['box', 'BOX'], ['trip', 'TRIP'], ['load', 'LOAD'], ['km', 'KM'], ['day', 'DAY'],
             ['worker_day', 'WORKER-DAY'], ['week', 'WEEK'], ['month', 'MONTH'], ['hour', 'HOUR'],
             ['worker_hour', 'WORKER-HOUR'], ['job', 'JOB'], ['task', 'TASK'], ['service', 'SERVICE'],
-            ['point', 'POINT'], ['person', 'PERSON'], ['ls', 'LS'], ['no', 'NO.'], ['item', 'ITEM'], ['pkt', 'PKT'], ['pairs', 'PAIRS'],
+            ['point', 'POINT'], ['person', 'PERSON'], ['ls', 'LS'], ['no', 'NO.'], ['item', 'ITEM'], ['pkt', 'PKT'], ['pairs', 'PAIRS'], ['bkt', 'BKT'],
         ]);
 
         $this->seedType('payment_status', [
