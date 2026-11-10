@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-10 — Sandbox Data: Mbweni Duplex Draft From Tracker v6
+
+- No code change. Database backed up first. Data Entry's draft for **Duplex residence** (BWG-MWN-DPX-2026-001, project 57) now holds the 43 lines of the MBWENI DUPLEXES sheet (DUP-TXN-0001–0043, 15 Jun to 30 Oct), total TSh 33,843,649.48. None match the 14 lines already saved there (all November).
+- In v6 she moved the June–September lines (DUP-TXN-0001–0035) out of the MBWENI JKT sheet into MBWENI DUPLEXES. The Mbweni JKT draft from v5, which had those lines, had already been deleted with nothing saved, so nothing is doubled. The v6 JKT sheet (28 October lines) was not re-added.
+- Dates are as stored and run in order (she fixed 0029–0032 to 8 Sep herself). "Concrete & Masonry" became Concrete & Cement or Masonry as before; other categories kept as written (PIPA/NDOO under Materials with Tools & Small Equipment, DUP-TXN-0043 Fundi Chuma under Materials with Direct Labour).
+
 ## 2026-11-09 — Sandbox Data: Six More Drafts From Tracker v5
 
 - No code change. Database backed up first. Data Entry's drafts now hold the register lines from tracker workbook v5: Mikocheni (211 lines, TSh 66,643,859.00), Kimbiji zoo (58, TSh 23,904,000.00), Oysterbay mosque/Oyster Masjeed (30, TSh 2,462,500.00), Mbweni JKT (58, TSh 35,177,649.48), Sinza Site (21, TSh 10,402,299.99), TTCL Site (56, TSh 12,385,350.00). Drafts are not saved expenses.
