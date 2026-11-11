@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-11 — Sandbox Data: Galco Bandari Draft Copied to Galco Mbozi
+
+- No code change. Database backed up first (`before-mbozi-draft`). Data Entry's 12-line draft for **Galco Bandari** (BWG-BND-2026-001) was copied unchanged into a new Data Entry draft for **Galco Mbozi** (BWG-MBO-2026-001), TSh 15,018,157.85, all AFRIZANIA BUILDING MATERIALS COMP LTD. Only the phase links were switched to Mbozi's own phases of the same name (Finishing, External Works, Other / General). The Bandari draft is untouched; neither draft is saved to the ledger.
+
 ## 2026-11-11 — New Unit: GAL (Gallon)
 
 - **GAL** added to the units list (code `gal`) by migration `2026_11_11_090000_add_gal_unit`, and in `LookupSeeder` for fresh builds. On the Record Expense form it sits near the top for Materials lines (after L, litres); every other category still has it in the full list.
