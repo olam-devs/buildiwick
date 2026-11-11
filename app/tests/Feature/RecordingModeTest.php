@@ -251,7 +251,7 @@ class RecordingModeTest extends TestCase
         $this->assertSame(9, $project->phases()->count());
         $this->assertSame('Service', $project->phases()->orderByDesc('phase_order')->value('phase_name'));
         $this->assertSame(['sand' => 'materials', 'hardcore_stones' => 'materials', 'demolition' => 'labour_subcontracts'], Lookup::where('type', 'subcategory')->whereIn('code', ['sand', 'hardcore_stones', 'demolition'])->orderBy('sort_order')->pluck('parent_code', 'code')->all());
-        $this->assertEqualsCanonicalizing(['TON', 'ITEM', 'BOX', 'PKT', 'PAIRS', 'BKT'], Lookup::where('type', 'unit')->whereIn('code', ['tonne', 'item', 'box', 'pkt', 'pairs', 'bkt'])->pluck('label')->all());
+        $this->assertEqualsCanonicalizing(['TON', 'ITEM', 'BOX', 'PKT', 'PAIRS', 'BKT', 'GAL'], Lookup::where('type', 'unit')->whereIn('code', ['tonne', 'item', 'box', 'pkt', 'pairs', 'bkt', 'gal'])->pluck('label')->all());
         $this->assertTrue($pm->assignedProjects()->whereKey($project->id)->exists());
         $this->actingAs($pm)->get(route('ledger.index'))->assertSee('New residence');
     }
