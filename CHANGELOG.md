@@ -4,9 +4,9 @@ Every session or PR adds an entry here — dated, plain language, written for a 
 
 ## 2026-11-11 — Sandbox Data: Kinondoni Draft From Tracker v7
 
-- No code change. Database backed up first (`before-kinondoni-draft`). Data Entry's draft for **Kinondoni residence** (BWG-KND-RES-2026-001, project 59) keeps her own 7 lines and now adds 326 lines from the KINONDONI RESIDENCE sheet (KIN-TXN-0001–0335, 20 Jul to 31 Oct), TSh 234,626,846.62; the draft is now 333 lines.
+- No code change. Database backed up first (`before-kinondoni-draft`). Data Entry's draft for **Kinondoni residence** (BWG-KND-RES-2026-001, project 59) keeps her own 7 lines and now adds 326 lines from the KINONDONI RESIDENCE sheet (KIN-TXN-0001–0335, 20 Jul to 31 Oct), TSh 234,626,846.62 at first (see 0336 below).
 - Excel-flipped dates corrected by row order: 0068 (8 Apr → 4 Aug), 0159–0162 (9 Apr → 4 Sep), 0224–0233 (10 Jan → 1 Oct), 0234–0235 (10 Mar → 3 Oct). 0170–0171 stay 15 Sep between 10 Sep lines (not ambiguous).
-- KIN-TXN-0336 (500 blocks, 850,000, 1 Nov) left out: it matches saved KND-RES-TXN-0001 (Blocks procurement, 850,000, 4 Nov).
+- KIN-TXN-0336 (500 blocks, 850,000, 1 Nov) was first left out as a likely double of saved KND-RES-TXN-0001 (Blocks procurement, 850,000, 4 Nov); at the user's request it was then added as it is (second backup `before-kinondoni-0336`), making 327 sheet lines and 334 in the draft. The user is sending the flagged points to Data Entry to verify before she saves.
 - 0236 (sand) and 0237 (aggregates) have no price in the sheet and are left blank for her to fill. 0130 "Concrete & Masonry" became Masonry; units TON → TONNE, NO. → NO.; other categories kept as written, including the cross-category ones (e.g. labour lines with Concrete & Cement).
 
 ## 2026-11-11 — Sandbox Data: Galco Bandari Draft Copied to Galco Mbozi
