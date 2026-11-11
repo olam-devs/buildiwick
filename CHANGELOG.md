@@ -2,6 +2,13 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-11 — Sandbox Data: Kinondoni Draft From Tracker v7
+
+- No code change. Database backed up first (`before-kinondoni-draft`). Data Entry's draft for **Kinondoni residence** (BWG-KND-RES-2026-001, project 59) keeps her own 7 lines and now adds 326 lines from the KINONDONI RESIDENCE sheet (KIN-TXN-0001–0335, 20 Jul to 31 Oct), TSh 234,626,846.62; the draft is now 333 lines.
+- Excel-flipped dates corrected by row order: 0068 (8 Apr → 4 Aug), 0159–0162 (9 Apr → 4 Sep), 0224–0233 (10 Jan → 1 Oct), 0234–0235 (10 Mar → 3 Oct). 0170–0171 stay 15 Sep between 10 Sep lines (not ambiguous).
+- KIN-TXN-0336 (500 blocks, 850,000, 1 Nov) left out: it matches saved KND-RES-TXN-0001 (Blocks procurement, 850,000, 4 Nov).
+- 0236 (sand) and 0237 (aggregates) have no price in the sheet and are left blank for her to fill. 0130 "Concrete & Masonry" became Masonry; units TON → TONNE, NO. → NO.; other categories kept as written, including the cross-category ones (e.g. labour lines with Concrete & Cement).
+
 ## 2026-11-11 — Sandbox Data: Galco Bandari Draft Copied to Galco Mbozi
 
 - No code change. Database backed up first (`before-mbozi-draft`). Data Entry's 12-line draft for **Galco Bandari** (BWG-BND-2026-001) was copied unchanged into a new Data Entry draft for **Galco Mbozi** (BWG-MBO-2026-001), TSh 15,018,157.85, all AFRIZANIA BUILDING MATERIALS COMP LTD. Only the phase links were switched to Mbozi's own phases of the same name (Finishing, External Works, Other / General). The Bandari draft is untouched; neither draft is saved to the ledger.
