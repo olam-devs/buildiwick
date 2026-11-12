@@ -82,10 +82,11 @@ class DataEntryController extends Controller
     }
 
     /**
-     * The period chosen on My Entries: today (default), yesterday, this week, this month, or picked dates (at most a year,
-     * never in the future). Dates are when the lines were entered.
+     * The period chosen on My Entries: today (default), yesterday, this week, this month, the last 12 months, or picked
+     * dates (at most a year, never in the future). Dates are when the lines were entered, or with `by=expense` the expense
+     * date on the line. `q` searches item, supplier, receipt no. and line code within the period.
      *
-     * @return array{key: string, from: CarbonImmutable, to: CarbonImmutable, label: string, query: array<string, string>}
+     * @return array{key: string, from: CarbonImmutable, to: CarbonImmutable, label: string, query: array<string, string>, by: string, q: string, keep: array<string, string>}
      */
     public static function period(Request $request): array
     {
@@ -95,10 +96,11 @@ class DataEntryController extends Controller
             'yesterday' => [$today->subDay(), $today->subDay()],
             'week' => [$today->startOfWeek(), $today],
             'month' => [$today->startOfMonth(), $today],
+            'year' => [$today->subYear(), $today],
             'custom' => [self::date($request->query('from')) ?? $today, self::date($request->query('to')) ?? $today],
             default => [$today, $today],
         };
-        if (! in_array($key, ['yesterday', 'week', 'month', 'custom'], true)) {
+        if (! in_array($key, ['yesterday', 'week', 'month', 'year', 'custom'], true)) {
             $key = 'today';
         }
         $to = $to->min($today);
@@ -108,6 +110,7 @@ class DataEntryController extends Controller
             'yesterday' => 'Yesterday, '.$from->format('d M Y'),
             'week' => 'This week, '.$from->format('d M').' – '.$to->format('d M Y'),
             'month' => 'This month, '.$from->format('d M').' – '.$to->format('d M Y'),
+            'year' => 'Last 12 months, '.$from->format('d M Y').' – '.$to->format('d M Y'),
             default => $from->equalTo($to) ? $from->format('l, d M Y') : $from->format('d M Y').' – '.$to->format('d M Y'),
         };
         $query = match ($key) {
@@ -115,8 +118,13 @@ class DataEntryController extends Controller
             'custom' => ['period' => 'custom', 'from' => $from->toDateString(), 'to' => $to->toDateString()],
             default => ['period' => $key],
         };
+        $by = $request->query('by') === 'expense' ? 'expense' : 'entered';
+        $search = mb_substr(trim((string) $request->query('q', '')), 0, 100);
+        // Kept when another period is picked: the date basis and the search.
+        $keep = array_filter(['by' => $by === 'expense' ? 'expense' : null, 'q' => $search !== '' ? $search : null]);
+        $label .= $by === 'expense' ? ' · by expense date' : ' · by date entered';
 
-        return ['key' => $key, 'from' => $from, 'to' => $to, 'label' => $label, 'query' => $query];
+        return ['key' => $key, 'from' => $from, 'to' => $to, 'label' => $label, 'query' => $query + $keep, 'by' => $by, 'q' => $search, 'keep' => $keep];
     }
 
     private static function date(mixed $value): ?CarbonImmutable
@@ -138,13 +146,25 @@ class DataEntryController extends Controller
             ->when($project, fn ($query) => $query->where('project_id', $project->id))->count();
     }
 
-    /** What this person entered in a period (optionally on one project), newest first. */
+    /** What this person entered in a period (by date entered or expense date, optionally searched, on one project), newest first. */
     private function linesIn(Request $request, array $period, ?Project $project = null)
     {
+        $byExpense = ($period['by'] ?? 'entered') === 'expense';
+        $search = $period['q'] ?? '';
+
         return ExpenseRequest::query()->where('requested_by', $request->user()->id)
-            ->whereBetween('created_at', [$period['from']->startOfDay(), $period['to']->endOfDay()])
+            ->when($byExpense,
+                fn ($query) => $query->whereDate('requested_at', '>=', $period['from']->toDateString())->whereDate('requested_at', '<=', $period['to']->toDateString()),
+                fn ($query) => $query->whereBetween('created_at', [$period['from']->startOfDay(), $period['to']->endOfDay()]))
+            ->when($search !== '', fn ($query) => $query->where(function ($query) use ($search) {
+                $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search).'%';
+                foreach (['item_description', 'supplier_fundi_client', 'invoice_receipt_no', 'request_code'] as $column) {
+                    $query->orWhere($column, 'like', $like);
+                }
+            }))
             ->when($project, fn ($query) => $query->where('project_id', $project->id))
-            ->whereIn('status', ['approved', 'rejected'])->with(['project', 'payments', 'phase'])->latest('id')->get();
+            ->whereIn('status', ['approved', 'rejected'])->with(['project', 'payments', 'phase'])
+            ->when($byExpense, fn ($query) => $query->orderByDesc('requested_at'))->latest('id')->get();
     }
 
     /** What this person entered today, newest first. */

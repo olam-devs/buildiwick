@@ -1,22 +1,42 @@
 {{-- Period filter for My Entries: quick choices plus picked dates (the phone's own calendar). --}}
-@php($chips = ['today' => 'Today', 'yesterday' => 'Yesterday', 'week' => 'This week', 'month' => 'This month'])
+@php
+  $chips = ['today' => 'Today', 'yesterday' => 'Yesterday', 'week' => 'This week', 'month' => 'This month', 'year' => 'Last 12 months'];
+  $keep = $period['keep'] ?? [];
+  $periodOnly = array_diff_key($period['query'], ['by' => 1, 'q' => 1]);
+@endphp
 <div class="period-bar">
+  {{-- Search the item (and supplier, receipt no., code) within the period below. --}}
+  <form method="GET" action="{{ $route([]) }}" class="period-search" role="search">
+    @foreach($periodOnly + array_diff_key($keep, ['q' => 1]) as $name => $value)<input type="hidden" name="{{ $name }}" value="{{ $value }}">@endforeach
+    <input type="search" name="q" value="{{ $period['q'] ?? '' }}" placeholder="Search item, supplier, receipt no. or code" aria-label="Search entries">
+    <button class="btn btn-primary" type="submit">Search</button>
+    @if(($period['q'] ?? '') !== '')<a class="btn btn-ghost" href="{{ $route($periodOnly + array_diff_key($keep, ['q' => 1])) }}">Clear</a>@endif
+  </form>
+  <div class="period-by" role="group" aria-label="Which date to filter by">
+    <span>Dates by:</span>
+    <a @class(['period-chip', 'on' => ($period['by'] ?? 'entered') === 'entered']) href="{{ $route($periodOnly + array_diff_key($keep, ['by' => 1])) }}">Date entered</a>
+    <a @class(['period-chip', 'on' => ($period['by'] ?? 'entered') === 'expense']) href="{{ $route($periodOnly + ['by' => 'expense'] + $keep) }}">Expense date</a>
+  </div>
   <div class="period-chips">
     @foreach($chips as $key => $text)
-      <a @class(['period-chip', 'on' => $period['key'] === $key]) href="{{ $route($key === 'today' ? [] : ['period' => $key]) }}">{{ $text }}</a>
+      <a @class(['period-chip', 'on' => $period['key'] === $key]) href="{{ $route(($key === 'today' ? [] : ['period' => $key]) + $keep) }}">{{ $text }}</a>
     @endforeach
     <button type="button" @class(['period-chip', 'on' => $period['key'] === 'custom']) id="periodPick" aria-expanded="{{ $period['key'] === 'custom' ? 'true' : 'false' }}">📅 Pick dates</button>
   </div>
   <form method="GET" action="{{ $route([]) }}" class="period-custom" id="periodCustom" @unless($period['key'] === 'custom') hidden @endunless>
     <input type="hidden" name="period" value="custom">
+    @foreach($keep as $name => $value)<input type="hidden" name="{{ $name }}" value="{{ $value }}">@endforeach
     <label>From <input type="date" name="from" value="{{ $period['from']->toDateString() }}" max="{{ today()->toDateString() }}" required></label>
     <label>To <input type="date" name="to" value="{{ $period['to']->toDateString() }}" max="{{ today()->toDateString() }}" required></label>
     <button class="btn btn-primary" type="submit">Show</button>
   </form>
-  <p class="period-label">Showing: <b>{{ $period['label'] }}</b></p>
+  <p class="period-label">Showing: <b>{{ $period['label'] }}</b>@if(($period['q'] ?? '') !== '') · search “{{ $period['q'] }}”@endif</p>
 </div>
 <style>
   .period-bar{margin:0 0 12px}
+  .period-search{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .period-search input[type=search]{flex:1 1 220px;font:inherit;font-size:16px;padding:8px 12px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink)}
+  .period-by{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px;font-size:13px;color:var(--ink-soft)}
   .period-chips{display:flex;flex-wrap:wrap;gap:6px}
   .period-chip{display:inline-flex;align-items:center;padding:8px 13px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer}
   .period-chip.on{background:var(--primary);border-color:var(--primary);color:#fff}

@@ -14,5 +14,5 @@
   <div class="lg-card"><div class="k">Total</div><div class="v">TSh {{ \App\Support\Money::format(\App\Services\LedgerAnalyticsService::money((int) $today->where('status', '!=', 'rejected')->sum(fn ($line) => \App\Services\LedgerAnalyticsService::cents($line->total_amount)))) }}</div></div>
 </div>
 @endunless
-@include('entry._today', ['today' => $today, 'title' => $period['key'] === 'today' ? 'Entered today' : 'Entered', 'showDate' => ! $period['from']->isToday()])
+@include('entry._today', ['today' => $today, 'title' => $period['key'] === 'today' && $period['by'] === 'entered' && $period['q'] === '' ? 'Entered today' : ($period['q'] !== '' ? 'Found' : 'Entered'), 'showDate' => ! $period['from']->isToday(), 'dateBy' => $period['by'], 'searching' => $period['q'] !== ''])
 @endsection

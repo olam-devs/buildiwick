@@ -17,7 +17,7 @@
       @php($state = $line->status === 'rejected' ? 'Denied' : ($line->payments->isNotEmpty() ? 'Confirmed' : 'To confirm'))
       @php($canChange = auth()->user()->can('edit-ledger-line', $line) && $line->payments->isEmpty())
       <tr @class(['today-locked' => $isEntry && ! $canChange])>
-        <td data-label="ID" class="code">{{ $line->request_code }}<span class="muted">{{ $line->created_at?->format(($showDate ?? false) ? 'd M · H:i' : 'H:i') }}</span></td>
+        <td data-label="ID" class="code">{{ $line->request_code }}<span class="muted">@if(($dateBy ?? 'entered') === 'expense')Expense {{ \Carbon\CarbonImmutable::parse($line->requested_at)->format('d M Y') }} · entered {{ $line->created_at?->format('d M') }}@else{{ $line->created_at?->format(($showDate ?? false) ? 'd M · H:i' : 'H:i') }}@endif</span></td>
         @if($showProject ?? false)<td data-label="Project">{{ $line->project?->name }}</td>@endif
         <td data-label="Item">{{ $line->item_description }}<span class="muted">@if($line->supplier_fundi_client){{ $line->supplier_fundi_client }} · @endif{{ $line->project?->is_company_overheads ? $line->phase?->name : (\App\Services\LedgerAnalyticsService::CATEGORIES[$line->main_category] ?? $line->main_category) }}</span></td>
         <td data-label="Amount" class="amt">{{ $money::format($line->total_amount) }}</td>
@@ -32,7 +32,7 @@
         </div></td>
       </tr>
     @empty
-      <tr><td colspan="{{ (($showProject ?? false) ? 6 : 5) - ($isEntry ? 1 : 0) }}" class="lg-empty">{{ ($title ?? 'Entered today') === 'Entered today' ? 'Nothing entered yet today.' : 'Nothing entered in this period.' }}</td></tr>
+      <tr><td colspan="{{ (($showProject ?? false) ? 6 : 5) - ($isEntry ? 1 : 0) }}" class="lg-empty">{{ ($searching ?? false) ? 'Nothing found for this search in this period.' : (($title ?? 'Entered today') === 'Entered today' ? 'Nothing entered yet today.' : 'Nothing entered in this period.') }}</td></tr>
     @endforelse
     </tbody>
   </table></div>

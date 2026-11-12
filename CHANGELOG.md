@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — My Entries: Expense-Date Filter and Search
+
+- My Entries can now filter by **Date entered** (as before, the default) or **Expense date** (the date on the line), with a new "Last 12 months" period next to Today / Yesterday / This week / This month / Pick dates.
+- A **search box** finds lines by item, supplier, receipt no. or line code, within the chosen period and date basis; changing the period keeps the search and the date basis. With the expense date, each line shows "Expense 03 Nov 2026 · entered 12 Nov".
+
 ## 2026-11-12 — Entry Sheet: Locks, Two-Way Updates and Approvals (Sheet Sync Steps 5–7)
 
 - **Saved lines in the sheet:** `Saved <code> · can be changed today` (blue) while Data Entry may still edit the line in Buildiwick (`edit-ledger-line`: entered today, unconfirmed, not changed by others); afterwards `Locked <code>` (grey). Denied/deleted lines show `Locked … · denied in Buildiwick` / `Locked · deleted in Buildiwick`.
