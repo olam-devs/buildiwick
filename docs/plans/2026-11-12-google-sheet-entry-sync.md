@@ -44,7 +44,7 @@ Data Entry keeps one Excel tracker (a tab per project) and edits/extends the sam
 
 ## Review panel on each project draft
 
-A **Review** button on the Record Expense form shows the current problems in the draft, grouped with counts; clicking a group shows only those lines in the form (extending the existing "Show date" filter). Saving is allowed once she has gone through them (exact rule to agree: block on hard errors only, e.g. missing price/unknown unit).
+A **Review** button on the Record Expense form shows the current problems in the draft, grouped with counts; clicking a group shows only those lines in the form (extending the existing "Show date" filter). **Agreed 2026-11-12:** only hard errors block saving (missing price/total, unknown unit or subcategory, error values such as `#REF!`, future date); everything else is a warning she can save past.
 
 Checks (the same ones run by hand so far):
 
@@ -77,5 +77,6 @@ Checks (the same ones run by hand so far):
 ## Open points
 
 - Lock time: midnight Dar time after the day the line was **entered in the sheet** (agreed). Draft lines never lock.
-- Does a review flag block saving, or only warn? (Proposal: block only hard errors.)
-- How often to sync (proposal: 15 minutes).
+- Review flags: **agreed** — block only hard errors, warn on the rest.
+- Google emails: **received** (the user as lock editor; Data Entry as sheet editor). Kept out of Git; they go into the system's user records when built.
+- How often to sync (proposal: 15 minutes; not yet confirmed).
