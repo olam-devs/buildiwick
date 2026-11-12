@@ -126,17 +126,18 @@ class SheetsClient
     }
 
     /**
-     * Writes plain values into cells, several ranges in one call.
+     * Writes values into cells, several ranges in one call: as they are (RAW), or read like typed text
+     * (USER_ENTERED, used for formulas).
      *
      * @param  array<string, list<list<mixed>>>  $data  A1 range => rows of values
      */
-    public function writeValues(array $data): void
+    public function writeValues(array $data, string $input = 'RAW'): void
     {
         if ($data === []) {
             return;
         }
         $this->sheets()->spreadsheets_values->batchUpdate($this->spreadsheetId(), new BatchUpdateValuesRequest([
-            'valueInputOption' => 'RAW',
+            'valueInputOption' => $input,
             'data' => array_map(fn (string $range, array $values) => ['range' => $range, 'values' => $values], array_keys($data), $data),
         ]));
     }

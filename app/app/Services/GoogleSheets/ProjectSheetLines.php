@@ -52,16 +52,25 @@ class ProjectSheetLines
 
     private ?User $clerk = null;
 
+    /** @var array<string, list<list<string>>> Total cells to turn into "quantity × unit cost" formulas */
+    private array $formulas = [];
+
+    private bool $allFormulas = false;
+
     public function __construct(private SheetsClient $client, private ProjectSheetTabs $tabs, private ExpenseLedgerService $ledger) {}
 
     /**
      * @param  list<int>|null  $onlyProjectIds
      * @param  bool  $withDrafts  also put draft lines typed in Buildiwick into the sheet (one-time fill; not on the 5-minute run,
      *                            because a line still being typed would change under its key)
+     * @param  bool  $totalFormulas  turn every Total that equals quantity × unit cost into a formula (one-time; new and
+     *                               rewritten lines, and lines typed without a total, always get one)
      * @return array{added: int, updated: int, removed: int, needs_check: int, appended: int, written_back: int, waiting: int, locked: int, projects: list<string>, missing_tabs: list<string>}
      */
-    public function sync(?array $onlyProjectIds = null, bool $withDrafts = false): array
+    public function sync(?array $onlyProjectIds = null, bool $withDrafts = false, bool $totalFormulas = false): array
     {
+        $this->formulas = [];
+        $this->allFormulas = $totalFormulas;
         $user = $this->clerk();
         $this->loadLookups();
         $report = ['added' => 0, 'updated' => 0, 'removed' => 0, 'needs_check' => 0, 'appended' => 0, 'written_back' => 0, 'waiting' => 0, 'locked' => 0, 'projects' => [], 'missing_tabs' => []];
@@ -96,6 +105,7 @@ class ProjectSheetLines
         // Tabs that need more rows for the lines added at the bottom get them first.
         $this->client->batchUpdate(array_map(fn (int $sheetId, int $rows) => ['appendDimension' => ['sheetId' => $sheetId, 'dimension' => 'ROWS', 'length' => $rows]], array_keys($grow), $grow));
         $this->client->writeValues($writes);
+        $this->client->writeValues($this->formulas, 'USER_ENTERED');
         $this->client->batchUpdate($this->lockRequests($lockedRows));
 
         return $report;
@@ -206,6 +216,8 @@ class ProjectSheetLines
             $hash = self::hash($values);
             [$row, $problems] = $this->draftRow($cells, $project, $phases, $tree);
             $row += ['sheet_key' => $key, 'sheet_rev' => $rev];
+            // Total follows quantity × unit cost: typed without a total, or (one-time) a total that already matches.
+            $this->queueTotalFormula($tab, $sheetRow, $values, ! $this->allFormulas);
             $line = $lines->get($key);
             // A line the system wrote itself has no reading yet: this first reading is its starting point.
             if ($line && $line->sheet_hash === '') {
@@ -236,6 +248,7 @@ class ProjectSheetLines
                     } elseif ($line->draft_hash !== null && $line->draft_hash !== $draftHash) {
                         // Changed in the Buildiwick form: the sheet row follows.
                         $writes["{$tab}!C{$sheetRow}:{$last}{$sheetRow}"] = [$draftValues];
+                        $this->queueTotalFormula($tab, $sheetRow, $draftValues);
                         [, $problems] = $this->draftRow([$key, $status, ...$draftValues], $project, $phases, $tree);
                         $line->fill(['sheet_hash' => $draftHash, 'draft_hash' => $draftHash])->save();
                         $counts['written_back']++;
@@ -246,6 +259,9 @@ class ProjectSheetLines
                 }
             } elseif ($line->state === 'saved') {
                 $wanted = $this->syncSaved($line, $hash, $values, $row, $problems, $tree, "{$tab}!C{$sheetRow}:{$last}{$sheetRow}", $writes, $counts);
+                if (isset($writes["{$tab}!C{$sheetRow}:{$last}{$sheetRow}"])) {
+                    $this->queueTotalFormula($tab, $sheetRow, $writes["{$tab}!C{$sheetRow}:{$last}{$sheetRow}"][0]);
+                }
                 if (str_starts_with($wanted, 'Locked')) {
                     $lockedRows[$tabInfo['id']][] = $sheetRow;
                 }
@@ -315,6 +331,9 @@ class ProjectSheetLines
         if ($append !== []) {
             $end = $first + count($append) - 1;
             $writes["{$tab}!A{$first}:{$last}{$end}"] = $append;
+            foreach ($append as $offset => $cells) {
+                $this->queueTotalFormula($tab, $first + $offset, array_slice($cells, 2));
+            }
             $capacity = $tabInfo['rows'] ?? ProjectSheetLayout::ROWS;
             if ($end > $capacity) {
                 $grow[$tabInfo['id']] = $end - $capacity + 200;
@@ -452,6 +471,30 @@ class ProjectSheetLines
         }
 
         return $requests;
+    }
+
+    /**
+     * Makes the Total cell a formula (quantity × unit cost, quantity 1 when empty) when the line has a unit cost and its
+     * total is empty or already equal to that product, so changing quantity or unit cost in the sheet updates it.
+     * A total typed on its own (no unit cost, or a different amount) is left as it is.
+     *
+     * @param  list<mixed>  $values  cells C to N
+     */
+    private function queueTotalFormula(string $tab, int $row, array $values, bool $onlyWhenEmpty = false): void
+    {
+        $number = fn ($value) => is_numeric($value) ? (float) $value : (is_numeric($clean = str_replace(',', '', trim((string) $value))) ? (float) $clean : null);
+        $quantity = trim((string) ($values[6] ?? '')) === '' ? 1.0 : $number($values[6]);
+        $cost = $number($values[8] ?? '');
+        $total = trim((string) ($values[9] ?? ''));
+        if ($cost === null || $quantity === null) {
+            return;
+        }
+        $matches = $total !== '' && $number($total) !== null && round($quantity * $cost, 2) === round((float) $number($total), 2);
+        if ($total === '' || (! $onlyWhenEmpty && $matches)) {
+            $column = chr(ord('A') + ProjectSheetLayout::column('total_amount'));
+            [$q, $c] = [chr(ord('A') + ProjectSheetLayout::column('quantity')).$row, chr(ord('A') + ProjectSheetLayout::column('unit_cost')).$row];
+            $this->formulas["{$tab}!{$column}{$row}"] = [["=IF({$c}=\"\",\"\",ROUND(IF({$q}=\"\",1,{$q})*{$c},2))"]];
+        }
     }
 
     /** @return list<mixed> a saved line as sheet cells, columns C to N */

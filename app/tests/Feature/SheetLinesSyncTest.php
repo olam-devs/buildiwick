@@ -240,6 +240,24 @@ class SheetLinesSyncTest extends TestCase
         $this->artisan('app:sheets-sync')->expectsOutputToContain('Added 0, updated 0, removed 0')->doesntExpectOutputToContain('written to the sheet')->assertSuccessful();
     }
 
+    public function test_the_total_becomes_quantity_times_unit_cost_in_the_sheet(): void
+    {
+        $this->sheets->rows = [
+            $this->sheetRow('', 46331, 'Materials', '', 'Cement', 50, 'BAG', 18500, '', 'Preliminaries'),
+            $this->sheetRow('', 46331, 'Materials', '', 'Sand', 2, 'TRIP', 1000, 2000, 'Preliminaries'),
+            $this->sheetRow('', 46331, 'Materials', '', 'Lump sum', '', '', '', 50000, 'Preliminaries'),
+        ];
+
+        // A line typed without a total gets the formula; one with its own total keeps it on the 5-minute run.
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $this->assertSame(['L3' => '=IF(K3="","",ROUND(IF(I3="",1,I3)*K3,2))'], $this->sheets->formulas);
+
+        // The one-time run turns matching totals into formulas too, never a total typed on its own.
+        $this->sheets->formulas = [];
+        $this->artisan('app:sheets-sync', ['--total-formulas' => true])->assertSuccessful();
+        $this->assertSame(['L3', 'L4'], array_keys($this->sheets->formulas));
+    }
+
     /** @return list<mixed> columns A to N of the project tab */
     private function sheetRow(string $key, mixed $date, string $category, string $subcategory, string $item, mixed $qty, string $unit, mixed $cost, mixed $total, string $phase): array
     {
@@ -306,8 +324,18 @@ class FakeSheetGrid extends SheetsClient
         return 'robot@example.test';
     }
 
-    public function writeValues(array $data): void
+    /** @var array<string, string> formulas written, by cell */
+    public array $formulas = [];
+
+    public function writeValues(array $data, string $input = 'RAW'): void
     {
+        if ($input === 'USER_ENTERED') {
+            foreach ($data as $range => $values) {
+                $this->formulas[substr($range, strrpos($range, '!') + 1)] = $values[0][0];
+            }
+
+            return;
+        }
         $this->rows = array_values($this->rows);
         foreach ($data as $range => $values) {
             preg_match('/!([A-Z])(\d+)(?::[A-Z]\d+)?$/', $range, $match);

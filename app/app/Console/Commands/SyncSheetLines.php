@@ -12,7 +12,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-#[Signature('app:sheets-sync {--project=* : Only these project ids} {--with-drafts : Also put draft lines typed in Buildiwick into the sheet (one-time fill)}')]
+#[Signature('app:sheets-sync {--project=* : Only these project ids} {--with-drafts : Also put draft lines typed in Buildiwick into the sheet (one-time fill)} {--total-formulas : Turn every Total that equals quantity x unit cost into a formula (one-time)}')]
 #[Description('Bring lines typed in the Google entry sheet into the Data Entry drafts (runs every 5 minutes); also gives new projects their tab.')]
 class SyncSheetLines extends Command
 {
@@ -34,7 +34,7 @@ class SyncSheetLines extends Command
                 $created = $tabs->sync($missing)['created'];
                 $this->line('New tabs ('.count($created).'): '.implode(', ', $created));
             }
-            $report = $lines->sync($only, (bool) $this->option('with-drafts'));
+            $report = $lines->sync($only, (bool) $this->option('with-drafts'), (bool) $this->option('total-formulas'));
         } catch (Throwable $e) {
             $this->error('Sheet lines could not be synced: '.$e->getMessage());
             Log::warning('Google sheet sync failed', ['error' => $e->getMessage()]);
