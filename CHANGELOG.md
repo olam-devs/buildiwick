@@ -2,6 +2,13 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — Google Sheet: One Tab per Project (Sheet Sync Step 2)
+
+- `php artisan app:sheets-tabs` (`ProjectSheetTabs` + `ProjectSheetLayout`) creates one tab per open project (not company overheads, not completed) in the shared "Buildiwick Project Entries" sheet, named after the project, and stores its Google tab id in the new `projects.sheet_tab_id` (tab id = 100000 + project id). Re-running it adds nothing, follows project renames, and refreshes the dropdowns; it never deletes a tab or touches typed lines.
+- Each tab: row 1 title, row 2 headers, lines from row 3. Columns: hidden Row key, Status, Date, Main Category, Subcategory, Item / Description, Supplier / Fundi, Invoice / Receipt No., Quantity, Unit, Unit Cost, Total, Phase / Stage, Notes. Dropdowns (strict) for main category, subcategory, unit and that project's phases (full path for subphases); date must be a real date; numbers must be 0 or more. Rows colour by Status: grey "Locked…", blue "Saved…", red "Needs check…".
+- Row key, Status and the two header rows are hard-protected (not warning-only): only the owner and the service account can change them. The starter "Sheet1" becomes a "How to use" guide tab.
+- Sandbox data: Data Entry's Galco Mbozi draft lines (12) were appended to her Galco Bandari draft after her one VAT line (13 lines), phases mapped by name; backup `before-mbozi-to-bandari`.
+
 ## 2026-11-12 — Google Sheets Connection (Sheet Sync Step 1)
 
 - Added `google/apiclient` (approved by the user), trimmed to the Sheets and Drive services by `Google\Task\Composer::cleanup`. Composer also moved a few shared packages up minor versions (guzzle, monolog, psr, symfony polyfills).

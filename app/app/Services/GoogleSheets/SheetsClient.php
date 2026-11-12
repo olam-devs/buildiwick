@@ -5,6 +5,7 @@ namespace App\Services\GoogleSheets;
 use Google\Client;
 use Google\Service\Drive;
 use Google\Service\Sheets;
+use Google\Service\Sheets\BatchUpdateSpreadsheetRequest;
 use RuntimeException;
 
 /**
@@ -55,6 +56,31 @@ class SheetsClient
             'can_edit' => (bool) $file->getCapabilities()?->getCanEdit(),
             'can_share' => (bool) $file->getCapabilities()?->getCanShare(),
         ];
+    }
+
+    /**
+     * The spreadsheet's tabs in order.
+     *
+     * @return list<array{id: int, title: string}>
+     */
+    public function tabs(): array
+    {
+        $spreadsheet = $this->sheets()->spreadsheets->get($this->spreadsheetId(), ['fields' => 'sheets.properties(sheetId,title)']);
+
+        return array_map(fn ($sheet) => ['id' => (int) $sheet->getProperties()->getSheetId(), 'title' => (string) $sheet->getProperties()->getTitle()], $spreadsheet->getSheets());
+    }
+
+    /**
+     * Applies Sheets API batchUpdate requests (plain arrays in the API's JSON shape) in one call.
+     *
+     * @param  list<array<string, mixed>>  $requests
+     */
+    public function batchUpdate(array $requests): void
+    {
+        if ($requests === []) {
+            return;
+        }
+        $this->sheets()->spreadsheets->batchUpdate($this->spreadsheetId(), new BatchUpdateSpreadsheetRequest(['requests' => $requests]));
     }
 
     public function serviceAccountEmail(): string
