@@ -285,7 +285,9 @@
     const i = n++;
     const prev = body.lastElementChild;
     const cat = data.main_category || (prev ? prev.querySelector('[data-f=cat]').value : headCat.value);
-    const phase = data.project_phase_id || (prev ? prev.querySelector('[data-f=phase]').value : headPhase.value);
+    // A new empty row follows the row above; a restored line (draft, sheet) without a phase stays blank so the Review flags it.
+    const restored = !!(data.item_description || data.unit_cost || data.total_amount);
+    const phase = data.project_phase_id || (restored ? '' : (prev ? prev.querySelector('[data-f=phase]').value : headPhase.value));
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="idx"></td>
       <td class="rb-more rb-datecell" data-label="Date"><input data-f="date" type="date" name="rows[${i}][expense_date]" max="${C.today}"></td>
