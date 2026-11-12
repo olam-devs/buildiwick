@@ -9,6 +9,7 @@ use App\Services\GoogleSheets\SheetsClient;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 #[Signature('app:sheets-sync {--project=* : Only these project ids}')]
@@ -36,6 +37,7 @@ class SyncSheetLines extends Command
             $report = $lines->sync($only);
         } catch (Throwable $e) {
             $this->error('Sheet lines could not be synced: '.$e->getMessage());
+            Log::warning('Google sheet sync failed', ['error' => $e->getMessage()]);
 
             return self::FAILURE;
         }
