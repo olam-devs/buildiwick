@@ -2,6 +2,14 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — Entry Sheet Filled With All Current Data
+
+- The user wants every project's data visible in the sheet now, not only lines typed from today. `php artisan app:sheets-sync --with-drafts` writes each project's saved ledger lines (Status `Saved <code>`, blue) and Data Entry's draft lines (Status `Draft`) into its tab, with labels for category/subcategory/unit, the full phase path and dates as real dates; each gets a row key and a `sheet_lines` row. All saved lines were entered by Data Entry, so the sheet shows her nothing she did not enter herself.
+- From now on the 5-minute run adds any saved line the sheet does not have yet (e.g. typed straight into the Buildiwick form) at the bottom of its tab; denied or deleted lines show `Denied <code>` / `Deleted in Buildiwick`. Draft lines typed in the Buildiwick form are only written on a `--with-drafts` run (a line still being typed would change under its key). Tabs get 200 more rows when full.
+- A Record Expense page opened before the fill sends draft lines without their new key; the server gives each the key of the identical draft line (same date, item, qty, cost, total; `ExpenseDraft::adoptSheetKeys`), so nothing is doubled or lost.
+- Sheet Status now also flags draft lines with no phase (`Needs check: no phase`).
+- Live: backup `before-sheet-fill`; 1,370 lines written (945 saved, 425 draft). Kimbiji zoo enclosure and Galco Mwenge Gate drafts were written 20 minutes later, after Data Entry stopped editing them. Read back: 945 Saved, and the draft lines either Draft or Needs check (no price: Kinondoni sand and aggregates, Estate renovation "Kazi ya P"; no phase: mostly Kinondoni).
+
 ## 2026-11-12 — Review Panel on Record Expense (Sheet Sync Step 4)
 
 - `DraftReviewService` checks the lines on the Record Expense form the way imported drafts were reviewed by hand. **Errors (stop saving):** date in the future or not a date, no price (Data Entry only; a warning for others), unit or subcategory not in the system, spreadsheet error values (`#REF!`, `#VALUE!`…), no item, no phase. **Warnings:** day and month probably swapped (the date breaks the row order and the swapped date is nearer the rows around it, e.g. "08 Apr 2026 may be 04 Aug 2026"), date out of order, quantity × unit cost ≠ total (beyond TSh 1 plus the 2-decimal quantity rounding), subcategory from another main category, the same date + item + amount twice in the form, and possible doubles of saved lines (same item and amount, or same amount and subcategory within 3 days).
