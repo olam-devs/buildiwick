@@ -96,7 +96,8 @@ class DraftReviewService
                 $add('no_phase', $index, 'No phase chosen');
             }
             $quantity = $this->number($value('quantity')) ?? 1.0;
-            if ($cost !== null && $total !== null && abs($quantity * $cost - $total) > 1) {
+            // Quantities are kept to 2 decimals (3.037 t becomes 3.04), so a gap within that rounding is not a mistake.
+            if ($cost !== null && $total !== null && abs($quantity * $cost - $total) > 1 + $cost * 0.005) {
                 $add('sum_mismatch', $index, rtrim(rtrim(number_format($quantity, 3, '.', ','), '0'), '.').' × '.Money::format((string) $cost).' = '.Money::format((string) round($quantity * $cost, 2)).', but the total is '.Money::format((string) $total));
             }
         }
