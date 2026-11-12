@@ -17,6 +17,7 @@ class Access
         'manage_phases_budget' => ['label' => 'Edit phases & budget', 'hint' => 'Create phases and subphases and set budgets'],
         'export' => ['label' => 'Download Excel', 'hint' => 'Export the expenditure register'],
         'view_analytics' => ['label' => 'See totals & analytics', 'hint' => 'Project overview, totals, charts and budget use. Sensitive: off for staff by default'],
+        'edit_locked_sheet_lines' => ['label' => 'Edit locked sheet lines', 'hint' => 'Change grey (locked) lines in the Google entry sheet. Needs their Google email on the account and the sheet shared with it'],
     ];
 
     public const ROLE_DEFAULTS = [

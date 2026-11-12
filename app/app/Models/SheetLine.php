@@ -11,7 +11,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class SheetLine extends Model
 {
-    protected $fillable = ['project_id', 'row_key', 'sheet_hash', 'state', 'expense_request_id'];
+    protected $fillable = ['project_id', 'row_key', 'sheet_hash', 'system_hash', 'draft_hash', 'state', 'expense_request_id', 'pending', 'pending_hash', 'pending_at'];
+
+    protected function casts(): array
+    {
+        return ['pending' => 'array', 'pending_at' => 'datetime'];
+    }
 
     public function project(): BelongsTo
     {

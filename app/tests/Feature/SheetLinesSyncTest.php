@@ -110,7 +110,7 @@ class SheetLinesSyncTest extends TestCase
         $this->assertSame(['saved', $saved->id], [SheetLine::query()->sole()->state, SheetLine::query()->sole()->expense_request_id]);
         $this->assertSame(['Nails'], array_column(ExpenseDraft::for($this->clerk, $this->project)->data['rows'], 'item_description'));
         $this->artisan('app:sheets-sync')->expectsOutputToContain('Added 0, updated 0, removed 0')->assertSuccessful();
-        $this->assertSame('Saved '.$saved->request_code, $this->sheets->cell('B3'));
+        $this->assertSame('Saved '.$saved->request_code.' · can be changed today', $this->sheets->cell('B3'));
         $this->assertCount(1, ExpenseDraft::for($this->clerk, $this->project)->data['rows']);
     }
 
@@ -137,7 +137,7 @@ class SheetLinesSyncTest extends TestCase
 
         $this->artisan('app:sheets-sync', ['--with-drafts' => true])->expectsOutputToContain('Written into the sheet: 2 line(s).')->assertSuccessful();
 
-        $this->assertSame(['Saved '.$saved->request_code, 46329, 'Materials', 'Concrete & Cement', 'Cement 42.5', '', '', 10.0, 'BAG', 18500.0, 185000.0, 'Preliminaries', 'Site A'],
+        $this->assertSame(['Saved '.$saved->request_code.' · can be changed today', 46329, 'Materials', 'Concrete & Cement', 'Cement 42.5', '', '', 10.0, 'BAG', 18500.0, 185000.0, 'Preliminaries', 'Site A'],
             array_slice($this->sheets->rows[0], 1));
         $this->assertSame(['Draft', 'Nails', 'KG'], [$this->sheets->cell('B4'), $this->sheets->cell('F4'), $this->sheets->cell('J4')]);
         $key = ExpenseDraft::for($this->clerk, $this->project)->data['rows'][0]['sheet_key'];
@@ -156,6 +156,87 @@ class SheetLinesSyncTest extends TestCase
         $this->artisan('app:sheets-sync')->doesntExpectOutputToContain('Written into the sheet')->assertSuccessful();
         $this->assertStringStartsWith('Saved KND-RES-TXN-0002', $this->sheets->cell('B4'));
         $this->assertCount(2, $this->sheets->rows);
+    }
+
+    public function test_saved_lines_lock_the_day_after_entry_with_hard_row_protection(): void
+    {
+        $phase = (string) $this->project->phases()->orderBy('phase_order')->value('id');
+        $ledger = app(ExpenseLedgerService::class);
+        $old = $ledger->record($this->project, ['expense_date' => '2026-11-10', 'main_category' => 'materials', 'project_phase_id' => $phase, 'item_description' => 'Sand', 'unit_cost' => '300000'], $this->clerk);
+        $old->forceFill(['created_at' => now()->subDay()])->save();
+        $ledger->record($this->project, ['expense_date' => '2026-11-12', 'main_category' => 'materials', 'project_phase_id' => $phase, 'item_description' => 'Cement', 'unit_cost' => '18500'], $this->clerk);
+        $boss = User::factory()->create(['role_id' => Role::firstOrCreate(['name' => 'accounts'], ['description' => 'accounts'])->id, 'email' => 'Boss@Example.test', 'is_active' => true,
+            'permissions' => ['mark_paid', 'edit_locked_sheet_lines']]);
+
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('Locked lines: 1.')->assertSuccessful();
+
+        $this->assertSame(['Locked '.$old->request_code, 'Saved KND-RES-TXN-0002 · can be changed today'], [$this->sheets->cell('B3'), $this->sheets->cell('B4')]);
+        $locks = array_values(array_filter($this->sheets->requests, fn ($r) => isset($r['addProtectedRange'])));
+        $this->assertCount(1, $locks);
+        $range = $locks[0]['addProtectedRange']['protectedRange'];
+        $this->assertSame([2, 3, false, ['boss@example.test', 'robot@example.test']], [$range['range']['startRowIndex'], $range['range']['endRowIndex'], $range['warningOnly'], $range['editors']['users']]);
+
+        // Unchanged: the protection is not rebuilt. Taking the permission away rebuilds it without that editor.
+        $this->sheets->requests = [];
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $this->assertSame([], $this->sheets->requests);
+        $boss->update(['permissions' => ['mark_paid']]);
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $this->assertSame(['deleteProtectedRange', 'addProtectedRange'], array_map(fn ($r) => array_key_first($r), $this->sheets->requests));
+        $this->assertSame(['robot@example.test'], $this->sheets->requests[1]['addProtectedRange']['protectedRange']['editors']['users']);
+    }
+
+    public function test_a_sheet_change_to_a_saved_line_waits_for_apply_or_undo_and_buildiwick_edits_reach_the_sheet(): void
+    {
+        $phase = (string) $this->project->phases()->orderBy('phase_order')->value('id');
+        $saved = app(ExpenseLedgerService::class)->record($this->project, ['expense_date' => '2026-11-12', 'main_category' => 'materials', 'project_phase_id' => $phase,
+            'item_description' => 'Cement', 'quantity' => '10', 'unit' => 'bag', 'unit_cost' => '18500'], $this->clerk);
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+
+        // Typed in the sheet: not applied, shown as waiting.
+        $this->sheets->rows[0][8] = 12;
+        $this->sheets->rows[0][11] = 222000;
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('waiting for approval: 1')->assertSuccessful();
+        $this->assertSame('10.00', $saved->fresh()->quantity);
+        $this->assertStringEndsWith('sheet change waiting for approval in Buildiwick', $this->sheets->cell('B3'));
+        $changes = $this->actingAs($this->clerk)->postJson(route('ledger.draft.review', $this->project), ['rows' => []])->json('sheet_changes');
+        $this->assertSame([['field' => 'Quantity', 'from' => '10', 'to' => '12'], ['field' => 'Total (TSh)', 'from' => '185,000.00', 'to' => '222,000.00']], $changes[0]['changes']);
+        $this->assertTrue($changes[0]['can_act']);
+
+        // Apply goes through the normal edit.
+        $this->actingAs($this->clerk)->postJson(route('ledger.sheet-changes.apply', [$this->project, $changes[0]['id']]))->assertOk();
+        $this->assertSame(['12.00', '222000.00'], [$saved->fresh()->quantity, $saved->fresh()->total_amount]);
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $this->assertSame('Saved '.$saved->request_code.' · can be changed today', $this->sheets->cell('B3'));
+
+        // Undo puts the saved values back into the sheet. (The Director may still act on a line Data Entry edited.)
+        $director = User::factory()->create(['role_id' => Role::firstOrCreate(['name' => 'admin'], ['description' => 'admin'])->id, 'is_active' => true]);
+        $this->sheets->rows[0][5] = 'Cement 42.5R';
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $id = $this->actingAs($director)->postJson(route('ledger.draft.review', $this->project), ['rows' => []])->json('sheet_changes.0.id');
+        $this->actingAs($director)->postJson(route('ledger.sheet-changes.undo', [$this->project, $id]))->assertOk();
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('written to the sheet: 1')->assertSuccessful();
+        $this->assertSame('Cement', $this->sheets->cell('F3'));
+
+        // Edited in Buildiwick: the sheet row follows.
+        app(ExpenseLedgerService::class)->update($saved->fresh(), ['expense_date' => '2026-11-12', 'main_category' => 'materials', 'project_phase_id' => $phase,
+            'item_description' => 'Cement bags', 'quantity' => '12', 'unit' => 'bag', 'unit_cost' => '18500', 'total_amount' => '222000'], $director);
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('written to the sheet: 1')->assertSuccessful();
+        $this->assertSame('Cement bags', $this->sheets->cell('F3'));
+    }
+
+    public function test_a_draft_line_changed_in_the_buildiwick_form_is_written_to_the_sheet(): void
+    {
+        $this->sheets->rows = [$this->sheetRow('', 46331, 'Materials', '', 'Cement 42.5', 50, 'BAG', 18500, 925000, 'Preliminaries')];
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $row = ExpenseDraft::for($this->clerk, $this->project)->data['rows'][0];
+
+        $this->actingAs($this->clerk)->postJson(route('ledger.draft.save', $this->project), ['header' => ['expense_date' => '2026-11-12'],
+            'rows' => [array_merge($row, ['quantity' => '40', 'total_amount' => '740000'])], 'known_keys' => [$row['sheet_key']]])->assertOk();
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('written to the sheet: 1')->assertSuccessful();
+
+        $this->assertSame([40.0, 740000.0, 'Draft'], [$this->sheets->cell('I3'), $this->sheets->cell('L3'), $this->sheets->cell('B3')]);
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('Added 0, updated 0, removed 0')->doesntExpectOutputToContain('written to the sheet')->assertSuccessful();
     }
 
     /** @return list<mixed> columns A to N of the project tab */
@@ -187,6 +268,41 @@ class FakeSheetGrid extends SheetsClient
     public function readValues(array $ranges): array
     {
         return array_map(fn () => array_values($this->rows), $ranges);
+    }
+
+    /** @var list<array<string, mixed>> */
+    public array $requests = [];
+
+    /** @var array<int, list<array{id: int, start: int, end: int, editors: list<string>}>> */
+    private array $protections = [];
+
+    private int $nextProtection = 1;
+
+    public function batchUpdate(array $requests): void
+    {
+        foreach ($requests as $request) {
+            $this->requests[] = $request;
+            if (isset($request['deleteProtectedRange'])) {
+                foreach ($this->protections as $sheet => $ranges) {
+                    $this->protections[$sheet] = array_values(array_filter($ranges, fn ($r) => $r['id'] !== $request['deleteProtectedRange']['protectedRangeId']));
+                }
+            }
+            if (isset($request['addProtectedRange'])) {
+                $range = $request['addProtectedRange']['protectedRange'];
+                $this->protections[$range['range']['sheetId']][] = ['id' => $this->nextProtection++, 'start' => $range['range']['startRowIndex'],
+                    'end' => $range['range']['endRowIndex'], 'editors' => [...$range['editors']['users'], 'owner@example.test']];
+            }
+        }
+    }
+
+    public function protectedRanges(string $description): array
+    {
+        return $this->protections;
+    }
+
+    public function serviceAccountEmail(): string
+    {
+        return 'robot@example.test';
     }
 
     public function writeValues(array $data): void

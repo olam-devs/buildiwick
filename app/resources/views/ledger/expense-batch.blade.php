@@ -37,6 +37,8 @@
       'draft' => (($draft ?? null) && ! old('rows')) ? $draft->data : null,
       'draftUrl' => route('ledger.draft.save', $project),
       'reviewUrl' => route('ledger.draft.review', $project),
+      'applyUrl' => route('ledger.sheet-changes.apply', [$project, '__ID__']),
+      'undoUrl' => route('ledger.sheet-changes.undo', [$project, '__ID__']),
       'today' => now()->toDateString(),
   ];
   $restoring = ($draft ?? null) && ! old('rows');
@@ -64,6 +66,13 @@
   .rv-showing{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--ink-soft)}
   .rb-table tr.rv-err td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
   .rb-table tr.rv-warn td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+  .sc-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .sc-list h4{margin:4px 0 0;font-size:14px}
+  .sc-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px}
+  .sc-item ul{margin:6px 0;padding-left:18px}
+  .sc-item .sc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .sc-item .sc-bad{color:var(--danger-ink)}
+  .sc-item small{color:var(--ink-dim)}
   .rv-note{display:flex;flex-direction:column;gap:2px;margin-top:5px;font-size:12px;line-height:1.35}
   .rv-note .rv-error{color:var(--danger-ink)}
   .rv-note .rv-warning{color:var(--warn-ink)}
@@ -169,6 +178,7 @@
   <section class="lg-panel rv-panel" id="reviewPanel" hidden>
     <div class="rv-head"><div><h3>Review</h3><p class="rv-sum" id="reviewSummary"></p></div><button type="button" class="btn btn-ghost" id="reviewAgain">Check again</button></div>
     <div class="rv-groups" id="reviewGroups"></div>
+    <div class="sc-list" id="sheetChanges" hidden></div>
     <div class="rv-showing" id="reviewShowing" hidden><span id="reviewShowingText"></span><button type="button" class="btn btn-ghost" id="reviewShowAll">Show all lines</button></div>
   </section>
 
@@ -423,7 +433,7 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
   lastSent = C.draft ? collect() : '';
   // Review: the same checks as the save, grouped by problem. Clicking a group shows only those lines.
   const reviewPanel = document.getElementById('reviewPanel'), reviewGroups = document.getElementById('reviewGroups'), reviewShowing = document.getElementById('reviewShowing');
-  let reviewed = false, pickedCode = null;
+  let reviewed = false, pickedCode = null, reviewAsked = false;
   const runReview = trs => fetch(C.reviewUrl, {method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token},
     body: JSON.stringify({expense_date: headDate.value, rows: trs.map(rowData)})}).then(r => r.ok ? r.json() : Promise.reject());
   const showPick = () => {
@@ -461,14 +471,38 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
       });
       reviewGroups.appendChild(button);
     });
-    reviewPanel.hidden = false;
+    showSheetChanges(result.sheet_changes || []);
+    if (result.groups.length || (result.sheet_changes || []).length || reviewAsked) reviewPanel.hidden = false;
     showPick();
   };
+  // Changes typed in the Google sheet to lines already saved: never applied without a decision here.
+  const showSheetChanges = list => {
+    const box = document.getElementById('sheetChanges');
+    box.hidden = !list.length;
+    box.innerHTML = list.length ? `<h4>Changed in the Google Sheet after saving (${list.length})</h4>` : '';
+    list.forEach(change => {
+      const item = document.createElement('div'); item.className = 'sc-item';
+      item.innerHTML = `<b>${esc(change.code)}</b> · ${esc(change.item)} <small>${esc(change.at)}</small>`
+        + `<ul>${change.changes.map(c => `<li>${esc(c.field)}: ${esc(c.from)} → <b>${esc(c.to)}</b></li>`).join('') || '<li>No visible difference</li>'}</ul>`
+        + (change.problems.length ? `<div class="sc-bad">Fix in the sheet first: ${esc(change.problems.join('; '))}</div>` : '')
+        + (change.can_act ? `<div class="sc-actions"><button type="button" class="btn btn-primary" data-act="apply" ${change.problems.length ? 'disabled' : ''}>Apply to the saved line</button><button type="button" class="btn btn-ghost" data-act="undo">Undo in the sheet</button></div>`
+          : '<small>Waiting for the Director (or whoever may change this line).</small>');
+      item.querySelectorAll('[data-act]').forEach(button => button.addEventListener('click', () => {
+        if (button.dataset.act === 'undo' && !confirm('Put the saved values back into the sheet row?')) return;
+        button.disabled = true;
+        fetch((button.dataset.act === 'apply' ? C.applyUrl : C.undoUrl).replace('__ID__', change.id), {method: 'POST', headers: {'Accept': 'application/json', 'X-CSRF-TOKEN': token}})
+          .then(r => r.json().then(d => ({ok: r.ok, d})))
+          .then(({ok, d}) => { alert(ok ? d.message : (d.message || 'That did not work.')); refreshReview(); })
+          .catch(() => { button.disabled = false; alert('No connection. Try again.'); });
+      }));
+      box.appendChild(item);
+    });
+  };
   const refreshReview = () => { const trs = [...body.children]; return runReview(trs).then(r => showReview(r, trs)).catch(() => { document.getElementById('reviewSummary').textContent = 'The review could not run (no connection?). Try again.'; reviewPanel.hidden = false; }); };
-  document.getElementById('reviewButton').addEventListener('click', () => { refreshReview().then(() => reviewPanel.scrollIntoView({block: 'start'})); });
+  document.getElementById('reviewButton').addEventListener('click', () => { reviewAsked = true; refreshReview().then(() => reviewPanel.scrollIntoView({block: 'start'})); });
   document.getElementById('reviewAgain').addEventListener('click', refreshReview);
   document.getElementById('reviewShowAll').addEventListener('click', () => { pickedCode = null; reviewPick = null; reviewGroups.querySelectorAll('.rv-group').forEach(b => b.classList.remove('on')); showPick(); });
-  if ((C.draft?.rows || []).length) refreshReview();
+  refreshReview();
   // Preview: everything entered, as it will be saved, before submitting.
   const form = document.getElementById('batchForm'), dialog = document.getElementById('previewDialog');
   const fmt = v => (v || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});

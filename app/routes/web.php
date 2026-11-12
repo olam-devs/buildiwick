@@ -52,6 +52,8 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::post('/ledger/projects/{project}/draft', [LedgerController::class, 'saveDraft'])->name('ledger.draft.save');
     Route::delete('/ledger/projects/{project}/draft', [LedgerController::class, 'discardDraft'])->name('ledger.draft.discard');
     Route::post('/ledger/projects/{project}/draft/review', [LedgerController::class, 'reviewDraft'])->name('ledger.draft.review');
+    Route::post('/ledger/projects/{project}/sheet-changes/{sheetLine}/apply', [LedgerController::class, 'applySheetChange'])->name('ledger.sheet-changes.apply');
+    Route::post('/ledger/projects/{project}/sheet-changes/{sheetLine}/undo', [LedgerController::class, 'undoSheetChange'])->name('ledger.sheet-changes.undo');
     Route::get('/ledger/projects/{project}/expenses/{line}/edit', [LedgerController::class, 'edit'])->name('ledger.expenses.edit');
     Route::put('/ledger/projects/{project}/expenses/{line}', [LedgerController::class, 'update'])->name('ledger.expenses.update');
     Route::delete('/ledger/projects/{project}/expenses/{line}', [LedgerController::class, 'destroy'])->name('ledger.expenses.destroy');

@@ -14,6 +14,7 @@ use App\Models\SheetLine;
 use App\Models\User;
 use App\Services\DraftReviewService;
 use App\Services\ExpenseLedgerService;
+use App\Services\GoogleSheets\ProjectSheetLines;
 use App\Services\LedgerAnalyticsService;
 use App\Services\LedgerWorkbookService;
 use App\Services\PhaseBudgetService;
@@ -261,7 +262,28 @@ class LedgerController extends Controller
             'rows.*' => ['nullable', 'array'],
         ]);
 
-        return response()->json($reviews->review($project, $validated['rows'] ?? [], $validated['expense_date'] ?? null, self::priceRequired($request->user())));
+        return response()->json($reviews->review($project, $validated['rows'] ?? [], $validated['expense_date'] ?? null, self::priceRequired($request->user()))
+            + ['sheet_changes' => app(ProjectSheetLines::class)->waitingChanges($project, $request->user())]);
+    }
+
+    /** Applies a change typed in the Google sheet to a saved line (normal edit rules and edit log). */
+    public function applySheetChange(Request $request, Project $project, SheetLine $sheetLine, ProjectSheetLines $sheet)
+    {
+        abort_unless((int) $sheetLine->project_id === (int) $project->id && $sheetLine->expenseRequest, 404);
+        $this->authorize('edit-ledger-line', $sheetLine->expenseRequest);
+        $line = $sheet->apply($sheetLine, $request->user());
+
+        return response()->json(['message' => $line->request_code.' updated from the sheet.']);
+    }
+
+    /** Drops a change typed in the Google sheet to a saved line; the sheet row gets the saved values back. */
+    public function undoSheetChange(Request $request, Project $project, SheetLine $sheetLine, ProjectSheetLines $sheet)
+    {
+        abort_unless((int) $sheetLine->project_id === (int) $project->id && $sheetLine->expenseRequest, 404);
+        $this->authorize('edit-ledger-line', $sheetLine->expenseRequest);
+        $sheet->undo($sheetLine);
+
+        return response()->json(['message' => 'The sheet row gets the saved values back within 5 minutes.']);
     }
 
     /** Data Entry may not save a line without a price; others may (it is shown as a warning). */

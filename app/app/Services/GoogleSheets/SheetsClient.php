@@ -86,6 +86,28 @@ class SheetsClient
     }
 
     /**
+     * Protected ranges with a given description, per tab id: their id, first row, row after the last (0-based) and editors.
+     *
+     * @return array<int, list<array{id: int, start: int, end: int, editors: list<string>}>>
+     */
+    public function protectedRanges(string $description): array
+    {
+        $spreadsheet = $this->sheets()->spreadsheets->get($this->spreadsheetId(), ['fields' => 'sheets(properties.sheetId,protectedRanges(protectedRangeId,description,range,editors.users))']);
+        $found = [];
+        foreach ($spreadsheet->getSheets() as $sheet) {
+            foreach ($sheet->getProtectedRanges() ?? [] as $range) {
+                if ($range->getDescription() === $description) {
+                    $found[(int) $sheet->getProperties()->getSheetId()][] = ['id' => (int) $range->getProtectedRangeId(),
+                        'start' => (int) $range->getRange()->getStartRowIndex(), 'end' => (int) $range->getRange()->getEndRowIndex(),
+                        'editors' => array_values($range->getEditors()?->getUsers() ?? [])];
+                }
+            }
+        }
+
+        return $found;
+    }
+
+    /**
      * Cell values of several A1 ranges in one call, unformatted (numbers as numbers, dates as day serials).
      *
      * @param  list<string>  $ranges

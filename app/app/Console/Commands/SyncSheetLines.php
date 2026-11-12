@@ -43,6 +43,10 @@ class SyncSheetLines extends Command
         }
 
         $this->line("Added {$report['added']}, updated {$report['updated']}, removed {$report['removed']} draft line(s); {$report['needs_check']} need checking.");
+        if ($report['written_back'] + $report['waiting'] > 0) {
+            $this->line("Changes from Buildiwick written to the sheet: {$report['written_back']}; sheet changes to saved lines waiting for approval: {$report['waiting']}.");
+        }
+        $this->line("Locked lines: {$report['locked']}.");
         if ($report['appended']) {
             $this->line("Written into the sheet: {$report['appended']} line(s).");
         }
