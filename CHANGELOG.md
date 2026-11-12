@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — Plan: Google Sheet Entry Synced to Drafts
+
+- No code change. Added `docs/plans/2026-11-12-google-sheet-entry-sync.md`: Data Entry's tracker moves to one Google Sheet (tab per project) that the system reads every ~15 minutes into her drafts only; a Review panel on each draft lists problems by type; saved lines show their state in the sheet (Draft / Saved – editable / Saved – locked) and lock hard a day after entry, editable only by the user and people with a new permission. Agreed in principle, not built; needs a Google service account and approval for the `google/apiclient` dependency.
+
 ## 2026-11-11 — Sandbox Data: Kinondoni Draft From Tracker v7
 
 - No code change. Database backed up first (`before-kinondoni-draft`). Data Entry's draft for **Kinondoni residence** (BWG-KND-RES-2026-001, project 59) keeps her own 7 lines and now adds 326 lines from the KINONDONI RESIDENCE sheet (KIN-TXN-0001–0335, 20 Jul to 31 Oct), TSh 234,626,846.62 at first (see 0336 below).
