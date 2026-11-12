@@ -2,6 +2,15 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — Entry Sheet: Locks, Two-Way Updates and Approvals (Sheet Sync Steps 5–7)
+
+- **Saved lines in the sheet:** `Saved <code> · can be changed today` (blue) while Data Entry may still edit the line in Buildiwick (`edit-ledger-line`: entered today, unconfirmed, not changed by others); afterwards `Locked <code>` (grey). Denied/deleted lines show `Locked … · denied in Buildiwick` / `Locked · deleted in Buildiwick`.
+- **Hard locks:** locked rows get a Google protected range (not warning-only; contiguous rows share one range, description "Buildiwick locked lines"). Editors: the service account plus users given the new permission **Edit locked sheet lines** (`edit_locked_sheet_lines`, User Management, off by default; uses the account's email, and the owner must also share the sheet with it). The owner can always edit. Ranges are rebuilt only when the locked rows or editors change.
+- **Sheet change to a saved line** is never applied quietly: the Status adds "sheet change waiting for approval in Buildiwick", and the Record Expense Review lists it ("Changed in the Google Sheet after saving") field by field with **Apply to the saved line** (normal edit with its permission check and edit log) or **Undo in the sheet** (the next sync writes the saved values back). Only someone who may edit the line can act; others see it waiting.
+- **Buildiwick → sheet:** an edit to a saved line, or to a draft line in the Record Expense form, is written to its sheet row on the next sync. If a draft line changed in both places in the same 5 minutes, the sheet wins. A saved row deleted from the sheet comes back at the bottom.
+- `sheet_lines` gained `system_hash`, `draft_hash`, `pending`, `pending_hash`, `pending_at`; hashes are taken over normalised cell values (numbers by value), so existing ones were cleared and re-read once.
+- Live after backup `before-sheet-locks`: 866 saved lines locked (14 tabs, 14 ranges; editors the owner and the service account), the rest still editable today; a second run changed nothing.
+
 ## 2026-11-12 — Entry Sheet Filled With All Current Data
 
 - The user wants every project's data visible in the sheet now, not only lines typed from today. `php artisan app:sheets-sync --with-drafts` writes each project's saved ledger lines (Status `Saved <code>`, blue) and Data Entry's draft lines (Status `Draft`) into its tab, with labels for category/subcategory/unit, the full phase path and dates as real dates; each gets a row key and a `sheet_lines` row. All saved lines were entered by Data Entry, so the sheet shows her nothing she did not enter herself.
