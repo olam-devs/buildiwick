@@ -1,6 +1,6 @@
 # Plan: Google Sheet entry, synced to Data Entry drafts
 
-Status: **proposed, agreed in principle by the user on 2026-11-12. Not built.** Read with `CLAUDE.md` (recording mode, Data Entry, drafts).
+Status: **agreed 2026-11-12; steps 1–3 built (sync every 5 minutes).** Read with `CLAUDE.md` (recording mode, Data Entry, drafts).
 
 ## Why
 
@@ -32,7 +32,7 @@ Data Entry keeps one Excel tracker (a tab per project) and edits/extends the sam
 - Lock = Google **protected range** in hard mode (not "warning only"). An edit, paste, delete or clear on a locked row is refused by Google with "You're trying to edit a protected cell"; nothing is kept and nothing fails silently.
 - The protected range's editor list is kept equal to: the user + system users with the new permission **`edit_locked_sheet_lines`** ("Edit locked sheet lines", off by default, set in User Management) who have a Google email on file.
 
-## Sync (every ~15 minutes, cron on the host)
+## Sync (every 5 minutes, cron on the host)
 
 1. Read each tab. Rows are matched by a hidden row key the system writes (not by row number, so inserted/sorted rows are safe).
 2. **New row** → added to her draft for that project.
@@ -79,4 +79,4 @@ Checks (the same ones run by hand so far):
 - Lock time: midnight Dar time after the day the line was **entered in the sheet** (agreed). Draft lines never lock.
 - Review flags: **agreed** — block only hard errors, warn on the rest.
 - Google emails: **received** (the user as lock editor; Data Entry as sheet editor). Kept out of Git; they go into the system's user records when built.
-- How often to sync (proposal: 15 minutes; not yet confirmed).
+- How often to sync: **every 5 minutes** (agreed).
