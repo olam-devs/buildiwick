@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — Sheet Total Calculates Itself
+
+- The sheet's Total column is now a formula, `=IF(K="","",ROUND(IF(I="",1,I)*K,2))`, so changing Quantity or Unit Cost in the sheet updates the Total. New and rewritten lines get it, and so does a line typed with a unit cost but no total. A total typed on its own (no unit cost, or an amount different from quantity × unit cost) is kept as typed. Formulas are written with USER_ENTERED (`SheetsClient::writeValues($data, 'USER_ENTERED')`); everything else stays RAW.
+- One-time `app:sheets-sync --total-formulas` converted existing totals that already matched: live after backup `before-total-formulas`, 1,354 totals are formulas and 13 typed totals were kept.
+
 ## 2026-11-12 — Data Entry Edits Until Confirmed, With an Edit History
 
 - At the user's request, Data Entry may now edit or delete her own lines **until Accounts confirms them**, on any day (before: only the day she entered them). Lines already changed by someone else (Director, PM, Accounts) stay locked for her, as before. My Entries wording updated; use "Expense date"/periods there to find older lines.
