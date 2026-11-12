@@ -119,10 +119,10 @@ class AppServiceProvider extends ServiceProvider
             if (! $ledgerUser($user) || ! $user->canAccessProject($line->project_id)) {
                 return false;
             }
-            // Data Entry may fix or remove only their own lines, the same day, until Accounts confirms them
-            // or someone else (Director, PM, Accounts) changes them.
+            // Data Entry may fix or remove their own lines until Accounts confirms them (any day; every change is
+            // in the project's Edit history), unless someone else (Director, PM, Accounts) has changed them.
             if ($dataEntry($user)) {
-                return (int) $line->requested_by === (int) $user->id && $line->created_at?->isToday() && $line->status === 'approved'
+                return (int) $line->requested_by === (int) $user->id && $line->status === 'approved'
                     && $line->payments()->doesntExist()
                     && ProjectEditLog::query()->where('document_type', 'expense')->where('document_id', $line->id)->where('edited_by', '!=', $user->id)->doesntExist();
             }

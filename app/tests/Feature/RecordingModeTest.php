@@ -731,15 +731,15 @@ class RecordingModeTest extends TestCase
         $page(['period' => 'yesterday'])->assertSee('Monday Sand')->assertDontSee('Today Nails')->assertDontSee('PM Gravel');
         $page(['period' => 'week'])->assertSee('Monday Sand')->assertSee('Today Nails')->assertDontSee('October Cement');
         $page(['period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-31'])->assertSee('October Cement')->assertDontSee('Monday Sand')->assertSee('01 Oct 2026 – 31 Oct 2026');
-        // Only today's own lines can still be changed; earlier days are shown locked. Bad or future dates fall back safely.
-        $page(['period' => 'week'])->assertSee("Can't be changed", false);
+        // Earlier unconfirmed lines can still be changed (nothing shaded). Bad or future dates fall back safely.
+        $page(['period' => 'week'])->assertDontSee("Can't be changed", false);
         $page(['period' => 'custom', 'from' => 'x', 'to' => '2030-01-01'])->assertSee('Today Nails');
         $this->actingAs($clerk)->get(route('entry.today', ['period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-31']))
             ->assertRedirect(route('entry.today.project', [$project, 'period' => 'custom', 'from' => '2026-10-01', 'to' => '2026-10-31']));
         Carbon::setTestNow();
     }
 
-    public function test_data_entry_fixes_own_lines_only_the_same_day_and_adds_workers_by_name(): void
+    public function test_data_entry_fixes_own_lines_until_confirmed_with_the_edits_in_the_history_and_adds_workers_by_name(): void
     {
         [$project, $phases] = $this->project();
         $clerk = $this->user('data_entry', $project);
@@ -766,12 +766,17 @@ class RecordingModeTest extends TestCase
         $own->payments()->delete();
         $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $own]))->assertOk();
 
-        Carbon::setTestNow('2026-10-31 09:00:00');
-        $this->actingAs($clerk)->get(route('ledger.expenses.edit', [$project, $own]))->assertForbidden();
-        $this->actingAs($clerk)->delete(route('ledger.expenses.destroy', [$project, $own]))->assertForbidden();
-        Carbon::setTestNow('2026-10-30 10:00:00');
+        // A later day: still hers to change while unconfirmed, and every change shows in the project's Edit History.
+        Carbon::setTestNow('2026-11-05 09:00:00');
+        $this->actingAs($clerk)->put(route('ledger.expenses.update', [$project, $own]), $this->line($phases[0], ['unit_cost' => '25000']))->assertRedirect(route('entry.form', $project));
+        $this->actingAs($this->user('director'))->get(route('ledger.history', $project))->assertOk()
+            ->assertSee($own->request_code)->assertSee('Edited')->assertSee('24,000.00')->assertSee('25,000.00')->assertSee($clerk->name);
+        $this->actingAs($this->user('director'))->get(route('ledger.expenses', $project))->assertSee(route('ledger.history', [$project, 'q' => $own->request_code]));
+        $this->actingAs($clerk)->get(route('ledger.history', $project))->assertForbidden();
         $this->actingAs($clerk)->delete(route('ledger.expenses.destroy', [$project, $own]))->assertRedirect();
         $this->assertNull(ExpenseRequest::find($own->id));
+        $this->actingAs($this->user('director'))->get(route('ledger.history', $project))->assertSee('Deleted');
+        Carbon::setTestNow('2026-10-30 10:00:00');
 
         $first = $this->actingAs($clerk)->postJson(route('ledger.workers.quick', $project), ['fundi_subcontractor' => 'Juma  Mason', 'scope_of_work' => 'Mason'])->assertOk()->json();
         $again = $this->actingAs($clerk)->postJson(route('ledger.workers.quick', $project), ['fundi_subcontractor' => 'juma mason'])->assertOk()->json();

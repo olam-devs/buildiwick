@@ -110,7 +110,7 @@ class SheetLinesSyncTest extends TestCase
         $this->assertSame(['saved', $saved->id], [SheetLine::query()->sole()->state, SheetLine::query()->sole()->expense_request_id]);
         $this->assertSame(['Nails'], array_column(ExpenseDraft::for($this->clerk, $this->project)->data['rows'], 'item_description'));
         $this->artisan('app:sheets-sync')->expectsOutputToContain('Added 0, updated 0, removed 0')->assertSuccessful();
-        $this->assertSame('Saved '.$saved->request_code.' · can be changed today', $this->sheets->cell('B3'));
+        $this->assertSame('Saved '.$saved->request_code.' · can be changed until confirmed', $this->sheets->cell('B3'));
         $this->assertCount(1, ExpenseDraft::for($this->clerk, $this->project)->data['rows']);
     }
 
@@ -137,7 +137,7 @@ class SheetLinesSyncTest extends TestCase
 
         $this->artisan('app:sheets-sync', ['--with-drafts' => true])->expectsOutputToContain('Written into the sheet: 2 line(s).')->assertSuccessful();
 
-        $this->assertSame(['Saved '.$saved->request_code.' · can be changed today', 46329, 'Materials', 'Concrete & Cement', 'Cement 42.5', '', '', 10.0, 'BAG', 18500.0, 185000.0, 'Preliminaries', 'Site A'],
+        $this->assertSame(['Saved '.$saved->request_code.' · can be changed until confirmed', 46329, 'Materials', 'Concrete & Cement', 'Cement 42.5', '', '', 10.0, 'BAG', 18500.0, 185000.0, 'Preliminaries', 'Site A'],
             array_slice($this->sheets->rows[0], 1));
         $this->assertSame(['Draft', 'Nails', 'KG'], [$this->sheets->cell('B4'), $this->sheets->cell('F4'), $this->sheets->cell('J4')]);
         $key = ExpenseDraft::for($this->clerk, $this->project)->data['rows'][0]['sheet_key'];
@@ -158,19 +158,20 @@ class SheetLinesSyncTest extends TestCase
         $this->assertCount(2, $this->sheets->rows);
     }
 
-    public function test_saved_lines_lock_the_day_after_entry_with_hard_row_protection(): void
+    public function test_saved_lines_lock_once_data_entry_can_no_longer_change_them_with_hard_row_protection(): void
     {
         $phase = (string) $this->project->phases()->orderBy('phase_order')->value('id');
         $ledger = app(ExpenseLedgerService::class);
-        $old = $ledger->record($this->project, ['expense_date' => '2026-11-10', 'main_category' => 'materials', 'project_phase_id' => $phase, 'item_description' => 'Sand', 'unit_cost' => '300000'], $this->clerk);
-        $old->forceFill(['created_at' => now()->subDay()])->save();
+        // Recorded by the Director (paid at once): not Data Entry's to change, so locked in the sheet.
+        $director = User::factory()->create(['role_id' => Role::firstOrCreate(['name' => 'admin'], ['description' => 'admin'])->id, 'is_active' => true]);
+        $old = $ledger->record($this->project, ['expense_date' => '2026-11-10', 'main_category' => 'materials', 'project_phase_id' => $phase, 'item_description' => 'Sand', 'unit_cost' => '300000'], $director);
         $ledger->record($this->project, ['expense_date' => '2026-11-12', 'main_category' => 'materials', 'project_phase_id' => $phase, 'item_description' => 'Cement', 'unit_cost' => '18500'], $this->clerk);
         $boss = User::factory()->create(['role_id' => Role::firstOrCreate(['name' => 'accounts'], ['description' => 'accounts'])->id, 'email' => 'Boss@Example.test', 'is_active' => true,
             'permissions' => ['mark_paid', 'edit_locked_sheet_lines']]);
 
         $this->artisan('app:sheets-sync')->expectsOutputToContain('Locked lines: 1.')->assertSuccessful();
 
-        $this->assertSame(['Locked '.$old->request_code, 'Saved KND-RES-TXN-0002 · can be changed today'], [$this->sheets->cell('B3'), $this->sheets->cell('B4')]);
+        $this->assertSame(['Locked '.$old->request_code, 'Saved KND-RES-TXN-0002 · can be changed until confirmed'], [$this->sheets->cell('B3'), $this->sheets->cell('B4')]);
         $locks = array_values(array_filter($this->sheets->requests, fn ($r) => isset($r['addProtectedRange'])));
         $this->assertCount(1, $locks);
         $range = $locks[0]['addProtectedRange']['protectedRange'];
@@ -207,7 +208,7 @@ class SheetLinesSyncTest extends TestCase
         $this->actingAs($this->clerk)->postJson(route('ledger.sheet-changes.apply', [$this->project, $changes[0]['id']]))->assertOk();
         $this->assertSame(['12.00', '222000.00'], [$saved->fresh()->quantity, $saved->fresh()->total_amount]);
         $this->artisan('app:sheets-sync')->assertSuccessful();
-        $this->assertSame('Saved '.$saved->request_code.' · can be changed today', $this->sheets->cell('B3'));
+        $this->assertSame('Saved '.$saved->request_code.' · can be changed until confirmed', $this->sheets->cell('B3'));
 
         // Undo puts the saved values back into the sheet. (The Director may still act on a line Data Entry edited.)
         $director = User::factory()->create(['role_id' => Role::firstOrCreate(['name' => 'admin'], ['description' => 'admin'])->id, 'is_active' => true]);

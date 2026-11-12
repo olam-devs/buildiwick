@@ -147,12 +147,29 @@ class LedgerController extends Controller
             ? $analytics->phaseRows($tree, $lines, $analytics->budgets($project))->filter(fn ($row) => $row['depth'] === 1 || $row['count'] > 0)
             : collect();
 
+        // Lines changed after they were entered get an "Edited" mark that opens their history.
+        $edited = ProjectEditLog::query()->where('document_type', 'expense')->where('action', 'ledger_line_updated')
+            ->whereIn('document_id', $paged->getCollection()->pluck('id'))->pluck('document_id')->flip();
+
         return view('ledger.expenses', [
-            'project' => $project, 'lines' => $paged, 'totals' => $totals, 'filters' => $filters, 'tree' => $tree,
+            'project' => $project, 'lines' => $paged, 'edited' => $edited, 'totals' => $totals, 'filters' => $filters, 'tree' => $tree,
             'phaseRows' => $phaseRows, 'subcategories' => Lookup::ofType('subcategory')->pluck('label', 'code'),
             'units' => ExpenseLedgerService::units(), 'methods' => Lookup::ofType('payment_method')->pluck('label', 'code'),
             'workers' => LabourAgreement::query()->where('project_id', $project->id)->orderBy('fundi_subcontractor')->pluck('fundi_subcontractor', 'id'),
         ]);
+    }
+
+    /** Edit history of the project's expense lines: who changed or deleted what, with the values before and after. */
+    public function history(Request $request, Project $project)
+    {
+        $this->authorize('view-ledger', $project);
+        $search = mb_substr(trim((string) $request->query('q', '')), 0, 100);
+        $logs = ProjectEditLog::query()->where('project_id', $project->id)->where('document_type', 'expense')
+            ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query->where('document_code', 'like', '%'.$search.'%')->orWhere('item_description', 'like', '%'.$search.'%')))
+            ->with('editor.role')->latest('id')->paginate(50)->withQueryString();
+
+        return view('ledger.history', ['project' => $project, 'logs' => $logs, 'search' => $search, 'tree' => new PhaseTree($project->phases()->get()),
+            'subcategories' => Lookup::query()->where('type', 'subcategory')->pluck('label', 'code'), 'units' => ExpenseLedgerService::units()]);
     }
 
     public function export(Request $request, Project $project, LedgerAnalyticsService $analytics, LedgerWorkbookService $workbooks)

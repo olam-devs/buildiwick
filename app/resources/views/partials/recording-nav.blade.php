@@ -23,6 +23,7 @@
     {!! $todayLink() !!}
   @endcan
   @can('view-budget', $workspaceProject)<a class="navitem {{ $nav('ledger.structure') }}" href="{{ route('ledger.structure', $workspaceProject) }}">{{ $workspaceProject->is_company_overheads ? 'Cost Groups & Budget' : 'Phases & Budget' }}</a>@endcan
+  @can('view-ledger', $workspaceProject)<a class="navitem {{ $nav('ledger.history') }}" href="{{ route('ledger.history', $workspaceProject) }}">Edit History</a>@endcan
   @if(! $workspaceProject->is_company_overheads && auth()->user()->can('view-workers', $workspaceProject))<a class="navitem {{ $nav('ledger.workers') }}" href="{{ route('ledger.workers', $workspaceProject) }}">Workers</a>@endif
   @if($isDirector)
     <a class="navitem {{ $nav('director.projects.warnings') }}" href="{{ route('director.projects.warnings', $workspaceProject) }}">Warnings &amp; KPIs</a>

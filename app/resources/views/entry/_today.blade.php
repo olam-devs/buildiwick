@@ -1,4 +1,4 @@
-{{-- Lines this person entered (today, or the period chosen on My Entries). Their own lines can be fixed or removed the same day, until they are checked. --}}
+{{-- Lines this person entered (today, or the period chosen on My Entries). Their own lines can be fixed or removed until Accounts confirms them. --}}
 @php
   $money = \App\Support\Money::class;
   $isEntry = auth()->user()->role?->name === 'data_entry';
@@ -9,7 +9,7 @@
 </style>
 <section class="lg-panel" style="margin-top:16px">
   <h3>{{ $title ?? 'Entered today' }} ({{ $today->count() }})</h3>
-  @if($isEntry)<p class="hint">You can edit or delete your lines on the day you enter them. Shaded lines are checked or from an earlier day and can no longer be changed.</p>@endif
+  @if($isEntry)<p class="hint">You can edit or delete your lines until Accounts confirms them; every change is recorded. Shaded lines are confirmed (or were changed by someone else) and can no longer be changed.</p>@endif
   <div class="tablewrap" style="border:0;margin-top:8px"><table class="lg-table lg-cards-sm">
     <thead><tr><th>ID</th>@if($showProject ?? false)<th>Project</th>@endif<th>Item</th><th class="amt">Amount</th>@unless($isEntry)<th>Status</th>@endunless<th></th></tr></thead>
     <tbody>

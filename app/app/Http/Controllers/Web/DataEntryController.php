@@ -12,7 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 
 /**
- * The Data Entry screen: pick a project, enter expenses on one form, and see (and, the same day,
+ * The Data Entry screen: pick a project, enter expenses on one form, and see (and, until confirmed,
  * correct) what you entered today. Nothing else of the system is shown; entries wait for Accounts.
  */
 class DataEntryController extends Controller

@@ -46,6 +46,7 @@ Route::middleware(['auth', 'active-account'])->group(function () {
     Route::get('/ledger/overheads', [LedgerController::class, 'overheads'])->name('ledger.overheads');
     Route::get('/ledger/projects/{project}', [LedgerController::class, 'overview'])->name('ledger.overview');
     Route::get('/ledger/projects/{project}/expenses', [LedgerController::class, 'expenses'])->name('ledger.expenses');
+    Route::get('/ledger/projects/{project}/history', [LedgerController::class, 'history'])->name('ledger.history');
     Route::get('/ledger/projects/{project}/expenses.xlsx', [LedgerController::class, 'export'])->name('ledger.expenses.export');
     Route::get('/ledger/projects/{project}/expenses/create', [LedgerController::class, 'create'])->name('ledger.expenses.create');
     Route::post('/ledger/projects/{project}/expenses', [LedgerController::class, 'store'])->name('ledger.expenses.store');

@@ -27,7 +27,7 @@ use RuntimeException;
  *   from the sheet leaves the draft. Nothing is saved to the ledger here; she still checks and saves in Buildiwick.
  * - Draft → sheet: a draft line changed in the Buildiwick form is written back to its sheet row.
  * - Saved lines: every saved line of the project is in the sheet. While Data Entry may still change it in
- *   Buildiwick (the day it was entered, unconfirmed) its Status is "Saved … · can be changed today" (blue);
+ *   Buildiwick (unconfirmed, not changed by others) its Status is "Saved … · can be changed until confirmed" (blue);
  *   afterwards "Locked …" (grey) and the row is hard-protected: only the owner, the service account and users
  *   with "Edit locked sheet lines" can change it. A change typed in the sheet to a saved line is never applied
  *   quietly: it waits in the Review for Apply or Undo. A change made in Buildiwick is written to the sheet.
@@ -387,17 +387,17 @@ class ProjectSheetLines
         $status = match (true) {
             ! $saved => 'Locked · deleted in Buildiwick',
             $saved->status === 'rejected' => 'Locked '.$saved->request_code.' · denied in Buildiwick',
-            $this->editableByClerk($saved) => 'Saved '.$saved->request_code.' · can be changed today',
+            $this->editableByClerk($saved) => 'Saved '.$saved->request_code.' · can be changed until confirmed',
             default => 'Locked '.$saved->request_code,
         };
 
         return $status.($line->pending ? ' · sheet change waiting for approval in Buildiwick' : '');
     }
 
-    /** Data Entry may still change the line in Buildiwick (the day it was entered, unconfirmed, not changed by others). */
+    /** Data Entry may still change the line in Buildiwick (unconfirmed, not changed by others). */
     private function editableByClerk(ExpenseRequest $saved): bool
     {
-        return $saved->created_at?->isToday() && Gate::forUser($this->clerk())->allows('edit-ledger-line', $saved);
+        return Gate::forUser($this->clerk())->allows('edit-ledger-line', $saved);
     }
 
     /**

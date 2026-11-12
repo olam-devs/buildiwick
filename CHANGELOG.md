@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — Data Entry Edits Until Confirmed, With an Edit History
+
+- At the user's request, Data Entry may now edit or delete her own lines **until Accounts confirms them**, on any day (before: only the day she entered them). Lines already changed by someone else (Director, PM, Accounts) stay locked for her, as before. My Entries wording updated; use "Expense date"/periods there to find older lines.
+- Every change is visible: a new **Edit History** page per project (project menu, for anyone who can see the register; not Data Entry) lists each edit, deletion, denial, restore and amount correction with who, when and the values before → after (dates, phases, categories, units and amounts shown in words), searchable by line code or item. Edited lines carry an **Edited** mark in the Expenditure register that opens their history. The records are the existing `project_edit_logs` rows written by `ExpenseLedgerService`.
+- The Google sheet follows the same rule: saved lines stay blue ("Saved … · can be changed until confirmed") until confirmed or changed by someone else, then lock.
+
 ## 2026-11-12 — My Entries: Expense-Date Filter and Search
 
 - My Entries can now filter by **Date entered** (as before, the default) or **Expense date** (the date on the line), with a new "Last 12 months" period next to Today / Yesterday / This week / This month / Pick dates.
