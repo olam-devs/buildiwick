@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'google_sheets' => [
+        // Service-account JSON key, kept outside the repository (never commit it).
+        'key_path' => env('GOOGLE_SHEETS_KEY_PATH'),
+        // The shared "Buildiwick Project Entries" spreadsheet that Data Entry types into.
+        'spreadsheet_id' => env('GOOGLE_SHEETS_SPREADSHEET_ID'),
+    ],
+
 ];

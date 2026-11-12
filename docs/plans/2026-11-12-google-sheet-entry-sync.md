@@ -15,7 +15,7 @@ Data Entry keeps one Excel tracker (a tab per project) and edits/extends the sam
 ## The sheet
 
 - **One Google Sheet, one tab per project**, laid out like her tracker (Transaction ID, Date, Main Category, Subcategory, Item, Supplier, Invoice No., Qty, Unit, Unit Cost, Total, Work Area / Stage, Notes) plus a system-managed **Status** column.
-- The system owns the file through a Google **service account** (robot user). The file is shared with Data Entry, the user, and anyone they choose. Data Entry cannot change protections or sharing.
+- **The user owns the file** (Google no longer gives service accounts Drive storage). The **service account** (robot user) is an editor and does all the work; Data Entry is an editor; "Editors can change permissions and share" is off, so Data Entry cannot re-share, and she cannot remove protections she is not listed on. Set up 2026-11-12; `app:sheets-check` confirms it.
 - **New project in the system → new tab appears** (projects are created in the system only; a tab added by hand is ignored and reported).
 - Dropdowns for main category, subcategory (filtered by main category where Sheets allows), unit and phase come from the system's `lookups` / `project_phases`; dates use a date picker. Pasting can bypass these, so the review still checks everything.
 - Works offline in Chrome or the Sheets app (offline mode on); lines reach the system once uploaded.

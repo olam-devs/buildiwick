@@ -2,6 +2,13 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — Google Sheets Connection (Sheet Sync Step 1)
+
+- Added `google/apiclient` (approved by the user), trimmed to the Sheets and Drive services by `Google\Task\Composer::cleanup`. Composer also moved a few shared packages up minor versions (guzzle, monolog, psr, symfony polyfills).
+- `App\Services\GoogleSheets\SheetsClient` is the one place the app talks to Google; settings `GOOGLE_SHEETS_KEY_PATH` and `GOOGLE_SHEETS_SPREADSHEET_ID` (`config('services.google_sheets')`, both in `.env.example`).
+- `php artisan app:sheets-check` signs in as the service account and reports the sheet's title, owner, tabs, and whether the robot can edit and editors can re-share.
+- On the sandbox the key lives in `~/buildiwick-secrets/google-sheets.json` (folder 700, file 600, outside the repo and web root). The user owns the sheet "Buildiwick Project Entries"; the service account and Data Entry are editors; editors cannot re-share. Service accounts no longer get Drive storage, so the plan now has the user own the sheet (plan file updated).
+
 ## 2026-11-12 — Plan: Google Sheet Entry Synced to Drafts
 
 - No code change. Added `docs/plans/2026-11-12-google-sheet-entry-sync.md`: Data Entry's tracker moves to one Google Sheet (tab per project) that the system reads every ~15 minutes into her drafts only; a Review panel on each draft lists problems by type; saved lines show their state in the sheet (Draft / Saved – editable / Saved – locked) and lock hard a day after entry, editable only by the user and people with a new permission. Agreed in principle, not built; needs a Google service account and approval for the `google/apiclient` dependency.
