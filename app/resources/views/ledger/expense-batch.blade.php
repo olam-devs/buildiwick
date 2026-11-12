@@ -36,6 +36,7 @@
       // An unsubmitted form saved earlier (any device) is restored, unless the page is showing a failed save.
       'draft' => (($draft ?? null) && ! old('rows')) ? $draft->data : null,
       'draftUrl' => route('ledger.draft.save', $project),
+      'reviewUrl' => route('ledger.draft.review', $project),
       'today' => now()->toDateString(),
   ];
   $restoring = ($draft ?? null) && ! old('rows');
@@ -51,6 +52,21 @@
   .rb-draft .btn{min-height:36px}
   .rb-saved{font-size:12.5px;color:var(--ink-dim);align-self:center}
   .rb-table tr[hidden]{display:none!important}
+  .rv-panel{margin-bottom:12px}
+  .rv-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .rv-head h3{margin:0;font-size:15px}
+  .rv-sum{font-size:13.5px;color:var(--ink-soft);margin:4px 0 0}
+  .rv-groups{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  .rv-group{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--warn-line);background:var(--warn-soft);color:var(--warn-ink);font:inherit;font-size:13.5px;cursor:pointer}
+  .rv-group.error{border-color:var(--danger-line);background:var(--danger-soft);color:var(--danger-ink)}
+  .rv-group.on{outline:2px solid var(--primary);outline-offset:1px}
+  .rv-group b{font-weight:600}
+  .rv-showing{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--ink-soft)}
+  .rb-table tr.rv-err td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
+  .rb-table tr.rv-warn td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+  .rv-note{display:flex;flex-direction:column;gap:2px;margin-top:5px;font-size:12px;line-height:1.35}
+  .rv-note .rv-error{color:var(--danger-ink)}
+  .rv-note .rv-warning{color:var(--warn-ink)}
   .rb-filter{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--primary-soft);font-size:13.5px}
   .rb-filter[hidden]{display:none}
   .rb-filter select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--input-bg);color:var(--ink);min-height:40px}
@@ -150,6 +166,12 @@
     <p class="rb-hint">The date, {{ $project->is_company_overheads ? 'cost group' : 'category, phase' }}, supplier, receipt no. and notes above apply to every item below. Change them on a row only if that item is different. New suppliers are saved for next time.</p>
   </section>
 
+  <section class="lg-panel rv-panel" id="reviewPanel" hidden>
+    <div class="rv-head"><div><h3>Review</h3><p class="rv-sum" id="reviewSummary"></p></div><button type="button" class="btn btn-ghost" id="reviewAgain">Check again</button></div>
+    <div class="rv-groups" id="reviewGroups"></div>
+    <div class="rv-showing" id="reviewShowing" hidden><span id="reviewShowingText"></span><button type="button" class="btn btn-ghost" id="reviewShowAll">Show all lines</button></div>
+  </section>
+
   <section class="lg-panel" style="padding:0;overflow:hidden">
     <div class="rb-filter" id="dateFilterBar" hidden><label for="dateFilter"><b>Show date</b></label><select id="dateFilter"></select><span class="rb-filter-note" id="dateFilterNote"></span></div>
     <div style="overflow:auto">
@@ -186,7 +208,7 @@
       <input type="hidden" name="status" value="to_confirm">
       <p class="form-context" style="margin:0">Lines are saved as <b>To confirm</b>; Accounts confirms the payments.</p>
     @endif
-    <div class="rb-actions" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-ghost" type="button" id="previewButton">Preview</button><button class="btn btn-primary" type="submit" id="saveButton">Save Expenses</button>@unless($entryMode ?? false)<button class="btn btn-ghost rb-another" type="submit" name="after" value="another">Save &amp; Record More</button>@endunless</div>
+    <div class="rb-actions" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-ghost" type="button" id="reviewButton">Review</button><button class="btn btn-ghost" type="button" id="previewButton">Preview</button><button class="btn btn-primary" type="submit" id="saveButton">Save Expenses</button>@unless($entryMode ?? false)<button class="btn btn-ghost rb-another" type="submit" name="after" value="another">Save &amp; Record More</button>@endunless</div>
     <p class="rb-hint" id="draftStatus">Your entry is kept as a draft while you type, so you can continue later on any device.</p>
   </section>
 </form>
@@ -309,6 +331,8 @@
   const number = () => { [...body.children].forEach((tr, i) => tr.querySelector('.idx').textContent = i + 1); refreshFilter(); };
   const rowData = tr => { const row = {}; tr.querySelectorAll('[name^="rows["]').forEach(el => { const m = el.name.match(/\]\[([a-z_]+)\]$/); if (m && el.value !== '__new') row[m[1]] = el.value; }); return row; };
   // "Show date": with rows from several days, show one day at a time. Only the rows shown are saved; the rest stay in the draft.
+  // Review: lines picked from a Review group (null = all lines).
+  let reviewPick = null;
   const filterSelect = document.getElementById('dateFilter'), filterBar = document.getElementById('dateFilterBar'), filterNote = document.getElementById('dateFilterNote');
   const rowDate = tr => tr.querySelector('[data-f=date]').value || headDate.value;
   const shownRows = () => [...body.children].filter(tr => !tr.hidden);
@@ -322,9 +346,9 @@
     filterSelect.innerHTML = `<option value="">All dates (${body.children.length})</option>` + dates.map(d => `<option value="${d}">${shortDate(d)} (${counts[d]})</option>`).join('');
     filterSelect.value = pick;
     filterBar.hidden = dates.length < 2 && !pick;
-    [...body.children].forEach(tr => { tr.hidden = !!pick && rowDate(tr) !== pick; });
+    [...body.children].forEach(tr => { tr.hidden = (!!pick && rowDate(tr) !== pick) || (reviewPick !== null && !reviewPick.has(tr)); });
     const hiddenCount = [...body.children].filter(tr => tr.hidden).length, shown = body.children.length - hiddenCount;
-    filterNote.textContent = pick ? `Only these ${shown} item${shown === 1 ? '' : 's'} are saved; the other ${hiddenCount} stay in your draft.` : 'Pick a date to save one day at a time.';
+    filterNote.textContent = (pick || reviewPick) ? `Only these ${shown} item${shown === 1 ? '' : 's'} are saved; the other ${hiddenCount} stay in your draft.` : 'Pick a date to save one day at a time.';
   }
   filterSelect.addEventListener('change', () => { refreshFilter(); sum(); window.scrollTo({top: filterBar.getBoundingClientRect().top + window.scrollY - 70}); });
   const sum = () => {
@@ -389,12 +413,60 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
       .then(d => { statusLine.textContent = d.arrived ? `${d.arrived} new line(s) arrived from the Google Sheet and are kept in your draft. Reload the page to see them.` : d.saved ? `Draft saved at ${d.at}. You can continue later on any device.` : 'Your entry is kept as a draft while you type, so you can continue later on any device.'; })
       .catch(() => { lastSent = ''; statusLine.textContent = 'Draft not saved (no connection?). Keep the page open and save when you can.'; });
   };
-  const queueDraft = () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 1500); };
+  const queueDraft = () => { clearTimeout(draftTimer); draftTimer = setTimeout(() => { saveDraft(); if (reviewed) refreshReview(); }, 1500); };
   ['input', 'change'].forEach(type => document.getElementById('batchForm').addEventListener(type, queueDraft));
   body.addEventListener('click', e => { if (e.target.closest('.rb-remove')) queueDraft(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(draftTimer); saveDraft(true); } });
   document.getElementById('batchForm').addEventListener('submit', e => { submitting = true; clearTimeout(draftTimer); setTimeout(() => { if (e.defaultPrevented) submitting = false; }, 0); });
   lastSent = C.draft ? collect() : '';
+  // Review: the same checks as the save, grouped by problem. Clicking a group shows only those lines.
+  const reviewPanel = document.getElementById('reviewPanel'), reviewGroups = document.getElementById('reviewGroups'), reviewShowing = document.getElementById('reviewShowing');
+  let reviewed = false, pickedCode = null;
+  const runReview = trs => fetch(C.reviewUrl, {method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token},
+    body: JSON.stringify({expense_date: headDate.value, rows: trs.map(rowData)})}).then(r => r.ok ? r.json() : Promise.reject());
+  const showPick = () => {
+    reviewShowing.hidden = reviewPick === null;
+    if (reviewPick) document.getElementById('reviewShowingText').textContent = `Showing ${reviewPick.size} line${reviewPick.size === 1 ? '' : 's'}: ${reviewGroups.querySelector('.rv-group.on b')?.textContent || ''}. Only the lines shown are saved; the others stay in your draft.`;
+    refreshFilter(); sum();
+  };
+  const showReview = (result, trs) => {
+    reviewed = true;
+    body.querySelectorAll('.rv-note').forEach(n => n.remove());
+    [...body.children].forEach(tr => tr.classList.remove('rv-err', 'rv-warn'));
+    const notes = new Map();
+    result.groups.forEach(g => g.rows.forEach(r => { const tr = trs[r.index]; if (!tr) return; if (!notes.has(tr)) notes.set(tr, []); notes.get(tr).push([g.severity, `${g.label}: ${r.note}`]); }));
+    notes.forEach((list, tr) => {
+      tr.classList.add(list.some(([sev]) => sev === 'error') ? 'rv-err' : 'rv-warn');
+      const div = document.createElement('div'); div.className = 'rv-note';
+      div.innerHTML = list.map(([sev, text]) => `<span class="rv-${sev}">${esc(text)}</span>`).join('');
+      tr.querySelector('.rb-item').appendChild(div);
+    });
+    document.getElementById('reviewSummary').textContent = !result.groups.length ? 'No problems found.'
+      : `${result.errors ? `${result.errors} problem${result.errors === 1 ? ' stops' : 's stop'} saving` : 'Nothing stops saving'}${result.warnings ? ` · ${result.warnings} to check` : ''}. Click a group to show only those lines.`;
+    if (pickedCode && !result.groups.some(g => g.code === pickedCode)) { pickedCode = null; reviewPick = null; }
+    reviewGroups.innerHTML = '';
+    result.groups.forEach(g => {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = `rv-group ${g.severity}${g.code === pickedCode ? ' on' : ''}`;
+      button.innerHTML = `<span><b>${esc(g.label)}</b> · ${g.severity === 'error' ? 'stops saving' : 'check'}</span><span>${g.rows.length} line${g.rows.length === 1 ? '' : 's'}</span>`;
+      button.addEventListener('click', () => {
+        const off = pickedCode === g.code;
+        pickedCode = off ? null : g.code;
+        reviewGroups.querySelectorAll('.rv-group').forEach(b => b.classList.toggle('on', b === button && !off));
+        reviewPick = off ? null : new Set(g.rows.map(r => trs[r.index]).filter(Boolean));
+        showPick();
+        if (!off) { const first = [...body.children].find(tr => !tr.hidden); if (first) first.scrollIntoView({block: 'center'}); }
+      });
+      reviewGroups.appendChild(button);
+    });
+    reviewPanel.hidden = false;
+    showPick();
+  };
+  const refreshReview = () => { const trs = [...body.children]; return runReview(trs).then(r => showReview(r, trs)).catch(() => { document.getElementById('reviewSummary').textContent = 'The review could not run (no connection?). Try again.'; reviewPanel.hidden = false; }); };
+  document.getElementById('reviewButton').addEventListener('click', () => { refreshReview().then(() => reviewPanel.scrollIntoView({block: 'start'})); });
+  document.getElementById('reviewAgain').addEventListener('click', refreshReview);
+  document.getElementById('reviewShowAll').addEventListener('click', () => { pickedCode = null; reviewPick = null; reviewGroups.querySelectorAll('.rv-group').forEach(b => b.classList.remove('on')); showPick(); });
+  if ((C.draft?.rows || []).length) refreshReview();
   // Preview: everything entered, as it will be saved, before submitting.
   const form = document.getElementById('batchForm'), dialog = document.getElementById('previewDialog');
   const fmt = v => (v || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -432,6 +504,21 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
   document.getElementById('pvSubmit').addEventListener('click', () => { dialog.close(); form.requestSubmit(document.getElementById('saveButton')); });
   // Phases with subphases (▸) cannot take expenses: block them in each row too.
   document.getElementById('batchForm').addEventListener('submit', e => { const bad = shownRows().find(tr => tr.querySelector('[data-f=item]').value.trim() && !tr.querySelector('[data-f=phase]').value); if (bad) { e.preventDefault(); bad.querySelector('[data-f=phase]').focus(); alert('Choose a phase for every item.'); } });
+  // Lines with problems that stop saving (see Review) are caught before sending; the server checks again.
+  let reviewPassed = false;
+  form.addEventListener('submit', e => {
+    if (e.defaultPrevented) return;
+    if (reviewPassed) { reviewPassed = false; return; }
+    e.preventDefault();
+    const trs = shownRows(), submitter = e.submitter;
+    const send = () => { reviewPassed = true; form.requestSubmit(submitter && submitter.form === form ? submitter : undefined); };
+    runReview(trs).then(result => {
+      if (!result.errors) { send(); return; }
+      showReview(result, trs);
+      reviewPanel.scrollIntoView({block: 'start'});
+      alert(`${result.errors} problem${result.errors === 1 ? ' stops' : 's stop'} saving. The lines are marked in red; see Review.`);
+    }).catch(send);
+  });
   // The rows are sent packed in one field: the server drops form fields past its limit (about 75 rows' worth).
   const rowInputs = () => body.querySelectorAll('[name^="rows["]');
   const unpack = () => { form.querySelectorAll('input[name=rows_json], input[name=keep_json], input[name=known_keys_json]').forEach(el => el.remove()); rowInputs().forEach(el => el.disabled = false); };

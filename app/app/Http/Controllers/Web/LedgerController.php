@@ -12,6 +12,7 @@ use App\Models\ProjectEditLog;
 use App\Models\ProjectPhase;
 use App\Models\SheetLine;
 use App\Models\User;
+use App\Services\DraftReviewService;
 use App\Services\ExpenseLedgerService;
 use App\Services\LedgerAnalyticsService;
 use App\Services\LedgerWorkbookService;
@@ -245,6 +246,28 @@ class LedgerController extends Controller
             ['data' => ['header' => $header, 'rows' => $rows->all()], 'item_count' => $rows->count()]);
     }
 
+    /**
+     * Reviews the lines on the Record Expense form (the draft as it is on screen): problems grouped by type,
+     * each with its rows. Rows keep the position they have on the form so the page can show them.
+     */
+    public function reviewDraft(Request $request, Project $project, DraftReviewService $reviews)
+    {
+        $this->authorize('record-expense', $project);
+        $validated = $request->validate([
+            'expense_date' => ['nullable', 'string', 'max:20'],
+            'rows' => ['nullable', 'array', 'max:3000'],
+            'rows.*' => ['nullable', 'array'],
+        ]);
+
+        return response()->json($reviews->review($project, $validated['rows'] ?? [], $validated['expense_date'] ?? null, self::priceRequired($request->user())));
+    }
+
+    /** Data Entry may not save a line without a price; others may (it is shown as a warning). */
+    private static function priceRequired(User $user): bool
+    {
+        return $user->role?->name === 'data_entry';
+    }
+
     public function discardDraft(Request $request, Project $project)
     {
         $this->authorize('record-expense', $project);
@@ -315,6 +338,11 @@ class LedgerController extends Controller
             'rows.*.expense_date.before_or_equal' => 'Row :position has a date in the future.',
             'rows.max' => 'Save at most '.self::MAX_ROWS.' items at a time.',
         ]);
+        // The Review's hard errors (no price for Data Entry, unknown unit, #REF!-style values...) stop the save.
+        $blocking = DraftReviewService::blockingMessages(app(DraftReviewService::class)->review($project, $request->input('rows', []), $header['expense_date'], self::priceRequired($request->user())));
+        if ($blocking !== []) {
+            throw ValidationException::withMessages(['rows' => array_slice($blocking, 0, 12)]);
+        }
         // A row keeps its own date when it has one (past data entered in one go); otherwise it takes the date above.
         // Lines that came from the Google sheet carry its row key, so the sheet line is marked saved.
         $sheetKeys = array_map(fn ($row) => is_array($row) && is_string($row['sheet_key'] ?? null) ? $row['sheet_key'] : null, $request->input('rows', []));
