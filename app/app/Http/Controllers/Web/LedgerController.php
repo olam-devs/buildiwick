@@ -231,7 +231,9 @@ class LedgerController extends Controller
     {
         $fields = ['expense_date', 'main_category', 'project_phase_id', 'item_description', 'supplier', 'subcategory', 'quantity', 'unit', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details', 'labour_agreement_id', 'sheet_key', 'sheet_rev'];
         $rows = collect($rows)->filter(fn ($row) => is_array($row))->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))->values()->all();
-        [$rows, $arrived] = ExpenseDraft::mergeFromPage(ExpenseDraft::for($user, $project), $rows, $knownKeys, $savedKeys);
+        $current = ExpenseDraft::for($user, $project);
+        $rows = ExpenseDraft::adoptSheetKeys($current, $rows, $savedKeys);
+        [$rows, $arrived] = ExpenseDraft::mergeFromPage($current, $rows, $knownKeys, $savedKeys);
         $rows = collect($rows)->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))
             ->filter(fn (array $row) => collect($row)->only(['item_description', 'unit_cost', 'total_amount'])->filter(fn ($v) => trim((string) $v) !== '')->isNotEmpty())
             ->values();
@@ -303,7 +305,8 @@ class LedgerController extends Controller
         $rows = collect($request->input('rows', []))
             ->filter(fn ($row) => is_array($row) && collect($row)->except(['expense_date', 'main_category', 'project_phase_id', 'supplier', 'quantity', 'unit', 'invoice_receipt_no', 'details', 'sheet_key', 'sheet_rev'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
             ->values()->all();
-        $request->merge(['rows' => $rows]);
+        // A page opened before the sheet labelled these draft lines still sends them without their sheet key.
+        $request->merge(['rows' => ExpenseDraft::adoptSheetKeys(ExpenseDraft::for($request->user(), $project), $rows)]);
         if ($request->user()->hasRole('admin')) {
             // The Director's entries are confirmed as they are recorded.
             $request->merge(['status' => 'paid',

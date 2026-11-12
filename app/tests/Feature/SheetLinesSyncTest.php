@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\Role;
 use App\Models\SheetLine;
 use App\Models\User;
+use App\Services\ExpenseLedgerService;
 use App\Services\GoogleSheets\ProjectSheetTabs;
 use App\Services\GoogleSheets\SheetsClient;
 use Database\Seeders\LookupSeeder;
@@ -126,6 +127,37 @@ class SheetLinesSyncTest extends TestCase
         $this->assertSame('Removed from the draft in Buildiwick', $this->sheets->cell('B3'));
     }
 
+    public function test_the_fill_writes_saved_and_draft_lines_into_the_sheet_and_an_open_page_does_not_double_them(): void
+    {
+        $phase = (string) $this->project->phases()->orderBy('phase_order')->value('id');
+        $saved = app(ExpenseLedgerService::class)->record($this->project, ['expense_date' => '2026-11-03', 'main_category' => 'materials', 'subcategory' => 'concrete_cement',
+            'project_phase_id' => $phase, 'item_description' => 'Cement 42.5', 'quantity' => '10', 'unit' => 'bag', 'unit_cost' => '18500', 'details' => 'Site A'], $this->clerk);
+        $typed = ['expense_date' => '2026-11-05', 'main_category' => 'materials', 'project_phase_id' => $phase, 'item_description' => 'Nails', 'quantity' => '2', 'unit' => 'kg', 'unit_cost' => '4000', 'total_amount' => '8000'];
+        $this->actingAs($this->clerk)->postJson(route('ledger.draft.save', $this->project), ['header' => ['expense_date' => '2026-11-12'], 'rows' => [$typed]])->assertJson(['saved' => true]);
+
+        $this->artisan('app:sheets-sync', ['--with-drafts' => true])->expectsOutputToContain('Written into the sheet: 2 line(s).')->assertSuccessful();
+
+        $this->assertSame(['Saved '.$saved->request_code, 46329, 'Materials', 'Concrete & Cement', 'Cement 42.5', '', '', 10.0, 'BAG', 18500.0, 185000.0, 'Preliminaries', 'Site A'],
+            array_slice($this->sheets->rows[0], 1));
+        $this->assertSame(['Draft', 'Nails', 'KG'], [$this->sheets->cell('B4'), $this->sheets->cell('F4'), $this->sheets->cell('J4')]);
+        $key = ExpenseDraft::for($this->clerk, $this->project)->data['rows'][0]['sheet_key'];
+        $this->assertSame($this->sheets->cell('A4'), $key);
+
+        // Reading it back changes nothing, and the 5-minute run does not write the lines again.
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('Added 0, updated 0, removed 0')->doesntExpectOutputToContain('Written into the sheet')->assertSuccessful();
+
+        // The page opened before the fill sends the line without its key: it keeps the key, with no copy added.
+        $this->actingAs($this->clerk)->postJson(route('ledger.draft.save', $this->project), ['header' => ['expense_date' => '2026-11-12'], 'rows' => [$typed], 'known_keys' => []])->assertJson(['arrived' => 0]);
+        $this->assertSame([$key], array_column(ExpenseDraft::for($this->clerk, $this->project)->data['rows'], 'sheet_key'));
+
+        // Saved from that page, the sheet line becomes Saved and is not written again.
+        $this->actingAs($this->clerk)->post(route('ledger.expenses.store', $this->project), ['expense_date' => '2026-11-12', 'status' => 'to_confirm', 'rows_json' => json_encode([$typed])])->assertSessionHasNoErrors();
+        $this->assertNull(ExpenseDraft::for($this->clerk, $this->project));
+        $this->artisan('app:sheets-sync')->doesntExpectOutputToContain('Written into the sheet')->assertSuccessful();
+        $this->assertStringStartsWith('Saved KND-RES-TXN-0002', $this->sheets->cell('B4'));
+        $this->assertCount(2, $this->sheets->rows);
+    }
+
     /** @return list<mixed> columns A to N of the project tab */
     private function sheetRow(string $key, mixed $date, string $category, string $subcategory, string $item, mixed $qty, string $unit, mixed $cost, mixed $total, string $phase): array
     {
@@ -161,8 +193,13 @@ class FakeSheetGrid extends SheetsClient
     {
         $this->rows = array_values($this->rows);
         foreach ($data as $range => $values) {
-            preg_match('/!([A-Z])(\d+)$/', $range, $match);
-            $this->rows[(int) $match[2] - 3][ord($match[1]) - ord('A')] = $values[0][0];
+            preg_match('/!([A-Z])(\d+)(?::[A-Z]\d+)?$/', $range, $match);
+            foreach ($values as $r => $cells) {
+                foreach ($cells as $c => $value) {
+                    $this->rows[(int) $match[2] - 3 + $r][ord($match[1]) - ord('A') + $c] = $value;
+                }
+                ksort($this->rows[(int) $match[2] - 3 + $r]);
+            }
         }
     }
 

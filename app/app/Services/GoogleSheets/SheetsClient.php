@@ -62,13 +62,14 @@ class SheetsClient
     /**
      * The spreadsheet's tabs in order.
      *
-     * @return list<array{id: int, title: string}>
+     * @return list<array{id: int, title: string, rows: int}>
      */
     public function tabs(): array
     {
-        $spreadsheet = $this->sheets()->spreadsheets->get($this->spreadsheetId(), ['fields' => 'sheets.properties(sheetId,title)']);
+        $spreadsheet = $this->sheets()->spreadsheets->get($this->spreadsheetId(), ['fields' => 'sheets.properties(sheetId,title,gridProperties.rowCount)']);
 
-        return array_map(fn ($sheet) => ['id' => (int) $sheet->getProperties()->getSheetId(), 'title' => (string) $sheet->getProperties()->getTitle()], $spreadsheet->getSheets());
+        return array_map(fn ($sheet) => ['id' => (int) $sheet->getProperties()->getSheetId(), 'title' => (string) $sheet->getProperties()->getTitle(),
+            'rows' => (int) ($sheet->getProperties()->getGridProperties()?->getRowCount() ?? 1000)], $spreadsheet->getSheets());
     }
 
     /**

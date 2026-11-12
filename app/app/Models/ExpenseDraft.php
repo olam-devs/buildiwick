@@ -53,6 +53,45 @@ class ExpenseDraft extends Model
         return [[...$rows, ...$missing], count($missing)];
     }
 
+    /**
+     * Gives page rows that have no sheet key the key of the identical draft line the sheet sync labelled after the page
+     * was opened (same date, item, quantity, unit cost and total), so an open page neither duplicates nor loses it.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<string>  $skipKeys  keys already used elsewhere in the same request
+     * @return list<array<string, mixed>>
+     */
+    public static function adoptSheetKeys(?self $draft, array $rows, array $skipKeys = []): array
+    {
+        $used = [...$skipKeys, ...array_filter(array_map(fn ($row) => is_array($row) ? ($row['sheet_key'] ?? null) : null, $rows))];
+        $server = collect($draft?->data['rows'] ?? [])->filter(fn ($row) => is_array($row) && filled($row['sheet_key'] ?? null));
+        if ($server->isEmpty()) {
+            return $rows;
+        }
+        foreach ($rows as $index => $row) {
+            if (! is_array($row) || filled($row['sheet_key'] ?? null)) {
+                continue;
+            }
+            $match = $server->first(fn (array $line) => ! in_array($line['sheet_key'], $used, true) && self::signature($line) === self::signature($row));
+            if ($match) {
+                $rows[$index]['sheet_key'] = $match['sheet_key'];
+                $rows[$index]['sheet_rev'] = $match['sheet_rev'] ?? '';
+                $used[] = $match['sheet_key'];
+            }
+        }
+
+        return $rows;
+    }
+
+    /** @param  array<string, mixed>  $row */
+    private static function signature(array $row): string
+    {
+        $number = fn (string $key) => is_numeric($value = str_replace(',', '', trim((string) ($row[$key] ?? '')))) ? (string) (float) $value : '';
+
+        return implode('|', [mb_strtolower(trim((string) ($row['item_description'] ?? ''))), trim((string) ($row['expense_date'] ?? '')),
+            $number('quantity'), $number('unit_cost'), $number('total_amount')]);
+    }
+
     public static function clear(User $user, Project $project): void
     {
         self::query()->where('user_id', $user->id)->where('project_id', $project->id)->delete();

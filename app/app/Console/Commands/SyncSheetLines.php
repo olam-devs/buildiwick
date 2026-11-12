@@ -12,7 +12,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-#[Signature('app:sheets-sync {--project=* : Only these project ids}')]
+#[Signature('app:sheets-sync {--project=* : Only these project ids} {--with-drafts : Also put draft lines typed in Buildiwick into the sheet (one-time fill)}')]
 #[Description('Bring lines typed in the Google entry sheet into the Data Entry drafts (runs every 5 minutes); also gives new projects their tab.')]
 class SyncSheetLines extends Command
 {
@@ -34,7 +34,7 @@ class SyncSheetLines extends Command
                 $created = $tabs->sync($missing)['created'];
                 $this->line('New tabs ('.count($created).'): '.implode(', ', $created));
             }
-            $report = $lines->sync($only);
+            $report = $lines->sync($only, (bool) $this->option('with-drafts'));
         } catch (Throwable $e) {
             $this->error('Sheet lines could not be synced: '.$e->getMessage());
             Log::warning('Google sheet sync failed', ['error' => $e->getMessage()]);
@@ -43,6 +43,9 @@ class SyncSheetLines extends Command
         }
 
         $this->line("Added {$report['added']}, updated {$report['updated']}, removed {$report['removed']} draft line(s); {$report['needs_check']} need checking.");
+        if ($report['appended']) {
+            $this->line("Written into the sheet: {$report['appended']} line(s).");
+        }
         if ($report['projects']) {
             $this->line('Drafts changed: '.implode(', ', $report['projects']));
         }

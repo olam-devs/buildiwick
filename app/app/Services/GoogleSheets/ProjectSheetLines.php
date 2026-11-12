@@ -3,6 +3,7 @@
 namespace App\Services\GoogleSheets;
 
 use App\Models\ExpenseDraft;
+use App\Models\ExpenseRequest;
 use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectPhase;
@@ -26,8 +27,6 @@ use RuntimeException;
  */
 class ProjectSheetLines
 {
-    private const LAST_ROW = 1000;
-
     /** @var array<string, string> lowercase label or code => code */
     private array $categories = [];
 
@@ -37,13 +36,18 @@ class ProjectSheetLines
     /** @var array<string, string> */
     private array $units = [];
 
+    /** @var array{main_category: array<string, string>, subcategory: array<string, string>, unit: array<string, string>} code => label */
+    private array $labels = ['main_category' => [], 'subcategory' => [], 'unit' => []];
+
     public function __construct(private SheetsClient $client, private ProjectSheetTabs $tabs) {}
 
     /**
      * @param  list<int>|null  $onlyProjectIds
-     * @return array{added: int, updated: int, removed: int, needs_check: int, projects: list<string>, missing_tabs: list<string>}
+     * @param  bool  $withDrafts  also put draft lines typed in Buildiwick into the sheet (one-time fill; not on the 5-minute run,
+     *                            because a line still being typed would change under its key)
+     * @return array{added: int, updated: int, removed: int, needs_check: int, appended: int, projects: list<string>, missing_tabs: list<string>}
      */
-    public function sync(?array $onlyProjectIds = null): array
+    public function sync(?array $onlyProjectIds = null, bool $withDrafts = false): array
     {
         $username = (string) config('services.google_sheets.draft_username');
         $user = User::query()->where('username', $username)->first();
@@ -51,8 +55,9 @@ class ProjectSheetLines
             throw new RuntimeException("No Data Entry account with username \"{$username}\" (GOOGLE_SHEETS_DRAFT_USERNAME).");
         }
         $this->loadLookups();
-        $report = ['added' => 0, 'updated' => 0, 'removed' => 0, 'needs_check' => 0, 'projects' => [], 'missing_tabs' => []];
-        $titles = collect($this->client->tabs())->pluck('title', 'id');
+        $report = ['added' => 0, 'updated' => 0, 'removed' => 0, 'needs_check' => 0, 'appended' => 0, 'projects' => [], 'missing_tabs' => []];
+        $tabList = collect($this->client->tabs())->keyBy('id');
+        $titles = $tabList->map(fn (array $tab) => $tab['title']);
         $projects = $this->tabs->projects()->filter(fn (Project $project) => $onlyProjectIds === null || in_array($project->id, $onlyProjectIds, true))->values();
         foreach ($projects as $project) {
             if (! $project->sheet_tab_id || ! $titles->has($project->sheet_tab_id)) {
@@ -61,21 +66,25 @@ class ProjectSheetLines
         }
         $projects = $projects->filter(fn (Project $project) => $project->sheet_tab_id && $titles->has($project->sheet_tab_id))->values();
         $last = chr(ord('A') + count(ProjectSheetLayout::COLUMNS) - 1);
-        $ranges = $projects->map(fn (Project $project) => self::quote($titles[$project->sheet_tab_id]).'!A'.(ProjectSheetLayout::FIRST_LINE + 1).':'.$last.self::LAST_ROW)->all();
+        $ranges = $projects->map(fn (Project $project) => self::quote($titles[$project->sheet_tab_id]).'!A'.(ProjectSheetLayout::FIRST_LINE + 1).':'.$last.($tabList[$project->sheet_tab_id]['rows'] ?? ProjectSheetLayout::ROWS))->all();
         $grids = $this->client->readValues($ranges);
 
         $writes = [];
+        $grow = [];
         foreach ($projects as $index => $project) {
-            $counts = DB::transaction(function () use ($project, $user, $grids, $index, $titles, &$writes) {
-                return $this->syncProject($project, $user, $grids[$index] ?? [], self::quote($titles[$project->sheet_tab_id]), $writes);
+            $tab = $tabList[$project->sheet_tab_id];
+            $counts = DB::transaction(function () use ($project, $user, $grids, $index, $tab, $withDrafts, &$writes, &$grow) {
+                return $this->syncProject($project, $user, $grids[$index] ?? [], $tab, $withDrafts, $writes, $grow);
             });
-            foreach (['added', 'updated', 'removed', 'needs_check'] as $key) {
+            foreach (['added', 'updated', 'removed', 'needs_check', 'appended'] as $key) {
                 $report[$key] += $counts[$key];
             }
-            if ($counts['added'] + $counts['updated'] + $counts['removed'] > 0) {
+            if ($counts['added'] + $counts['updated'] + $counts['removed'] + $counts['appended'] > 0) {
                 $report['projects'][] = $project->name;
             }
         }
+        // Tabs that need more rows for the lines added at the bottom get them first.
+        $this->client->batchUpdate(array_map(fn (int $sheetId, int $rows) => ['appendDimension' => ['sheetId' => $sheetId, 'dimension' => 'ROWS', 'length' => $rows]], array_keys($grow), $grow));
         $this->client->writeValues($writes);
 
         return $report;
@@ -83,16 +92,19 @@ class ProjectSheetLines
 
     /**
      * @param  list<list<mixed>>  $grid  sheet rows from row 3, columns A onwards
-     * @param  array<string, list<list<mixed>>>  $writes  cells to write back (row keys and Status), filled in here
-     * @return array{added: int, updated: int, removed: int, needs_check: int}
+     * @param  array{id: int, title: string, rows?: int}  $tabInfo
+     * @param  array<string, list<list<mixed>>>  $writes  cells to write back (row keys, Status, lines added at the bottom), filled in here
+     * @param  array<int, int>  $grow  rows to add per tab id, filled in here
+     * @return array{added: int, updated: int, removed: int, needs_check: int, appended: int}
      */
-    private function syncProject(Project $project, User $user, array $grid, string $tab, array &$writes): array
+    private function syncProject(Project $project, User $user, array $grid, array $tabInfo, bool $withDrafts, array &$writes, array &$grow): array
     {
-        $counts = ['added' => 0, 'updated' => 0, 'removed' => 0, 'needs_check' => 0];
+        $tab = self::quote($tabInfo['title']);
+        $counts = ['added' => 0, 'updated' => 0, 'removed' => 0, 'needs_check' => 0, 'appended' => 0];
         $draft = ExpenseDraft::for($user, $project);
         $rows = array_values($draft?->data['rows'] ?? []);
         $changed = false;
-        $lines = SheetLine::query()->where('project_id', $project->id)->with('expenseRequest:id,request_code')->get()->keyBy('row_key');
+        $lines = SheetLine::query()->where('project_id', $project->id)->with('expenseRequest:id,request_code,status')->get()->keyBy('row_key');
         $phases = (new PhaseTree($project->phases))->flatten();
         $tree = new PhaseTree($project->phases);
         $rev = (string) now()->timestamp;
@@ -120,6 +132,10 @@ class ProjectSheetLines
             [$row, $problems] = $this->draftRow($cells, $project, $phases, $tree);
             $row += ['sheet_key' => $key, 'sheet_rev' => $rev];
             $line = $lines->get($key);
+            // A line the system wrote itself has no reading yet: this first reading is its starting point.
+            if ($line && $line->sheet_hash === '') {
+                $line->update(['sheet_hash' => $hash]);
+            }
 
             if (! $line) {
                 SheetLine::create(['project_id' => $project->id, 'row_key' => $key, 'sheet_hash' => $hash, 'state' => 'draft']);
@@ -143,7 +159,12 @@ class ProjectSheetLines
                     $wanted = $this->draftStatus($problems);
                 }
             } elseif ($line->state === 'saved') {
-                $wanted = 'Saved '.($line->expenseRequest?->request_code ?? '').($line->sheet_hash !== $hash ? ' · later change in the sheet not applied' : '');
+                $saved = $line->expenseRequest;
+                $wanted = match (true) {
+                    ! $saved => 'Deleted in Buildiwick',
+                    $saved->status === 'rejected' => 'Denied '.$saved->request_code,
+                    default => 'Saved '.$saved->request_code,
+                }.($line->sheet_hash !== $hash ? ' · later change in the sheet not applied' : '');
             } else {
                 $wanted = 'Removed from the draft in Buildiwick';
             }
@@ -166,6 +187,48 @@ class ProjectSheetLines
                 }
                 $line->delete();
             }
+        }
+
+        // Lines the sheet does not have yet go at the bottom: lines saved in Buildiwick (typed in the form, or saved
+        // before the sheet existed) and, on the one-time fill, the draft lines typed in Buildiwick.
+        $append = [];
+        $linked = SheetLine::query()->where('project_id', $project->id)->whereNotNull('expense_request_id')->pluck('expense_request_id')->all();
+        $savedLines = ExpenseRequest::query()->where('project_id', $project->id)->where('status', '!=', 'rejected')->whereNotIn('id', $linked)
+            ->orderBy('requested_at')->orderBy('id')->get();
+        foreach ($savedLines as $saved) {
+            $key = $this->newKey();
+            SheetLine::create(['project_id' => $project->id, 'row_key' => $key, 'sheet_hash' => '', 'state' => 'saved', 'expense_request_id' => $saved->id]);
+            $append[] = [$key, 'Saved '.$saved->request_code, ...$this->sheetValues([
+                'expense_date' => CarbonImmutable::parse($saved->requested_at)->toDateString(), 'main_category' => $saved->main_category, 'subcategory' => $saved->subcategory,
+                'item_description' => $saved->item_description, 'supplier' => $saved->supplier_fundi_client, 'invoice_receipt_no' => $saved->invoice_receipt_no,
+                'quantity' => $saved->quantity, 'unit' => $saved->unit, 'unit_cost' => $saved->unit_cost, 'total_amount' => $saved->total_amount,
+                'project_phase_id' => $saved->project_phase_id, 'details' => $saved->notes,
+            ], $tree)];
+        }
+        if ($withDrafts) {
+            foreach ($rows as $index => $row) {
+                if (! is_array($row) || filled($row['sheet_key'] ?? null)
+                    || collect($row)->only(['item_description', 'unit_cost', 'total_amount'])->filter(fn ($v) => trim((string) $v) !== '')->isEmpty()) {
+                    continue;
+                }
+                $key = $this->newKey();
+                SheetLine::create(['project_id' => $project->id, 'row_key' => $key, 'sheet_hash' => '', 'state' => 'draft']);
+                $rows[$index]['sheet_key'] = $key;
+                $rows[$index]['sheet_rev'] = $rev;
+                $changed = true;
+                $append[] = [$key, 'Draft', ...$this->sheetValues($row, $tree)];
+            }
+        }
+        if ($append !== []) {
+            $first = ProjectSheetLayout::FIRST_LINE + 1 + count($grid);
+            $end = $first + count($append) - 1;
+            $last = chr(ord('A') + count(ProjectSheetLayout::COLUMNS) - 1);
+            $writes["{$tab}!A{$first}:{$last}{$end}"] = $append;
+            $capacity = $tabInfo['rows'] ?? ProjectSheetLayout::ROWS;
+            if ($end > $capacity) {
+                $grow[$tabInfo['id']] = $end - $capacity + 200;
+            }
+            $counts['appended'] = count($append);
         }
 
         if ($changed) {
@@ -257,6 +320,33 @@ class ProjectSheetLines
         return [$row, $problems];
     }
 
+    /**
+     * A line as sheet cells, columns C to N: labels instead of codes, the date as a day serial, amounts as numbers.
+     *
+     * @param  array<string, mixed>  $line  form/draft fields (codes, phase id)
+     * @return list<mixed>
+     */
+    private function sheetValues(array $line, PhaseTree $tree): array
+    {
+        $text = fn (string $key) => trim((string) ($line[$key] ?? ''));
+        $number = fn (string $key) => is_numeric(str_replace(',', '', $text($key))) ? (float) str_replace(',', '', $text($key)) : '';
+        $date = $text('expense_date');
+        $serial = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ? (int) CarbonImmutable::create(1899, 12, 30)->diffInDays(CarbonImmutable::parse($date)) : '';
+        $phase = $text('project_phase_id');
+
+        return [
+            $serial,
+            $this->labels['main_category'][$text('main_category')] ?? $text('main_category'),
+            $this->labels['subcategory'][$text('subcategory')] ?? $text('subcategory'),
+            $text('item_description'), $text('supplier'), $text('invoice_receipt_no'),
+            $number('quantity'),
+            $this->labels['unit'][$text('unit')] ?? $text('unit'),
+            $number('unit_cost'), $number('total_amount'),
+            $phase !== '' ? $tree->path((int) $phase) : '',
+            $text('details'),
+        ];
+    }
+
     /** A sheet date: a day serial number, or text such as 03/11/2026 (day first) or 2026-11-03. */
     private function date(mixed $value): ?string
     {
@@ -315,6 +405,9 @@ class ProjectSheetLines
 
     private function loadLookups(): void
     {
+        foreach (array_keys($this->labels) as $type) {
+            $this->labels[$type] = Lookup::query()->where('type', $type)->pluck('label', 'code')->all();
+        }
         $this->categories = [];
         foreach (Lookup::ofType('main_category')->get() as $lookup) {
             $this->categories[mb_strtolower($lookup->label)] = $lookup->code;
