@@ -2,6 +2,13 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-12 — Review Panel on Record Expense (Sheet Sync Step 4)
+
+- `DraftReviewService` checks the lines on the Record Expense form the way imported drafts were reviewed by hand. **Errors (stop saving):** date in the future or not a date, no price (Data Entry only; a warning for others), unit or subcategory not in the system, spreadsheet error values (`#REF!`, `#VALUE!`…), no item, no phase. **Warnings:** day and month probably swapped (the date breaks the row order and the swapped date is nearer the rows around it, e.g. "08 Apr 2026 may be 04 Aug 2026"), date out of order, quantity × unit cost ≠ total (beyond TSh 1 plus the 2-decimal quantity rounding), subcategory from another main category, the same date + item + amount twice in the form, and possible doubles of saved lines (same item and amount, or same amount and subcategory within 3 days).
+- The form has a **Review** button and a Review panel (also opened automatically when a draft is restored, and refreshed as she types). Problems are grouped with counts; clicking a group shows only those lines (like "Show date"), and each line carries its notes in red or amber. Only the lines shown are saved, as with the date filter.
+- Save is stopped while an error remains: the page checks first and points to the lines, and `storeRows` runs the same review on the server (`POST ledger/projects/{project}/draft/review` is the page's endpoint).
+- Deployed after backup `before-draft-review`. Run read-only on Data Entry's Kinondoni draft (334 lines) it found the two unpriced lines (0236/0237), 0336 as a possible double of KND-RES-TXN-0001, two TRANSPORT lines with the same date and amount, nails lines like saved KND-RES-TXN-0005/0006, and 12 cross-category lines. 167 lines of that draft have no phase stored; on the form they take the phase of the row above (existing behaviour), so the on-screen Review does not flag them.
+
 ## 2026-11-12 — Google Sheet Lines Into Data Entry Drafts Every 5 Minutes (Sheet Sync Step 3)
 
 - `php artisan app:sheets-sync` (`ProjectSheetLines`) reads every project tab in one call and keeps the Data Entry draft of that project in step: a new sheet line is added to the draft, a changed one is updated, and a row deleted or emptied in the sheet leaves the draft. Nothing reaches the ledger; she still checks and saves in Buildiwick. The draft owner is the account with username `GOOGLE_SHEETS_DRAFT_USERNAME` (default `user`).

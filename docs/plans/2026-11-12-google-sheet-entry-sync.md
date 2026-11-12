@@ -1,6 +1,6 @@
 # Plan: Google Sheet entry, synced to Data Entry drafts
 
-Status: **agreed 2026-11-12; steps 1–3 built (sync every 5 minutes).** Read with `CLAUDE.md` (recording mode, Data Entry, drafts).
+Status: **agreed 2026-11-12; steps 1–4 built (sync every 5 minutes; Review panel).** Read with `CLAUDE.md` (recording mode, Data Entry, drafts).
 
 ## Why
 
