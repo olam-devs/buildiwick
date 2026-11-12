@@ -40,6 +40,8 @@ return [
         'key_path' => env('GOOGLE_SHEETS_KEY_PATH'),
         // The shared "Buildiwick Project Entries" spreadsheet that Data Entry types into.
         'spreadsheet_id' => env('GOOGLE_SHEETS_SPREADSHEET_ID'),
+        // Username of the Data Entry account whose drafts receive the sheet lines.
+        'draft_username' => env('GOOGLE_SHEETS_DRAFT_USERNAME', 'user'),
     ],
 
 ];

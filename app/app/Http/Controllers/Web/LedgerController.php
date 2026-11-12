@@ -10,6 +10,7 @@ use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectEditLog;
 use App\Models\ProjectPhase;
+use App\Models\SheetLine;
 use App\Models\User;
 use App\Services\ExpenseLedgerService;
 use App\Services\LedgerAnalyticsService;
@@ -205,23 +206,32 @@ class LedgerController extends Controller
             'rows' => ['nullable', 'array', 'max:'.self::MAX_ROWS],
             'rows.*' => ['array'],
             'rows.*.*' => ['nullable', 'string', 'max:2000'],
+            'known_keys' => ['nullable', 'array'],
+            'known_keys.*' => ['string', 'max:20'],
         ]);
-        $draft = $this->keepDraft($request->user(), $project, $validated['header'] ?? [], $validated['rows'] ?? []);
+        $arrived = 0;
+        $draft = $this->keepDraft($request->user(), $project, $validated['header'] ?? [], $validated['rows'] ?? [], $validated['known_keys'] ?? null, arrived: $arrived);
 
-        return response()->json($draft ? ['saved' => true, 'at' => $draft->updated_at->format('H:i')] : ['saved' => false]);
+        return response()->json(($draft ? ['saved' => true, 'at' => $draft->updated_at->format('H:i')] : ['saved' => false]) + ['arrived' => $arrived]);
     }
 
     /**
      * Stores the user's unsaved rows (and the header above them) as the project's draft; with no filled-in row
      * the draft is removed instead.
      *
+     * Lines the Google sheet sync added meanwhile are kept (see ExpenseDraft::mergeFromPage); $arrived counts them.
+     *
      * @param  array<string, mixed>  $header
      * @param  array<int, array<string, mixed>>  $rows
+     * @param  list<string>|null  $knownKeys
+     * @param  list<string>  $savedKeys
      */
-    private function keepDraft(User $user, Project $project, array $header, array $rows): ?ExpenseDraft
+    private function keepDraft(User $user, Project $project, array $header, array $rows, ?array $knownKeys = null, array $savedKeys = [], int &$arrived = 0): ?ExpenseDraft
     {
-        $fields = ['expense_date', 'main_category', 'project_phase_id', 'item_description', 'supplier', 'subcategory', 'quantity', 'unit', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details', 'labour_agreement_id'];
-        $rows = collect($rows)->filter(fn ($row) => is_array($row))->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))
+        $fields = ['expense_date', 'main_category', 'project_phase_id', 'item_description', 'supplier', 'subcategory', 'quantity', 'unit', 'unit_cost', 'total_amount', 'invoice_receipt_no', 'details', 'labour_agreement_id', 'sheet_key', 'sheet_rev'];
+        $rows = collect($rows)->filter(fn ($row) => is_array($row))->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))->values()->all();
+        [$rows, $arrived] = ExpenseDraft::mergeFromPage(ExpenseDraft::for($user, $project), $rows, $knownKeys, $savedKeys);
+        $rows = collect($rows)->map(fn (array $row) => array_intersect_key($row, array_flip($fields)))
             ->filter(fn (array $row) => collect($row)->only(['item_description', 'unit_cost', 'total_amount'])->filter(fn ($v) => trim((string) $v) !== '')->isNotEmpty())
             ->values();
         if ($rows->isEmpty()) {
@@ -268,7 +278,7 @@ class LedgerController extends Controller
     private function storeRows(Request $request, Project $project, ExpenseLedgerService $ledger)
     {
         $rows = collect($request->input('rows', []))
-            ->filter(fn ($row) => is_array($row) && collect($row)->except(['expense_date', 'main_category', 'project_phase_id', 'supplier', 'quantity', 'unit', 'invoice_receipt_no', 'details'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
+            ->filter(fn ($row) => is_array($row) && collect($row)->except(['expense_date', 'main_category', 'project_phase_id', 'supplier', 'quantity', 'unit', 'invoice_receipt_no', 'details', 'sheet_key', 'sheet_rev'])->filter(fn ($v) => $v !== null && trim((string) $v) !== '')->isNotEmpty())
             ->values()->all();
         $request->merge(['rows' => $rows]);
         if ($request->user()->hasRole('admin')) {
@@ -306,13 +316,22 @@ class LedgerController extends Controller
             'rows.max' => 'Save at most '.self::MAX_ROWS.' items at a time.',
         ]);
         // A row keeps its own date when it has one (past data entered in one go); otherwise it takes the date above.
-        $lines = DB::transaction(fn () => collect($header['rows'])->map(fn (array $row) => $ledger->record($project, ['expense_date' => ($row['expense_date'] ?? null) ?: $header['expense_date']] + $row + [
-            'status' => $header['status'], 'payment_date' => $header['payment_date'] ?? null,
-            'payment_method' => $header['payment_method'] ?? null, 'transaction_reference' => $header['transaction_reference'] ?? null,
-        ], $request->user())));
+        // Lines that came from the Google sheet carry its row key, so the sheet line is marked saved.
+        $sheetKeys = array_map(fn ($row) => is_array($row) && is_string($row['sheet_key'] ?? null) ? $row['sheet_key'] : null, $request->input('rows', []));
+        $lines = DB::transaction(function () use ($header, $project, $ledger, $request, $sheetKeys) {
+            $lines = collect($header['rows'])->map(fn (array $row) => $ledger->record($project, ['expense_date' => ($row['expense_date'] ?? null) ?: $header['expense_date']] + $row + [
+                'status' => $header['status'], 'payment_date' => $header['payment_date'] ?? null,
+                'payment_method' => $header['payment_method'] ?? null, 'transaction_reference' => $header['transaction_reference'] ?? null,
+            ], $request->user()));
+            SheetLine::markSaved(collect($sheetKeys)->map(fn ($key, $index) => $key ? [$key, $lines[$index]->id] : null)->filter()->pluck(1, 0)->all());
+
+            return $lines;
+        });
         // Rows left out of this save (another date shown) stay in the draft for later; otherwise the draft is done.
         $kept = json_decode((string) $request->input('keep_json', '[]'), true);
-        $left = $this->keepDraft($request->user(), $project, $request->only(['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference']), is_array($kept) ? $kept : []);
+        $known = json_decode((string) $request->input('known_keys_json', 'null'), true);
+        $left = $this->keepDraft($request->user(), $project, $request->only(['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference']), is_array($kept) ? $kept : [],
+            is_array($known) ? array_values(array_filter($known, 'is_string')) : null, array_values(array_filter($sheetKeys)));
         $total = LedgerAnalyticsService::money((int) $lines->sum(fn ($line) => LedgerAnalyticsService::cents($line->total_amount)));
         $next = $this->afterSave($request, $project);
 

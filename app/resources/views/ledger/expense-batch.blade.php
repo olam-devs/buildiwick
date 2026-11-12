@@ -269,7 +269,7 @@
       <td class="rb-more rb-datecell" data-label="Date"><input data-f="date" type="date" name="rows[${i}][expense_date]" max="${C.today}"></td>
       <td class="rb-cat rb-catcell" data-label="Category"><select data-f="cat" name="rows[${i}][main_category]">${Object.entries(C.categories).map(([c, l]) => `<option value="${c}">${esc(l)}</option>`).join('')}</select></td>
       <td class="rb-more rb-phasecell" data-label="${C.phaseWord}"><select data-f="phase" name="rows[${i}][project_phase_id]">${phaseOptions}</select></td>
-      <td class="rb-item" data-label="Item"><input data-f="item" name="rows[${i}][item_description]" maxlength="255" value="${esc(data.item_description)}" autocomplete="off">
+      <td class="rb-item" data-label="Item"><input data-f="item" name="rows[${i}][item_description]" maxlength="255" value="${esc(data.item_description)}" autocomplete="off"><input type="hidden" name="rows[${i}][sheet_key]" value="${esc(data.sheet_key)}"><input type="hidden" name="rows[${i}][sheet_rev]" value="${esc(data.sheet_rev)}">
           <div class="worker-wrap" style="margin-top:5px"><select name="rows[${i}][labour_agreement_id]">${workerOptions(data.labour_agreement_id ?? (i === 0 ? C.presetWorker : ''))}</select></div></td>
       <td class="rb-more rb-supcell" data-label="Supplier"><input data-f="sup" name="rows[${i}][supplier]" list="supplierList" maxlength="150" autocomplete="off"></td>
       <td class="rb-more rb-subcell" data-label="Subcategory"><select data-f="sub" name="rows[${i}][subcategory]" data-value="${esc(data.subcategory)}"></select></td>
@@ -372,10 +372,12 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
   // Draft: the form is saved to the account as you type, and removed once the expenses are saved.
   const token = document.querySelector('#batchForm input[name=_token]').value, statusLine = document.getElementById('draftStatus');
   let draftTimer = null, submitting = false, lastSent = '';
+  // Lines from the Google sheet this page has loaded; lines the sheet sync adds later are kept by the server.
+  const knownKeys = (C.draft?.rows || []).map(r => r.sheet_key).filter(Boolean);
   const collect = () => {
     const header = {};
     ['expense_date', 'default_category', 'default_phase', 'default_supplier', 'default_receipt', 'default_notes', 'payment_date', 'payment_method', 'transaction_reference'].forEach(id => { const el = document.getElementById(id); if (el) header[id] = el.value; });
-    return JSON.stringify({header, rows: [...body.children].map(rowData)});
+    return JSON.stringify({header, rows: [...body.children].map(rowData), known_keys: knownKeys});
   };
   const saveDraft = (keepalive = false) => {
     if (submitting) return;
@@ -384,7 +386,7 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
     lastSent = payload;
     fetch(C.draftUrl, {method: 'POST', keepalive, headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token}, body: payload})
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => { statusLine.textContent = d.saved ? `Draft saved at ${d.at}. You can continue later on any device.` : 'Your entry is kept as a draft while you type, so you can continue later on any device.'; })
+      .then(d => { statusLine.textContent = d.arrived ? `${d.arrived} new line(s) arrived from the Google Sheet and are kept in your draft. Reload the page to see them.` : d.saved ? `Draft saved at ${d.at}. You can continue later on any device.` : 'Your entry is kept as a draft while you type, so you can continue later on any device.'; })
       .catch(() => { lastSent = ''; statusLine.textContent = 'Draft not saved (no connection?). Keep the page open and save when you can.'; });
   };
   const queueDraft = () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 1500); };
@@ -432,7 +434,7 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
   document.getElementById('batchForm').addEventListener('submit', e => { const bad = shownRows().find(tr => tr.querySelector('[data-f=item]').value.trim() && !tr.querySelector('[data-f=phase]').value); if (bad) { e.preventDefault(); bad.querySelector('[data-f=phase]').focus(); alert('Choose a phase for every item.'); } });
   // The rows are sent packed in one field: the server drops form fields past its limit (about 75 rows' worth).
   const rowInputs = () => body.querySelectorAll('[name^="rows["]');
-  const unpack = () => { form.querySelectorAll('input[name=rows_json], input[name=keep_json]').forEach(el => el.remove()); rowInputs().forEach(el => el.disabled = false); };
+  const unpack = () => { form.querySelectorAll('input[name=rows_json], input[name=keep_json], input[name=known_keys_json]').forEach(el => el.remove()); rowInputs().forEach(el => el.disabled = false); };
   form.addEventListener('submit', e => {
     if (e.defaultPrevented) return;
     unpack();
@@ -440,6 +442,8 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
       const field = document.createElement('input'); field.type = 'hidden'; field.name = name; field.value = JSON.stringify(rows.map(rowData));
       form.appendChild(field);
     });
+    const known = document.createElement('input'); known.type = 'hidden'; known.name = 'known_keys_json'; known.value = JSON.stringify(knownKeys);
+    form.appendChild(known);
     rowInputs().forEach(el => el.disabled = true);
   });
   window.addEventListener('pageshow', unpack);

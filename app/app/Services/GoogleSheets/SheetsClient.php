@@ -6,6 +6,7 @@ use Google\Client;
 use Google\Service\Drive;
 use Google\Service\Sheets;
 use Google\Service\Sheets\BatchUpdateSpreadsheetRequest;
+use Google\Service\Sheets\BatchUpdateValuesRequest;
 use RuntimeException;
 
 /**
@@ -81,6 +82,40 @@ class SheetsClient
             return;
         }
         $this->sheets()->spreadsheets->batchUpdate($this->spreadsheetId(), new BatchUpdateSpreadsheetRequest(['requests' => $requests]));
+    }
+
+    /**
+     * Cell values of several A1 ranges in one call, unformatted (numbers as numbers, dates as day serials).
+     *
+     * @param  list<string>  $ranges
+     * @return list<list<list<mixed>>> one grid per range, in the order asked
+     */
+    public function readValues(array $ranges): array
+    {
+        if ($ranges === []) {
+            return [];
+        }
+        $response = $this->sheets()->spreadsheets_values->batchGet($this->spreadsheetId(), [
+            'ranges' => $ranges, 'valueRenderOption' => 'UNFORMATTED_VALUE', 'dateTimeRenderOption' => 'SERIAL_NUMBER',
+        ]);
+
+        return array_map(fn ($range) => $range->getValues() ?? [], $response->getValueRanges());
+    }
+
+    /**
+     * Writes plain values into cells, several ranges in one call.
+     *
+     * @param  array<string, list<list<mixed>>>  $data  A1 range => rows of values
+     */
+    public function writeValues(array $data): void
+    {
+        if ($data === []) {
+            return;
+        }
+        $this->sheets()->spreadsheets_values->batchUpdate($this->spreadsheetId(), new BatchUpdateValuesRequest([
+            'valueInputOption' => 'RAW',
+            'data' => array_map(fn (string $range, array $values) => ['range' => $range, 'values' => $values], array_keys($data), $data),
+        ]));
     }
 
     public function serviceAccountEmail(): string
