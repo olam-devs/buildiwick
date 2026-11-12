@@ -296,7 +296,9 @@ class ProjectSheetLines
         $phase = $phases->first(fn (array $node) => mb_strtolower($node['path']) === mb_strtolower($phaseText))
             ?? ($byName->count() === 1 ? $byName->first() : null);
         $row['project_phase_id'] = $phase ? (string) $phase['phase']->id : '';
-        if ($phaseText !== '' && ! $phase) {
+        if ($phaseText === '') {
+            $problems[] = 'no phase';
+        } elseif (! $phase) {
             $problems[] = "phase \"{$phaseText}\" not in this project";
         } elseif ($phase && ! $tree->isLeaf($phase['phase']->id)) {
             $problems[] = "phase \"{$phaseText}\" has sub-phases, pick one of them";
