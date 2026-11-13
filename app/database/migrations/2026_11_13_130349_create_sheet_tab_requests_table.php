@@ -15,6 +15,8 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('sheet_tab_id')->unique();
             $table->string('title');
+            $table->string('project_code', 50)->nullable();
+            $table->string('location', 150)->nullable();
             $table->unsignedInteger('line_count')->default(0);
             $table->boolean('layout_ok')->default(true);
             $table->string('status')->default('pending');

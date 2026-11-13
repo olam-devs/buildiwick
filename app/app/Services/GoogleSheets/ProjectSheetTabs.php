@@ -2,6 +2,7 @@
 
 namespace App\Services\GoogleSheets;
 
+use App\Http\Controllers\Web\ProjectSetupController;
 use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\SheetTabRequest;
@@ -123,16 +124,19 @@ class ProjectSheetTabs
             if (! $request->exists) {
                 $report['new'][] = $tab['title'];
             }
-            $request->fill(['title' => $tab['title'], 'line_count' => $lines, 'layout_ok' => $layoutOk, 'status' => $request->status ?? 'pending'])->save();
+            $code = strtoupper(trim((string) ($grid[0][ProjectSheetLayout::CODE_COLUMN] ?? '')));
+            $location = trim((string) ($grid[0][ProjectSheetLayout::LOCATION_COLUMN] ?? ''));
+            $request->fill(['title' => $tab['title'], 'line_count' => $lines, 'layout_ok' => $layoutOk, 'status' => $request->status ?? 'pending',
+                'project_code' => $code !== '' ? mb_substr($code, 0, 50) : null, 'location' => $location !== '' ? mb_substr($location, 0, 150) : null])->save();
             if ($request->status === 'pending') {
                 $report['waiting']++;
             }
 
-            $heading = $request->status === 'rejected' ? ProjectSheetLayout::rejectedHeading() : ProjectSheetLayout::waitingHeading();
+            $heading = $request->status === 'rejected' ? ProjectSheetLayout::rejectedHeading() : ProjectSheetLayout::waitingHeading($request->detailsProblem());
             if ($blank) {
-                $requests = [...$requests, ...$this->layout->setUp($tab['id'], $heading, $this->sharedLists() + ['phases' => []], $this->client->serviceAccountEmail())];
-            } elseif ($layoutOk && trim((string) ($grid[0][1] ?? '')) !== $heading) {
-                $requests = [...$requests, ...$this->layout->headingRequest($tab['id'], $heading)];
+                $requests = [...$requests, ...$this->layout->setUp($tab['id'], $heading, $this->sharedLists() + ['phases' => self::standardPhases()], $this->client->serviceAccountEmail(), true)];
+            } elseif ($layoutOk && trim((string) ($grid[0][ProjectSheetLayout::NEW_HEADING_COLUMN] ?? '')) !== $heading) {
+                $requests = [...$requests, ...$this->layout->headingRequest($tab['id'], $heading, ProjectSheetLayout::NEW_HEADING_COLUMN)];
             }
         }
         $this->client->batchUpdate($requests);
@@ -141,7 +145,8 @@ class ProjectSheetTabs
     }
 
     /**
-     * Creates the "+ New project" tab when it is missing: laid out like a project tab, with a free-text Phase column.
+     * Creates the "+ New project" tab when it is missing: laid out like a project tab, with the standard phases (every new
+     * project starts with them) in the Phase dropdown and cells for the project code and location in row 1.
      *
      * @param  list<array{id: int, title: string, rows?: int}>  $tabs
      */
@@ -155,7 +160,7 @@ class ProjectSheetTabs
         $this->client->batchUpdate([
             ['addSheet' => ['properties' => ['sheetId' => $id, 'title' => $title,
                 'gridProperties' => ['rowCount' => ProjectSheetLayout::ROWS, 'columnCount' => count(ProjectSheetLayout::COLUMNS), 'frozenRowCount' => 2]]]],
-            ...$this->layout->setUp($id, ProjectSheetLayout::templateHeading(), $this->sharedLists() + ['phases' => []], $this->client->serviceAccountEmail()),
+            ...$this->layout->setUp($id, ProjectSheetLayout::templateHeading(), $this->sharedLists() + ['phases' => self::standardPhases()], $this->client->serviceAccountEmail(), true),
         ]);
         if (collect($tabs)->contains('title', 'How to use')) {
             $this->client->writeValues(["'How to use'!A2" => [[ProjectSheetLayout::GUIDE_TABS]]]);
@@ -183,12 +188,18 @@ class ProjectSheetTabs
             $lists = $this->sharedLists() + ['phases' => (new PhaseTree($project->phases))->flatten()->pluck('path')->all()];
             $this->client->batchUpdate([
                 ...($title !== $tab['title'] ? $this->layout->rename($tab['id'], $title) : []),
-                ...$this->layout->headingRequest($tab['id'], ProjectSheetLayout::heading($project)),
+                ...$this->layout->projectRow($tab['id'], $project),
                 ...$this->layout->validation($tab['id'], $lists),
             ]);
             $request->update(['tab_ready_at' => now()]);
             $report['ready'][] = $title;
         }
+    }
+
+    /** @return list<string> the phases every new project starts with */
+    public static function standardPhases(): array
+    {
+        return ProjectSetupController::startingPhases(false);
     }
 
     private static function quote(string $title): string

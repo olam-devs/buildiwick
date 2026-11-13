@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * the Director creates the project from it (`approved`, the tab becomes that project's tab and its lines go into the
  * draft) or marks it as not a project (`rejected`, its lines are never read).
  */
-#[Fillable(['sheet_tab_id', 'title', 'line_count', 'layout_ok', 'status', 'project_id', 'decided_by', 'decided_at', 'tab_ready_at'])]
+#[Fillable(['sheet_tab_id', 'title', 'project_code', 'location', 'line_count', 'layout_ok', 'status', 'project_id', 'decided_by', 'decided_at', 'tab_ready_at'])]
 class SheetTabRequest extends Model
 {
     protected function casts(): array
@@ -21,6 +21,28 @@ class SheetTabRequest extends Model
             'decided_at' => 'datetime',
             'tab_ready_at' => 'datetime',
         ];
+    }
+
+    /** Pattern of a project code (same rule as the New Project form). */
+    public const CODE_PATTERN = '/^[A-Z0-9][A-Z0-9-]*$/';
+
+    /** What stops a one-click approval with the code and location she typed in row 1, or null when both are fine. */
+    public function detailsProblem(): ?string
+    {
+        if (! $this->project_code) {
+            return 'Type the project code in the yellow cell C1 (e.g. BWG-MSV-2026-001).';
+        }
+        if (! preg_match(self::CODE_PATTERN, $this->project_code)) {
+            return 'Project code "'.$this->project_code.'": use capital letters, numbers and dashes only.';
+        }
+        if (Project::query()->where('project_code', $this->project_code)->exists()) {
+            return 'Project code "'.$this->project_code.'" is already used by another project.';
+        }
+        if (! $this->location) {
+            return 'Type the location in the yellow cell E1.';
+        }
+
+        return null;
     }
 
     public function project(): BelongsTo

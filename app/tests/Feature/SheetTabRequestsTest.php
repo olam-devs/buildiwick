@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\SheetTabRequest;
 use App\Models\User;
 use App\Services\GoogleSheets\ProjectSheetLayout;
+use App\Services\GoogleSheets\ProjectSheetTabs;
 use App\Services\GoogleSheets\SheetsClient;
 use Database\Seeders\LookupSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -45,43 +46,68 @@ class SheetTabRequestsTest extends TestCase
 
     public function test_a_tab_she_adds_waits_for_approval_and_its_lines_reach_the_draft_once_the_project_is_created(): void
     {
-        // First run: the "+ New project" template appears.
+        // First run: the "+ New project" template appears, with the standard phases in its Phase dropdown.
         $this->artisan('app:sheets-sync')->assertSuccessful();
         $this->assertContains(ProjectSheetLayout::TEMPLATE_TITLE, $this->sheets->titles());
+        $this->assertSame(ProjectSheetTabs::standardPhases(), $this->sheets->dropdown(ProjectSheetLayout::TEMPLATE_TAB_ID, 12));
 
-        // She duplicates it, renames it and types two lines before anyone approves it.
+        // She duplicates it, renames it, types the code and location in row 1 and two lines, before anyone approves it.
         $headers = array_column(ProjectSheetLayout::COLUMNS, 'header');
         $this->sheets->add(555, 'Msasani villa', [
-            ['', ProjectSheetLayout::templateHeading()], $headers,
-            ['', '', 46337, 'Materials', '', 'Cement 42.5', '', '', 10, 'BAG', 18500, 185000, 'Foundation', ''],
-            ['', '', 46337, 'Materials', '', 'Sand', '', '', 1, '', '', 350000, '', ''],
+            ['', 'Project code →', 'bwg-msv-2026-001 ', 'Location →', '', ProjectSheetLayout::templateHeading()], $headers,
+            ['', '', 46337, 'Materials', '', 'Cement 42.5', '', '', 10, 'BAG', 18500, 185000, 'Substructure (Foundation)', ''],
+            ['', '', 46337, 'Materials', '', 'Sand', '', '', 1, '', '', 350000, 'Walling', ''],
         ]);
         $this->artisan('app:sheets-sync')->expectsOutputToContain('New project tabs waiting for approval: Msasani villa')->assertSuccessful();
 
         $tab = SheetTabRequest::sole();
-        $this->assertSame(['pending', 2, true], [$tab->status, $tab->line_count, $tab->layout_ok]);
-        $this->assertSame(ProjectSheetLayout::waitingHeading(), $this->sheets->cell(555, 'B1'));
+        $this->assertSame(['pending', 2, true, 'BWG-MSV-2026-001', null], [$tab->status, $tab->line_count, $tab->layout_ok, $tab->project_code, $tab->location]);
+        // Row 1 tells her what is still missing; nothing reaches the draft yet.
+        $this->assertSame(ProjectSheetLayout::waitingHeading('Type the location in the yellow cell E1.'), $this->sheets->cell(555, 'F1'));
         $this->assertSame(0, ExpenseDraft::query()->count());
+        $this->actingAs($this->director)->get(route('admin.sheet-tabs.index'))->assertSee('Fill in details')->assertDontSee(route('admin.sheet-tabs.approve', $tab));
 
-        // The Director sees it and creates the project from it.
+        $this->sheets->put(555, 'E1', 'Msasani');
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $this->assertSame(ProjectSheetLayout::waitingHeading(), $this->sheets->cell(555, 'F1'));
+
+        // The Director sees it and approves it in one click.
         $this->actingAs($this->director)->get(route('director.index'))->assertSee('waiting for your approval');
-        $this->actingAs($this->director)->get(route('admin.sheet-tabs.index'))->assertOk()->assertSee('Msasani villa')->assertSee('Create project');
-        $this->actingAs($this->director)->get(route('admin.projects.create', ['sheet_tab' => $tab->id]))->assertOk()->assertSee('value="Msasani villa"', false);
-        $this->actingAs($this->director)->post(route('admin.projects.store'), [
-            'project_code' => 'BWG-MSV-2026-001', 'name' => 'Msasani villa', 'status' => 'active', 'location' => 'Msasani', 'standard_stages' => '1',
-            'sheet_tab_request_id' => $tab->id,
-        ])->assertRedirect();
+        $this->actingAs($this->director)->get(route('admin.sheet-tabs.index'))->assertOk()->assertSee('Msasani villa')->assertSee('BWG-MSV-2026-001')->assertSee(route('admin.sheet-tabs.approve', $tab));
+        $this->actingAs($this->director)->get(route('admin.projects.create', ['sheet_tab' => $tab->id]))->assertOk()->assertSee('value="BWG-MSV-2026-001"', false)->assertSee('value="Msasani"', false);
+        $this->actingAs($this->director)->post(route('admin.sheet-tabs.approve', $tab))->assertRedirect();
 
         $project = Project::where('project_code', 'BWG-MSV-2026-001')->sole();
-        $this->assertSame(555, (int) $project->sheet_tab_id);
+        $this->assertSame([555, 'Msasani villa', 'Msasani', 'active'], [(int) $project->sheet_tab_id, $project->name, $project->location, $project->status]);
+        $this->assertSame(ProjectSheetTabs::standardPhases(), $project->phases()->orderBy('phase_order')->pluck('phase_name')->all());
         $this->assertSame(['approved', $project->id], [$tab->fresh()->status, $tab->fresh()->project_id]);
         $this->assertTrue($project->assignedUsers()->whereKey($this->clerk->id)->exists());
         $this->assertSame(ProjectSheetLayout::heading($project), $this->sheets->cell(555, 'B1'));
 
-        // The next sync treats it like every other project tab: both lines go into her draft, no second tab is made.
+        // The next sync treats it like every other project tab: both lines go into her draft with their phases.
         $this->artisan('app:sheets-sync')->expectsOutputToContain('Added 2')->assertSuccessful();
-        $this->assertSame(['Cement 42.5', 'Sand'], array_column(ExpenseDraft::for($this->clerk, $project)->data['rows'], 'item_description'));
+        $rows = ExpenseDraft::for($this->clerk, $project)->data['rows'];
+        $this->assertSame(['Cement 42.5', 'Sand'], array_column($rows, 'item_description'));
+        $this->assertSame($project->phases()->whereIn('phase_name', ['Substructure (Foundation)', 'Walling'])->orderBy('phase_order')->pluck('id')->map(fn ($id) => (string) $id)->all(),
+            array_map('strval', array_column($rows, 'project_phase_id')));
         $this->assertCount(3, $this->sheets->titles());
+    }
+
+    public function test_the_director_can_correct_the_details_in_the_form_before_approving(): void
+    {
+        $this->sheets->add(556, 'Mbezi beach', [['', 'Project code →', 'BWG KND', 'Location →', 'Mbezi'], array_column(ProjectSheetLayout::COLUMNS, 'header')]);
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $tab = SheetTabRequest::sole();
+        $this->assertStringContainsString('capital letters, numbers and dashes', $tab->detailsProblem());
+
+        $this->actingAs($this->director)->post(route('admin.sheet-tabs.approve', $tab))->assertRedirect(route('admin.projects.create', ['sheet_tab' => $tab->id]));
+        $this->assertSame(0, Project::query()->count());
+        $this->actingAs($this->director)->post(route('admin.projects.store'), [
+            'project_code' => 'BWG-MBZ-2026-001', 'name' => 'Mbezi beach house', 'status' => 'active', 'location' => 'Mbezi', 'standard_stages' => '1',
+            'sheet_tab_request_id' => $tab->id,
+        ])->assertRedirect();
+        $this->assertSame(556, (int) Project::sole()->sheet_tab_id);
+        $this->assertSame('approved', $tab->fresh()->status);
     }
 
     public function test_a_tab_marked_as_not_a_project_is_never_read_and_only_the_director_decides(): void
@@ -97,7 +123,7 @@ class SheetTabRequestsTest extends TestCase
 
         $this->actingAs($this->director)->post(route('admin.sheet-tabs.reject', $tab))->assertRedirect();
         $this->assertSame('rejected', $tab->fresh()->status);
-        $this->assertSame(ProjectSheetLayout::rejectedHeading(), $this->sheets->cell(777, 'B1'));
+        $this->assertSame(ProjectSheetLayout::rejectedHeading(), $this->sheets->cell(777, 'F1'));
         $this->actingAs($this->director)->get(route('director.index'))->assertDontSee('waiting for your approval');
 
         // Deleting the tab from the sheet forgets it.
@@ -138,6 +164,21 @@ class TabbedSheet extends SheetsClient
         preg_match('/^([A-Z])(\d+)$/', $a1, $m);
 
         return $this->grids[$id][(int) $m[2] - 1][ord($m[1]) - 65] ?? null;
+    }
+
+    public function put(int $id, string $a1, mixed $value): void
+    {
+        preg_match('/^([A-Z])(\d+)$/', $a1, $m);
+        $this->grids[$id][(int) $m[2] - 1][ord($m[1]) - 65] = $value;
+    }
+
+    /** @var array<int, array<int, list<string>>> dropdown values per tab id and column */
+    private array $dropdowns = [];
+
+    /** @return list<string> */
+    public function dropdown(int $id, int $column): array
+    {
+        return $this->dropdowns[$id][$column] ?? [];
     }
 
     public function isConfigured(): bool
@@ -201,7 +242,11 @@ class TabbedSheet extends SheetsClient
             if (isset($request['updateSheetProperties']['properties']['title'])) {
                 $this->tabList[$request['updateSheetProperties']['properties']['sheetId']]['title'] = $request['updateSheetProperties']['properties']['title'];
             }
-            if (isset($request['updateCells'])) {
+            if (isset($request['setDataValidation'])) {
+                $range = $request['setDataValidation']['range'];
+                $this->dropdowns[$range['sheetId']][$range['startColumnIndex']] = array_column($request['setDataValidation']['rule']['condition']['values'] ?? [], 'userEnteredValue');
+            }
+            if (isset($request['updateCells']['start'])) {
                 $start = $request['updateCells']['start'];
                 foreach ($request['updateCells']['rows'] as $r => $row) {
                     foreach ($row['values'] as $c => $value) {

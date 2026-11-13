@@ -76,6 +76,9 @@ class ProjectSetupController extends Controller
         $this->authorize('create', Project::class);
         if (Features::recording()) {
             $sheetTab = $request->filled('sheet_tab') ? SheetTabRequest::query()->where('status', 'pending')->find($request->integer('sheet_tab')) : null;
+            if ($sheetTab && ! $request->session()->hasOldInput()) {
+                $request->session()->flashInput(['name' => $sheetTab->title, 'project_code' => $sheetTab->project_code, 'location' => $sheetTab->location]);
+            }
 
             return view('projects.recording-form', $this->recordingFormData(null) + ['sheetTab' => $sheetTab]);
         }
@@ -124,6 +127,32 @@ class ProjectSetupController extends Controller
         $decided = SheetTabRequest::query()->where('status', '!=', 'pending')->with(['project', 'decider'])->latest('decided_at')->limit(20)->get();
 
         return view('projects.sheet-tabs', compact('waiting', 'decided'));
+    }
+
+    /**
+     * One-click approval with the code and location she typed in the tab: the project is created with the tab's name
+     * and the standard phases, and the tab becomes its tab.
+     */
+    public function approveSheetTab(Request $request, SheetTabRequest $sheetTab, PhaseStructureService $phases)
+    {
+        $this->authorize('create', Project::class);
+        abort_unless($sheetTab->status === 'pending', 409, 'This tab has already been decided.');
+        if ($problem = $sheetTab->detailsProblem()) {
+            return redirect()->route('admin.projects.create', ['sheet_tab' => $sheetTab->id])->withErrors(['project_code' => $problem]);
+        }
+        $project = DB::transaction(function () use ($sheetTab, $request, $phases): Project {
+            $project = Project::create(['project_code' => $sheetTab->project_code, 'name' => mb_substr($sheetTab->title, 0, 150), 'status' => 'active',
+                'location' => $sheetTab->location, 'is_company_overheads' => false, 'created_by' => $request->user()->id]);
+            foreach (self::startingPhases(false) as $stage) {
+                $phases->create($project, $stage, null, $request->user());
+            }
+            $this->adoptSheetTab($project, $sheetTab->id, $request->user());
+
+            return $project;
+        });
+        $this->refreshSheetTabs();
+
+        return back()->with('success', 'Project '.$project->project_code.' · '.$project->name.' is approved. Her lines in the tab go into her Record Expense draft within 5 minutes.');
     }
 
     public function rejectSheetTab(Request $request, SheetTabRequest $sheetTab)

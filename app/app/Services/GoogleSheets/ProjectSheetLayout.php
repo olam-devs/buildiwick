@@ -23,6 +23,13 @@ class ProjectSheetLayout
 
     public const TEMPLATE_TITLE = '+ New project';
 
+    /** Row 1 of a new-project tab: she types the project code in C1 and the location in E1; the heading is in F1. */
+    public const CODE_COLUMN = 2;
+
+    public const LOCATION_COLUMN = 4;
+
+    public const NEW_HEADING_COLUMN = 5;
+
     public const GUIDE_TABS = 'One tab per project. For a project not in Buildiwick yet: right-click the "+ New project" tab, Duplicate, rename the copy to the project name and type in it; the owner approves it in Buildiwick.';
 
     /** @var list<array{key: string, header: string, width: int}> */
@@ -91,12 +98,13 @@ class ProjectSheetLayout
 
     public static function templateHeading(): string
     {
-        return 'NEW PROJECT: do not type here. Right-click this tab → Duplicate, rename the copy to the project name and type lines from row 3. The owner approves the new project in Buildiwick.';
+        return 'NEW PROJECT: do not type here. Right-click this tab → Duplicate, rename the copy to the project name, fill in the code and location on the left and type lines from row 3. The owner approves it in Buildiwick.';
     }
 
-    public static function waitingHeading(): string
+    /** @param  string|null  $problem  what is wrong with the code or location she typed in row 1 */
+    public static function waitingHeading(?string $problem = null): string
     {
-        return 'New project, waiting for approval in Buildiwick. Keep typing lines from row 3; they go into your Buildiwick draft once the project is approved.';
+        return ($problem ? $problem.' ' : '').'New project, waiting for approval in Buildiwick. Keep typing lines from row 3; they go into your Buildiwick draft once it is approved.';
     }
 
     public static function rejectedHeading(): string
@@ -105,28 +113,68 @@ class ProjectSheetLayout
     }
 
     /** @return list<array<string, mixed>> the request that writes row 1's text */
-    public function headingRequest(int $sheetId, string $heading): array
+    public function headingRequest(int $sheetId, string $heading, int $column = 1): array
     {
         return [['updateCells' => [
-            'start' => ['sheetId' => $sheetId, 'rowIndex' => 0, 'columnIndex' => 1],
+            'start' => ['sheetId' => $sheetId, 'rowIndex' => 0, 'columnIndex' => $column],
             'rows' => [['values' => [$this->text($heading, ['bold' => true, 'fontSize' => 12])]]],
             'fields' => 'userEnteredValue,userEnteredFormat',
         ]]];
     }
 
     /**
+     * Row 1 of a new-project tab: "Project code" and "Location" with a cell to type each, then the heading.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function newProjectRow(int $sheetId, string $heading): array
+    {
+        $input = ['red' => 1.0, 'green' => 0.96, 'blue' => 0.8];
+
+        return [
+            ['mergeCells' => ['range' => $this->range($sheetId, 0, 1, self::NEW_HEADING_COLUMN, count(self::COLUMNS)), 'mergeType' => 'MERGE_ALL']],
+            ['updateCells' => [
+                'start' => ['sheetId' => $sheetId, 'rowIndex' => 0, 'columnIndex' => 1],
+                'rows' => [['values' => [$this->text('Project code →', ['bold' => true]), $this->blank($input), $this->text('Location →', ['bold' => true]), $this->blank($input)]]],
+                'fields' => 'userEnteredValue,userEnteredFormat',
+            ]],
+            ...$this->headingRequest($sheetId, $heading, self::NEW_HEADING_COLUMN),
+        ];
+    }
+
+    /**
+     * Row 1 of a tab that has become a project's: the inputs go, the project heading spans the row again.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function projectRow(int $sheetId, Project $project): array
+    {
+        $last = count(self::COLUMNS);
+
+        return [
+            ['unmergeCells' => ['range' => $this->range($sheetId, 0, 1, 1, $last)]],
+            ['updateCells' => ['range' => $this->range($sheetId, 0, 1, 1, $last), 'fields' => 'userEnteredValue,userEnteredFormat']],
+            ['mergeCells' => ['range' => $this->range($sheetId, 0, 1, 1, $last), 'mergeType' => 'MERGE_ALL']],
+            ...$this->headingRequest($sheetId, self::heading($project)),
+        ];
+    }
+
+    /**
      * Requests that lay out an existing tab: heading, headers, formats, colours, protected system columns, dropdowns.
+     * A new-project tab (the template, or a tab she added) gets the code and location cells in row 1.
      *
      * @param  array{main_categories: list<string>, subcategories: list<string>, units: list<string>, phases: list<string>}  $lists
      * @return list<array<string, mixed>>
      */
-    public function setUp(int $sheetId, string $heading, array $lists, string $robotEmail): array
+    public function setUp(int $sheetId, string $heading, array $lists, string $robotEmail, bool $newProject = false): array
     {
         $last = count(self::COLUMNS);
         $requests = [
             ['updateSheetProperties' => ['properties' => ['sheetId' => $sheetId, 'gridProperties' => ['frozenRowCount' => 2]], 'fields' => 'gridProperties.frozenRowCount']],
-            ['mergeCells' => ['range' => $this->range($sheetId, 0, 1, 1, $last), 'mergeType' => 'MERGE_ALL']],
-            ...$this->headingRequest($sheetId, $heading),
+            ...($newProject ? $this->newProjectRow($sheetId, $heading) : [
+                ['mergeCells' => ['range' => $this->range($sheetId, 0, 1, 1, $last), 'mergeType' => 'MERGE_ALL']],
+                ...$this->headingRequest($sheetId, $heading),
+            ]),
             ['updateCells' => [
                 'start' => ['sheetId' => $sheetId, 'rowIndex' => 1, 'columnIndex' => 0],
                 'rows' => [['values' => array_map(fn (array $column) => $this->text($column['header'], ['bold' => true], ['red' => 0.93, 'green' => 0.94, 'blue' => 0.96]), self::COLUMNS)]],
@@ -159,9 +207,12 @@ class ProjectSheetLayout
         }
         foreach ([[$this->range($sheetId, 0, self::ROWS, 0, 2), 'Buildiwick system columns (row key and status)'],
             [$this->range($sheetId, 0, 2, 0, $last), 'Buildiwick title and headers']] as [$range, $description]) {
-            $requests[] = ['addProtectedRange' => ['protectedRange' => [
-                'range' => $range, 'description' => $description, 'warningOnly' => false, 'editors' => ['users' => [$robotEmail]],
-            ]]];
+            $protected = ['range' => $range, 'description' => $description, 'warningOnly' => false, 'editors' => ['users' => [$robotEmail]]];
+            if ($newProject && $range['endColumnIndex'] === $last) {
+                $protected['unprotectedRanges'] = [$this->range($sheetId, 0, 1, self::CODE_COLUMN, self::CODE_COLUMN + 1),
+                    $this->range($sheetId, 0, 1, self::LOCATION_COLUMN, self::LOCATION_COLUMN + 1)];
+            }
+            $requests[] = ['addProtectedRange' => ['protectedRange' => $protected]];
         }
 
         return [...$requests, ...$this->validation($sheetId, $lists)];
@@ -248,6 +299,15 @@ class ProjectSheetLayout
         }
 
         return ['userEnteredValue' => ['stringValue' => $value], 'userEnteredFormat' => $format];
+    }
+
+    /**
+     * @param  array<string, float>  $background
+     * @return array<string, mixed>
+     */
+    private function blank(array $background): array
+    {
+        return ['userEnteredFormat' => ['backgroundColor' => $background, 'textFormat' => ['bold' => true]]];
     }
 
     /**
