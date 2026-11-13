@@ -108,18 +108,19 @@ class SheetsClient
     }
 
     /**
-     * Cell values of several A1 ranges in one call, unformatted (numbers as numbers, dates as day serials).
+     * Cell values of several A1 ranges in one call, unformatted (numbers as numbers, dates as day serials), or with
+     * formulas as typed ('FORMULA').
      *
      * @param  list<string>  $ranges
      * @return list<list<list<mixed>>> one grid per range, in the order asked
      */
-    public function readValues(array $ranges): array
+    public function readValues(array $ranges, string $render = 'UNFORMATTED_VALUE'): array
     {
         if ($ranges === []) {
             return [];
         }
         $response = $this->sheets()->spreadsheets_values->batchGet($this->spreadsheetId(), [
-            'ranges' => $ranges, 'valueRenderOption' => 'UNFORMATTED_VALUE', 'dateTimeRenderOption' => 'SERIAL_NUMBER',
+            'ranges' => $ranges, 'valueRenderOption' => $render, 'dateTimeRenderOption' => 'SERIAL_NUMBER',
         ]);
 
         return array_map(fn ($range) => $range->getValues() ?? [], $response->getValueRanges());

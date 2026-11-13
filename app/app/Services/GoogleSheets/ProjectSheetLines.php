@@ -298,7 +298,9 @@ class ProjectSheetLines
         // Lines the sheet does not have go at the bottom: saved lines (typed in the Buildiwick form, saved before the
         // sheet existed, or a row deleted in the sheet) and, on the one-time fill, draft lines typed in Buildiwick.
         $append = [];
-        $first = ProjectSheetLayout::FIRST_LINE + 1 + count($grid);
+        // Right after the last filled row: rows below may only hold a Total formula that shows nothing yet.
+        $filledRows = array_keys(array_filter($grid, fn ($cells) => collect((array) $cells)->contains(fn ($value) => trim((string) $value) !== '')));
+        $first = ProjectSheetLayout::FIRST_LINE + 1 + ($filledRows === [] ? 0 : max($filledRows) + 1);
         $missing = $lines->filter(fn (SheetLine $line, string $key) => $line->state === 'saved' && ! isset($seen[$key]) && $line->expenseRequest);
         $linked = SheetLine::query()->where('project_id', $project->id)->whereNotNull('expense_request_id')->pluck('expense_request_id')->all();
         $unlinked = ExpenseRequest::query()->where('project_id', $project->id)->where('status', '!=', 'rejected')->whereNotIn('id', $linked)->get()
@@ -492,8 +494,7 @@ class ProjectSheetLines
         $matches = $total !== '' && $number($total) !== null && round($quantity * $cost, 2) === round((float) $number($total), 2);
         if ($total === '' || (! $onlyWhenEmpty && $matches)) {
             $column = chr(ord('A') + ProjectSheetLayout::column('total_amount'));
-            [$q, $c] = [chr(ord('A') + ProjectSheetLayout::column('quantity')).$row, chr(ord('A') + ProjectSheetLayout::column('unit_cost')).$row];
-            $this->formulas["{$tab}!{$column}{$row}"] = [["=IF({$c}=\"\",\"\",ROUND(IF({$q}=\"\",1,{$q})*{$c},2))"]];
+            $this->formulas["{$tab}!{$column}{$row}"] = [[SheetTotals::formula($row)]];
         }
     }
 

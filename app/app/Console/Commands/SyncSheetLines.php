@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Services\GoogleSheets\ProjectSheetLines;
 use App\Services\GoogleSheets\ProjectSheetTabs;
 use App\Services\GoogleSheets\SheetsClient;
+use App\Services\GoogleSheets\SheetTotals;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -16,7 +17,7 @@ use Throwable;
 #[Description('Bring lines typed in the Google entry sheet into the Data Entry drafts (runs every 5 minutes); also gives new projects their tab.')]
 class SyncSheetLines extends Command
 {
-    public function handle(SheetsClient $client, ProjectSheetTabs $tabs, ProjectSheetLines $lines): int
+    public function handle(SheetsClient $client, ProjectSheetTabs $tabs, ProjectSheetLines $lines, SheetTotals $totals): int
     {
         if (! $client->isConfigured()) {
             $this->error('Google Sheets is not set up. Set GOOGLE_SHEETS_KEY_PATH and GOOGLE_SHEETS_SPREADSHEET_ID in .env.');
@@ -45,6 +46,8 @@ class SyncSheetLines extends Command
                 }
             }
             $report = $lines->sync($only, (bool) $this->option('with-drafts'), (bool) $this->option('total-formulas'));
+            // Every Total cell of every tab follows quantity × unit cost, before anything is typed (new tabs too).
+            $report['total_formulas'] = $only === null ? $totals->fill() : 0;
         } catch (Throwable $e) {
             $this->error('Sheet lines could not be synced: '.$e->getMessage());
             Log::warning('Google sheet sync failed', ['error' => $e->getMessage()]);
@@ -57,6 +60,9 @@ class SyncSheetLines extends Command
             $this->line("Changes from Buildiwick written to the sheet: {$report['written_back']}; sheet changes to saved lines waiting for approval: {$report['waiting']}.");
         }
         $this->line("Locked lines: {$report['locked']}.");
+        if ($report['total_formulas']) {
+            $this->line("Total formulas filled in: {$report['total_formulas']}.");
+        }
         if ($report['appended']) {
             $this->line("Written into the sheet: {$report['appended']} line(s).");
         }

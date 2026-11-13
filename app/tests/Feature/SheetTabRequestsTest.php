@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\GoogleSheets\ProjectSheetLayout;
 use App\Services\GoogleSheets\ProjectSheetTabs;
 use App\Services\GoogleSheets\SheetsClient;
+use App\Services\GoogleSheets\SheetTotals;
 use App\Support\ProjectCode;
 use Database\Seeders\LookupSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -121,6 +122,32 @@ class SheetTabRequestsTest extends TestCase
         ])->assertRedirect();
         $this->assertSame(556, (int) Project::where('project_code', 'BWG-MBZ-RES-2026-001')->sole()->sheet_tab_id);
         $this->assertSame('approved', $tab->fresh()->status);
+    }
+
+    public function test_every_tab_gets_the_total_formula_in_every_row_even_before_approval(): void
+    {
+        $headers = array_column(ProjectSheetLayout::COLUMNS, 'header');
+        $this->sheets->add(555, 'Copy of + New project', [
+            ['', ProjectSheetLayout::NAME_LABEL, 'Msasani villa', 'Location →', 'Msasani'], $headers,
+            ['', '', 46337, 'Materials', '', 'Cement', '', '', 10, 'BAG', 18500, 185000, '', ''],   // pasted total = qty × cost
+            ['', '', 46337, 'Materials', '', 'Sand', '', '', 1, '', '', 350000, '', ''],            // total typed alone
+            ['', '', 46337, 'Materials', '', 'Nails', '', '', 3, 'KG', 4000, 99999, '', ''],        // total typed on purpose
+            ['', '', 46337, 'Materials', '', 'Paint', '', '', 2, '', 5000, '', '', ''],             // no total yet
+        ]);
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('Total formulas filled in:')->assertSuccessful();
+
+        $this->assertSame(SheetTotals::formula(3), $this->sheets->formulaAt(555, 'L3'));
+        $this->assertSame([350000, 99999], [$this->sheets->cell(555, 'L4'), $this->sheets->cell(555, 'L5')]);
+        $this->assertSame(SheetTotals::formula(6), $this->sheets->formulaAt(555, 'L6'));
+        $this->assertSame(SheetTotals::formula(250), $this->sheets->formulaAt(555, 'L250'));
+        // The template has it in every row, so a copy of it starts with working totals.
+        $this->assertSame(SheetTotals::formula(3), $this->sheets->formulaAt(ProjectSheetLayout::TEMPLATE_TAB_ID, 'L3'));
+        $this->assertSame('=IF(K6="","",ROUND(IF(I6="",1,I6)*K6,2))', SheetTotals::formula(6));
+
+        // Changing the quantity now changes the Total; nothing more is written on the next run.
+        $this->sheets->put(555, 'I3', 12);
+        $this->assertSame(222000.0, (float) $this->sheets->readValues(["'Copy of + New project'!L3:L3"])[0][0][0]);
+        $this->artisan('app:sheets-sync')->doesntExpectOutputToContain('Total formulas filled in:')->assertSuccessful();
     }
 
     public function test_project_codes_are_made_the_way_the_company_makes_them(): void
@@ -245,24 +272,38 @@ class TabbedSheet extends SheetsClient
         return [];
     }
 
-    public function readValues(array $ranges): array
+    public function readValues(array $ranges, string $render = 'UNFORMATTED_VALUE'): array
     {
-        return array_map(function (string $range) {
-            [$id, $row] = $this->locate($range);
+        return array_map(function (string $range) use ($render) {
+            [$id, $row, $column, $lastColumn] = $this->locate($range);
             $grid = $this->grids[$id] ?? [];
             ksort($grid);
             $out = [];
             for ($r = $row; $r <= (array_key_last($grid) ?? -1); $r++) {
                 $cells = $grid[$r] ?? [];
                 $line = [];
-                for ($c = 0; $c <= (empty($cells) ? -1 : max(array_keys($cells))); $c++) {
-                    $line[] = $cells[$c] ?? '';
+                for ($c = $column; $c <= min($lastColumn, empty($cells) ? -1 : max(array_keys($cells))); $c++) {
+                    $value = $cells[$c] ?? '';
+                    // Like Sheets: a formula shows its result unless formulas are asked for.
+                    if ($render !== 'FORMULA' && is_string($value) && str_starts_with($value, '=')) {
+                        $quantity = ($cells[8] ?? '') === '' ? 1 : (float) $cells[8];
+                        $value = ($cells[10] ?? '') === '' ? '' : round($quantity * (float) $cells[10], 2);
+                    }
+                    $line[] = $value;
                 }
                 $out[] = $line;
             }
 
             return $out;
         }, $ranges);
+    }
+
+    /** The formula typed in a cell, or null when it holds a plain value. */
+    public function formulaAt(int $id, string $a1): ?string
+    {
+        $value = $this->cell($id, $a1);
+
+        return is_string($value) && str_starts_with($value, '=') ? $value : null;
     }
 
     public function writeValues(array $data, string $input = 'RAW'): void
@@ -308,13 +349,13 @@ class TabbedSheet extends SheetsClient
         }
     }
 
-    /** @return array{0: int, 1: int, 2: int} tab id, first row index, first column index */
+    /** @return array{0: int, 1: int, 2: int, 3: int} tab id, first row index, first and last column index */
     private function locate(string $range): array
     {
-        preg_match("/^'?(.*?)'?!([A-Z])(\\d+)/", $range, $m);
+        preg_match("/^'?(.*?)'?!([A-Z])(\\d+)(?::([A-Z])\\d+)?/", $range, $m);
         $title = str_replace("''", "'", $m[1]);
         $id = collect($this->tabList)->firstWhere('title', $title)['id'] ?? -1;
 
-        return [$id, (int) $m[3] - 1, ord($m[2]) - 65];
+        return [$id, (int) $m[3] - 1, ord($m[2]) - 65, ($m[4] ?? '') !== '' ? ord($m[4]) - 65 : 99];
     }
 }

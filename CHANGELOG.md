@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-13 — Total Formula in Every Row of Every Tab
+
+- A second project's Total did not follow Quantity × Unit Cost: the formula was only added when the 5-minute sync read a line, and totals pasted as numbers (e.g. Lisa's 548 Oysterbay lines) stayed numbers.
+- New `App\Services\GoogleSheets\SheetTotals`, run at the end of every `app:sheets-sync`: in every tab with the Buildiwick headers (project tabs, the "+ New project" template so copies inherit it, and new tabs waiting for approval; never "How to use" or rejected tabs) every row from 3 gets `=IF(K="","",ROUND(IF(I="",1,I)*K,2))` in Total when the cell is empty, or when its number already equals quantity × unit cost. A different typed total (on purpose, or with no unit cost) and any existing formula are left as they are. It reads column I–L with formulas (`SheetsClient::readValues(..., 'FORMULA')`) so nothing is rewritten twice.
+- Lines the sync adds at the bottom now go right after the last filled row, since empty rows below now hold a formula that shows nothing.
+
 ## 2026-11-13 — Project Codes Made From the Name
 
 - Row 1 of a new-project tab now asks for the **project name** (C1) and location (E1), not the code. If C1 is empty, a tab she renamed counts as the name ("Copy of …" does not). The code is made by `App\Support\ProjectCode::suggest()` the company's way, `BWG-<place>[-<type>]-<year>-<NNN>`: an acronym stays (KICD, TTCL); otherwise the first letter and next different consonants of the first place word (Mwenge → MWN, Kinondoni → KND); the type of work when named (residence/villa → RES, finishing → FIN, apartments → APT, commercial → COM, duplex → DPX, labour → LAB); "Galco" and filler words (project, site, gate, hotel...) are left out; when the letters are already another project's and the name has no type, the next word or letter tells it apart (Mbezi Makonde → MBM, Mikocheni Majilis → MKM, Galco Mbozi → MBO); the number is the next free one. It reproduces the existing codes except a few hand-made ones (MKG, MSA). Row 1 shows "Project code will be …"; Approve makes the code again at that moment so it is always free. A name already in Buildiwick needs the form.

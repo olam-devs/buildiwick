@@ -286,8 +286,13 @@ class FakeSheetGrid extends SheetsClient
         return $this->tabList;
     }
 
-    public function readValues(array $ranges): array
+    public function readValues(array $ranges, string $render = 'UNFORMATTED_VALUE'): array
     {
+        // Only the line sync reads this fake; the Total fill (FORMULA reads) finds no Buildiwick headers and skips.
+        if ($render === 'FORMULA') {
+            return array_map(fn () => [], $ranges);
+        }
+
         // The "+ New project" template only has its row 1; every other range is the project tab.
         return array_map(fn (string $range) => str_contains($range, ProjectSheetLayout::TEMPLATE_TITLE)
             ? [['', ProjectSheetLayout::NAME_LABEL]] : array_values($this->rows), $ranges);
