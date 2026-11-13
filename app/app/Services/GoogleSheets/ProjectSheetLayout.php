@@ -205,14 +205,17 @@ class ProjectSheetLayout
                 ],
             ]]];
         }
-        foreach ([[$this->range($sheetId, 0, self::ROWS, 0, 2), 'Buildiwick system columns (row key and status)'],
-            [$this->range($sheetId, 0, 2, 0, $last), 'Buildiwick title and headers']] as [$range, $description]) {
-            $protected = ['range' => $range, 'description' => $description, 'warningOnly' => false, 'editors' => ['users' => [$robotEmail]]];
-            if ($newProject && $range['endColumnIndex'] === $last) {
-                $protected['unprotectedRanges'] = [$this->range($sheetId, 0, 1, self::CODE_COLUMN, self::CODE_COLUMN + 1),
-                    $this->range($sheetId, 0, 1, self::LOCATION_COLUMN, self::LOCATION_COLUMN + 1)];
-            }
-            $requests[] = ['addProtectedRange' => ['protectedRange' => $protected]];
+        // A new-project tab leaves its code (C1) and location (E1) cells open: row 1 is protected around them
+        // (Sheets allows open cells inside a protection only when it covers the whole sheet).
+        $titleRanges = $newProject
+            ? [$this->range($sheetId, 0, 1, self::CODE_COLUMN + 1, self::LOCATION_COLUMN), $this->range($sheetId, 0, 1, self::NEW_HEADING_COLUMN, $last), $this->range($sheetId, 1, 2, 0, $last)]
+            : [$this->range($sheetId, 0, 2, 0, $last)];
+        $protections = [[$this->range($sheetId, 0, self::ROWS, 0, 2), 'Buildiwick system columns (row key and status)'],
+            ...array_map(fn (array $range) => [$range, 'Buildiwick title and headers'], $titleRanges)];
+        foreach ($protections as [$range, $description]) {
+            $requests[] = ['addProtectedRange' => ['protectedRange' => [
+                'range' => $range, 'description' => $description, 'warningOnly' => false, 'editors' => ['users' => [$robotEmail]],
+            ]]];
         }
 
         return [...$requests, ...$this->validation($sheetId, $lists)];

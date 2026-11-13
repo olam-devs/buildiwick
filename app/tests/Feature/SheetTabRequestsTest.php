@@ -50,6 +50,8 @@ class SheetTabRequestsTest extends TestCase
         $this->artisan('app:sheets-sync')->assertSuccessful();
         $this->assertContains(ProjectSheetLayout::TEMPLATE_TITLE, $this->sheets->titles());
         $this->assertSame(ProjectSheetTabs::standardPhases(), $this->sheets->dropdown(ProjectSheetLayout::TEMPLATE_TAB_ID, 12));
+        // Row 1 is protected except the code (C1) and location (E1) cells; no protection uses open cells inside it.
+        $this->assertSame([[0, 1, 0, 2], [0, 1, 3, 4], [0, 1, 5, 14]], $this->sheets->protectedRow1(ProjectSheetLayout::TEMPLATE_TAB_ID));
 
         // She duplicates it, renames it, types the code and location in row 1 and two lines, before anyone approves it.
         $headers = array_column(ProjectSheetLayout::COLUMNS, 'header');
@@ -172,6 +174,19 @@ class TabbedSheet extends SheetsClient
         $this->grids[$id][(int) $m[2] - 1][ord($m[1]) - 65] = $value;
     }
 
+    /** @var array<int, list<array<string, int>>> protected ranges per tab id */
+    private array $protections = [];
+
+    /** @return list<list<int>> protected ranges touching row 1: start row, end row, start column, end column */
+    public function protectedRow1(int $id): array
+    {
+        $ranges = array_filter($this->protections[$id] ?? [], fn (array $r) => $r['startRowIndex'] === 0 && $r['endRowIndex'] <= 1 || ($r['startRowIndex'] === 0 && $r['startColumnIndex'] === 0 && $r['endColumnIndex'] === 2));
+        $rows = array_map(fn (array $r) => [$r['startRowIndex'], min(1, $r['endRowIndex']), $r['startColumnIndex'], $r['endColumnIndex']], array_values($ranges));
+        sort($rows);
+
+        return $rows;
+    }
+
     /** @var array<int, array<int, list<string>>> dropdown values per tab id and column */
     private array $dropdowns = [];
 
@@ -241,6 +256,13 @@ class TabbedSheet extends SheetsClient
             }
             if (isset($request['updateSheetProperties']['properties']['title'])) {
                 $this->tabList[$request['updateSheetProperties']['properties']['sheetId']]['title'] = $request['updateSheetProperties']['properties']['title'];
+            }
+            if (isset($request['addProtectedRange'])) {
+                $protected = $request['addProtectedRange']['protectedRange'];
+                if (isset($protected['unprotectedRanges'])) {
+                    throw new \RuntimeException('unprotectedRanges are only allowed on protections covering a whole sheet');
+                }
+                $this->protections[$protected['range']['sheetId']][] = $protected['range'];
             }
             if (isset($request['setDataValidation'])) {
                 $range = $request['setDataValidation']['range'];
