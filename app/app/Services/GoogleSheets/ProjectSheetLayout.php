@@ -23,8 +23,10 @@ class ProjectSheetLayout
 
     public const TEMPLATE_TITLE = '+ New project';
 
-    /** Row 1 of a new-project tab: she types the project code in C1 and the location in E1; the heading is in F1. */
-    public const CODE_COLUMN = 2;
+    /** Row 1 of a new-project tab: she types the project name in C1 and the location in E1; the heading is in F1. */
+    public const NAME_COLUMN = 2;
+
+    public const NAME_LABEL = 'Project name →';
 
     public const LOCATION_COLUMN = 4;
 
@@ -98,13 +100,17 @@ class ProjectSheetLayout
 
     public static function templateHeading(): string
     {
-        return 'NEW PROJECT: do not type here. Right-click this tab → Duplicate, rename the copy to the project name, fill in the code and location on the left and type lines from row 3. The owner approves it in Buildiwick.';
+        return 'NEW PROJECT: do not type here. Right-click this tab → Duplicate, type the project name and location in the yellow cells on the left and the lines from row 3. The project code is made for you; the owner approves it in Buildiwick.';
     }
 
-    /** @param  string|null  $problem  what is wrong with the code or location she typed in row 1 */
-    public static function waitingHeading(?string $problem = null): string
+    /**
+     * @param  string|null  $problem  what is missing in row 1
+     * @param  string|null  $code  the project code it will get
+     */
+    public static function waitingHeading(?string $problem = null, ?string $code = null): string
     {
-        return ($problem ? $problem.' ' : '').'New project, waiting for approval in Buildiwick. Keep typing lines from row 3; they go into your Buildiwick draft once it is approved.';
+        return ($problem ? $problem.' ' : '').($code && ! $problem ? 'Project code will be '.$code.'. ' : '')
+            .'New project, waiting for approval in Buildiwick. Keep typing lines from row 3; they go into your Buildiwick draft once it is approved.';
     }
 
     public static function rejectedHeading(): string
@@ -123,7 +129,7 @@ class ProjectSheetLayout
     }
 
     /**
-     * Row 1 of a new-project tab: "Project code" and "Location" with a cell to type each, then the heading.
+     * Row 1 of a new-project tab: "Project name" and "Location" with a cell to type each, then the heading.
      *
      * @return list<array<string, mixed>>
      */
@@ -135,7 +141,7 @@ class ProjectSheetLayout
             ['mergeCells' => ['range' => $this->range($sheetId, 0, 1, self::NEW_HEADING_COLUMN, count(self::COLUMNS)), 'mergeType' => 'MERGE_ALL']],
             ['updateCells' => [
                 'start' => ['sheetId' => $sheetId, 'rowIndex' => 0, 'columnIndex' => 1],
-                'rows' => [['values' => [$this->text('Project code →', ['bold' => true]), $this->blank($input), $this->text('Location →', ['bold' => true]), $this->blank($input)]]],
+                'rows' => [['values' => [$this->text(self::NAME_LABEL, ['bold' => true]), $this->blank($input), $this->text('Location →', ['bold' => true]), $this->blank($input)]]],
                 'fields' => 'userEnteredValue,userEnteredFormat',
             ]],
             ...$this->headingRequest($sheetId, $heading, self::NEW_HEADING_COLUMN),
@@ -208,7 +214,7 @@ class ProjectSheetLayout
         // A new-project tab leaves its code (C1) and location (E1) cells open: row 1 is protected around them
         // (Sheets allows open cells inside a protection only when it covers the whole sheet).
         $titleRanges = $newProject
-            ? [$this->range($sheetId, 0, 1, self::CODE_COLUMN + 1, self::LOCATION_COLUMN), $this->range($sheetId, 0, 1, self::NEW_HEADING_COLUMN, $last), $this->range($sheetId, 1, 2, 0, $last)]
+            ? [$this->range($sheetId, 0, 1, self::NAME_COLUMN + 1, self::LOCATION_COLUMN), $this->range($sheetId, 0, 1, self::NEW_HEADING_COLUMN, $last), $this->range($sheetId, 1, 2, 0, $last)]
             : [$this->range($sheetId, 0, 2, 0, $last)];
         $protections = [[$this->range($sheetId, 0, self::ROWS, 0, 2), 'Buildiwick system columns (row key and status)'],
             ...array_map(fn (array $range) => [$range, 'Buildiwick title and headers'], $titleRanges)];

@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-13 — Project Codes Made From the Name
+
+- Row 1 of a new-project tab now asks for the **project name** (C1) and location (E1), not the code. If C1 is empty, a tab she renamed counts as the name ("Copy of …" does not). The code is made by `App\Support\ProjectCode::suggest()` the company's way, `BWG-<place>[-<type>]-<year>-<NNN>`: an acronym stays (KICD, TTCL); otherwise the first letter and next different consonants of the first place word (Mwenge → MWN, Kinondoni → KND); the type of work when named (residence/villa → RES, finishing → FIN, apartments → APT, commercial → COM, duplex → DPX, labour → LAB); "Galco" and filler words (project, site, gate, hotel...) are left out; when the letters are already another project's and the name has no type, the next word or letter tells it apart (Mbezi Makonde → MBM, Mikocheni Majilis → MKM, Galco Mbozi → MBO); the number is the next free one. It reproduces the existing codes except a few hand-made ones (MKG, MSA). Row 1 shows "Project code will be …"; Approve makes the code again at that moment so it is always free. A name already in Buildiwick needs the form.
+- The live template's old "Project code →" label is replaced on the next sync.
+- Added **Mikocheni Majilis** (BWG-MKM-2026-001) directly, as asked; its tracker sheet had no expense lines.
+
 ## 2026-11-13 — New Projects Started From the Google Sheet
 
 - Data Entry can start a project Buildiwick does not have yet from the entry sheet: right-click the new **"+ New project"** tab (made by the sync, tab id 99999, free-text Phase column), Duplicate, rename the copy to the project name and type lines. A blank tab she adds is laid out the same way automatically.

@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\SheetLine;
 use App\Models\User;
 use App\Services\ExpenseLedgerService;
+use App\Services\GoogleSheets\ProjectSheetLayout;
 use App\Services\GoogleSheets\ProjectSheetLines;
 use App\Services\GoogleSheets\ProjectSheetTabs;
 use App\Services\GoogleSheets\SheetsClient;
@@ -287,7 +288,9 @@ class FakeSheetGrid extends SheetsClient
 
     public function readValues(array $ranges): array
     {
-        return array_map(fn () => array_values($this->rows), $ranges);
+        // The "+ New project" template only has its row 1; every other range is the project tab.
+        return array_map(fn (string $range) => str_contains($range, ProjectSheetLayout::TEMPLATE_TITLE)
+            ? [['', ProjectSheetLayout::NAME_LABEL]] : array_values($this->rows), $ranges);
     }
 
     /** @var list<array<string, mixed>> */

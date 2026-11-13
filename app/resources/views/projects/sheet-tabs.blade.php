@@ -3,18 +3,18 @@
 @section('content')
 @include('partials.ledger.styles')
 <div class="lg-head">
-  <div><h2>New Tabs from the Google Sheet</h2><p>Projects Data Entry started in the entry sheet by duplicating the "+ New project" tab, with the code and location she typed. She can keep typing while it waits. <b>Approve</b> creates the project with the standard phases; its lines then go into her Record Expense draft like every other project.</p></div>
+  <div><h2>New Tabs from the Google Sheet</h2><p>Projects Data Entry started in the entry sheet by duplicating the "+ New project" tab, with the name and location she typed; the code follows the company's pattern (BWG-place-type-year-number). She can keep typing while it waits. <b>Approve</b> creates the project with the standard phases; its lines then go into her Record Expense draft like every other project.</p></div>
   <div class="lg-actions"><a class="btn btn-ghost" href="{{ route('admin.projects.index') }}">All projects</a></div>
 </div>
 
 <section class="lg-panel" style="padding:0;overflow:hidden;margin-bottom:18px">
   <div class="tablewrap" style="border:0"><table class="lg-table lg-cards-sm">
-    <thead><tr><th>Tab</th><th>Code</th><th>Location</th><th class="amt">Lines typed</th><th>Added</th><th></th></tr></thead>
+    <thead><tr><th>Project</th><th>Code</th><th>Location</th><th class="amt">Lines typed</th><th>Added</th><th></th></tr></thead>
     <tbody>
     @forelse($waiting as $tab)
       @php($problem = $tab->detailsProblem())
       <tr>
-        <td data-label="Tab"><b>{{ $tab->title }}</b>@unless($tab->layout_ok)<span class="muted" style="display:block;color:var(--danger-ink)">Not in the Buildiwick layout: its lines cannot be read. Ask her to copy them into a duplicate of the "+ New project" tab.</span>@endunless
+        <td data-label="Project"><b>{{ $tab->name() }}</b>@if($tab->project_name && $tab->project_name !== $tab->title)<span class="muted" style="display:block">Tab: {{ $tab->title }}</span>@endif @unless($tab->layout_ok)<span class="muted" style="display:block;color:var(--danger-ink)">Not in the Buildiwick layout: its lines cannot be read. Ask her to copy them into a duplicate of the "+ New project" tab.</span>@endunless
           @if($tab->layout_ok && $problem)<span class="muted" style="display:block;color:var(--warn-ink)">{{ $problem }}</span>@endif</td>
         <td data-label="Code" class="code">{{ $tab->project_code ?: '—' }}</td>
         <td data-label="Location">{{ $tab->location ?: '—' }}</td>

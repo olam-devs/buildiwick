@@ -17,6 +17,7 @@ use App\Services\GoogleSheets\SheetsClient;
 use App\Services\PhaseStructureService;
 use App\Services\ProjectRegistrationService;
 use App\Support\Features;
+use App\Support\ProjectCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -77,7 +78,7 @@ class ProjectSetupController extends Controller
         if (Features::recording()) {
             $sheetTab = $request->filled('sheet_tab') ? SheetTabRequest::query()->where('status', 'pending')->find($request->integer('sheet_tab')) : null;
             if ($sheetTab && ! $request->session()->hasOldInput()) {
-                $request->session()->flashInput(['name' => $sheetTab->title, 'project_code' => $sheetTab->project_code, 'location' => $sheetTab->location]);
+                $request->session()->flashInput(['name' => $sheetTab->name(), 'project_code' => ProjectCode::suggest($sheetTab->name()), 'location' => $sheetTab->location]);
             }
 
             return view('projects.recording-form', $this->recordingFormData(null) + ['sheetTab' => $sheetTab]);
@@ -141,7 +142,8 @@ class ProjectSetupController extends Controller
             return redirect()->route('admin.projects.create', ['sheet_tab' => $sheetTab->id])->withErrors(['project_code' => $problem]);
         }
         $project = DB::transaction(function () use ($sheetTab, $request, $phases): Project {
-            $project = Project::create(['project_code' => $sheetTab->project_code, 'name' => mb_substr($sheetTab->title, 0, 150), 'status' => 'active',
+            // The code is made again now, so it is still free even if another project took the earlier one.
+            $project = Project::create(['project_code' => ProjectCode::suggest($sheetTab->name()), 'name' => mb_substr($sheetTab->name(), 0, 150), 'status' => 'active',
                 'location' => $sheetTab->location, 'is_company_overheads' => false, 'created_by' => $request->user()->id]);
             foreach (self::startingPhases(false) as $stage) {
                 $phases->create($project, $stage, null, $request->user());

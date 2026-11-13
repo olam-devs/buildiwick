@@ -7,6 +7,7 @@ use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\SheetTabRequest;
 use App\Support\PhaseTree;
+use App\Support\ProjectCode;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -105,15 +106,24 @@ class ProjectSheetTabs
             || ($tab['id'] > self::TAB_ID_OFFSET && Project::query()->whereKey($tab['id'] - self::TAB_ID_OFFSET)->exists()))->values();
         // A waiting or rejected tab that was deleted from the sheet is forgotten.
         SheetTabRequest::query()->where('status', '!=', 'approved')->whereNotIn('sheet_tab_id', array_column($tabs, 'id'))->delete();
-        if ($unknown->isEmpty()) {
+        $template = collect($tabs)->firstWhere('id', ProjectSheetLayout::TEMPLATE_TAB_ID);
+        if ($unknown->isEmpty() && ! $template) {
             return $report;
         }
 
         $last = chr(ord('A') + count(ProjectSheetLayout::COLUMNS) - 1);
-        $grids = $this->client->readValues($unknown->map(fn (array $tab) => self::quote($tab['title']).'!A1:'.$last.max(3, (int) ($tab['rows'] ?? ProjectSheetLayout::ROWS)))->all());
+        $ranges = $unknown->map(fn (array $tab) => self::quote($tab['title']).'!A1:'.$last.max(3, (int) ($tab['rows'] ?? ProjectSheetLayout::ROWS)))->all();
+        if ($template) {
+            $ranges[] = self::quote($template['title']).'!A1:'.$last.'1';
+        }
+        $grids = $this->client->readValues($ranges);
+        $requests = [];
+        // The template's row 1 follows the current labels (it asked for a code before the code was made automatically).
+        if ($template && trim((string) ($grids[count($ranges) - 1][0][1] ?? '')) !== ProjectSheetLayout::NAME_LABEL) {
+            $requests = $this->layout->newProjectRow($template['id'], ProjectSheetLayout::templateHeading());
+        }
         $headers = array_column(ProjectSheetLayout::COLUMNS, 'header');
         $filled = fn (array $cells) => collect($cells)->contains(fn ($value) => trim((string) $value) !== '');
-        $requests = [];
         foreach ($unknown as $index => $tab) {
             $grid = $grids[$index] ?? [];
             $blank = ! collect($grid)->contains(fn ($cells) => $filled((array) $cells));
@@ -124,15 +134,20 @@ class ProjectSheetTabs
             if (! $request->exists) {
                 $report['new'][] = $tab['title'];
             }
-            $code = strtoupper(trim((string) ($grid[0][ProjectSheetLayout::CODE_COLUMN] ?? '')));
+            // The name typed in C1, or the tab's own name when she renamed it instead; the code is made from it.
+            $name = trim(preg_replace('/\s+/', ' ', (string) ($grid[0][ProjectSheetLayout::NAME_COLUMN] ?? '')));
+            if ($name === '' && ! preg_match('/^(copy of|\+ new project|sheet\d*$)/i', $tab['title'])) {
+                $name = trim($tab['title']);
+            }
             $location = trim((string) ($grid[0][ProjectSheetLayout::LOCATION_COLUMN] ?? ''));
             $request->fill(['title' => $tab['title'], 'line_count' => $lines, 'layout_ok' => $layoutOk, 'status' => $request->status ?? 'pending',
-                'project_code' => $code !== '' ? mb_substr($code, 0, 50) : null, 'location' => $location !== '' ? mb_substr($location, 0, 150) : null])->save();
+                'project_name' => $name !== '' ? mb_substr($name, 0, 150) : null, 'project_code' => $name !== '' ? ProjectCode::suggest($name) : null,
+                'location' => $location !== '' ? mb_substr($location, 0, 150) : null])->save();
             if ($request->status === 'pending') {
                 $report['waiting']++;
             }
 
-            $heading = $request->status === 'rejected' ? ProjectSheetLayout::rejectedHeading() : ProjectSheetLayout::waitingHeading($request->detailsProblem());
+            $heading = $request->status === 'rejected' ? ProjectSheetLayout::rejectedHeading() : ProjectSheetLayout::waitingHeading($request->detailsProblem(), $request->project_code);
             if ($blank) {
                 $requests = [...$requests, ...$this->layout->setUp($tab['id'], $heading, $this->sharedLists() + ['phases' => self::standardPhases()], $this->client->serviceAccountEmail(), true)];
             } elseif ($layoutOk && trim((string) ($grid[0][ProjectSheetLayout::NEW_HEADING_COLUMN] ?? '')) !== $heading) {

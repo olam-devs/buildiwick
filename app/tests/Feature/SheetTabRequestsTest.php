@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\GoogleSheets\ProjectSheetLayout;
 use App\Services\GoogleSheets\ProjectSheetTabs;
 use App\Services\GoogleSheets\SheetsClient;
+use App\Support\ProjectCode;
 use Database\Seeders\LookupSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -50,20 +51,26 @@ class SheetTabRequestsTest extends TestCase
         $this->artisan('app:sheets-sync')->assertSuccessful();
         $this->assertContains(ProjectSheetLayout::TEMPLATE_TITLE, $this->sheets->titles());
         $this->assertSame(ProjectSheetTabs::standardPhases(), $this->sheets->dropdown(ProjectSheetLayout::TEMPLATE_TAB_ID, 12));
-        // Row 1 is protected except the code (C1) and location (E1) cells; no protection uses open cells inside it.
+        // Row 1 is protected except the name (C1) and location (E1) cells; no protection uses open cells inside it.
         $this->assertSame([[0, 1, 0, 2], [0, 1, 3, 4], [0, 1, 5, 14]], $this->sheets->protectedRow1(ProjectSheetLayout::TEMPLATE_TAB_ID));
+        $this->assertSame(ProjectSheetLayout::NAME_LABEL, $this->sheets->cell(ProjectSheetLayout::TEMPLATE_TAB_ID, 'B1'));
+        // A template made before the code was automatic gets the new label.
+        $this->sheets->put(ProjectSheetLayout::TEMPLATE_TAB_ID, 'B1', 'Project code →');
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $this->assertSame(ProjectSheetLayout::NAME_LABEL, $this->sheets->cell(ProjectSheetLayout::TEMPLATE_TAB_ID, 'B1'));
 
-        // She duplicates it, renames it, types the code and location in row 1 and two lines, before anyone approves it.
+        // She duplicates it, types the name and two lines (no location yet), before anyone approves it.
         $headers = array_column(ProjectSheetLayout::COLUMNS, 'header');
-        $this->sheets->add(555, 'Msasani villa', [
-            ['', 'Project code →', 'bwg-msv-2026-001 ', 'Location →', '', ProjectSheetLayout::templateHeading()], $headers,
+        $this->sheets->add(555, 'Copy of + New project', [
+            ['', ProjectSheetLayout::NAME_LABEL, ' Msasani   villa ', 'Location →', '', ProjectSheetLayout::templateHeading()], $headers,
             ['', '', 46337, 'Materials', '', 'Cement 42.5', '', '', 10, 'BAG', 18500, 185000, 'Substructure (Foundation)', ''],
             ['', '', 46337, 'Materials', '', 'Sand', '', '', 1, '', '', 350000, 'Walling', ''],
         ]);
-        $this->artisan('app:sheets-sync')->expectsOutputToContain('New project tabs waiting for approval: Msasani villa')->assertSuccessful();
+        $this->artisan('app:sheets-sync')->expectsOutputToContain('New project tabs waiting for approval: Copy of + New project')->assertSuccessful();
 
         $tab = SheetTabRequest::sole();
-        $this->assertSame(['pending', 2, true, 'BWG-MSV-2026-001', null], [$tab->status, $tab->line_count, $tab->layout_ok, $tab->project_code, $tab->location]);
+        // The code is made from the name, the company's way: Msasani → MSN, villa → RES.
+        $this->assertSame(['pending', 2, true, 'Msasani villa', 'BWG-MSN-RES-2026-001', null], [$tab->status, $tab->line_count, $tab->layout_ok, $tab->project_name, $tab->project_code, $tab->location]);
         // Row 1 tells her what is still missing; nothing reaches the draft yet.
         $this->assertSame(ProjectSheetLayout::waitingHeading('Type the location in the yellow cell E1.'), $this->sheets->cell(555, 'F1'));
         $this->assertSame(0, ExpenseDraft::query()->count());
@@ -71,15 +78,17 @@ class SheetTabRequestsTest extends TestCase
 
         $this->sheets->put(555, 'E1', 'Msasani');
         $this->artisan('app:sheets-sync')->assertSuccessful();
-        $this->assertSame(ProjectSheetLayout::waitingHeading(), $this->sheets->cell(555, 'F1'));
+        $this->assertSame(ProjectSheetLayout::waitingHeading(null, 'BWG-MSN-RES-2026-001'), $this->sheets->cell(555, 'F1'));
+        $this->assertStringStartsWith('Project code will be BWG-MSN-RES-2026-001.', $this->sheets->cell(555, 'F1'));
 
         // The Director sees it and approves it in one click.
         $this->actingAs($this->director)->get(route('director.index'))->assertSee('waiting for your approval');
-        $this->actingAs($this->director)->get(route('admin.sheet-tabs.index'))->assertOk()->assertSee('Msasani villa')->assertSee('BWG-MSV-2026-001')->assertSee(route('admin.sheet-tabs.approve', $tab));
-        $this->actingAs($this->director)->get(route('admin.projects.create', ['sheet_tab' => $tab->id]))->assertOk()->assertSee('value="BWG-MSV-2026-001"', false)->assertSee('value="Msasani"', false);
+        $this->actingAs($this->director)->get(route('admin.sheet-tabs.index'))->assertOk()->assertSee('Msasani villa')->assertSee('BWG-MSN-RES-2026-001')->assertSee(route('admin.sheet-tabs.approve', $tab));
+        $this->actingAs($this->director)->get(route('admin.projects.create', ['sheet_tab' => $tab->id]))->assertOk()
+            ->assertSee('value="BWG-MSN-RES-2026-001"', false)->assertSee('value="Msasani villa"', false)->assertSee('value="Msasani"', false);
         $this->actingAs($this->director)->post(route('admin.sheet-tabs.approve', $tab))->assertRedirect();
 
-        $project = Project::where('project_code', 'BWG-MSV-2026-001')->sole();
+        $project = Project::where('project_code', 'BWG-MSN-RES-2026-001')->sole();
         $this->assertSame([555, 'Msasani villa', 'Msasani', 'active'], [(int) $project->sheet_tab_id, $project->name, $project->location, $project->status]);
         $this->assertSame(ProjectSheetTabs::standardPhases(), $project->phases()->orderBy('phase_order')->pluck('phase_name')->all());
         $this->assertSame(['approved', $project->id], [$tab->fresh()->status, $tab->fresh()->project_id]);
@@ -97,19 +106,39 @@ class SheetTabRequestsTest extends TestCase
 
     public function test_the_director_can_correct_the_details_in_the_form_before_approving(): void
     {
-        $this->sheets->add(556, 'Mbezi beach', [['', 'Project code →', 'BWG KND', 'Location →', 'Mbezi'], array_column(ProjectSheetLayout::COLUMNS, 'header')]);
+        // A name already in Buildiwick (any capitals) needs the Director's eye; a renamed tab's name counts when C1 is empty.
+        Project::create(['project_code' => 'BWG-MBZ-2026-001', 'name' => 'Mbezi Beach', 'status' => 'active', 'location' => 'Mbezi']);
+        $this->sheets->add(556, 'MBEZI BEACH', [['', ProjectSheetLayout::NAME_LABEL, '', 'Location →', 'Mbezi'], array_column(ProjectSheetLayout::COLUMNS, 'header')]);
         $this->artisan('app:sheets-sync')->assertSuccessful();
         $tab = SheetTabRequest::sole();
-        $this->assertStringContainsString('capital letters, numbers and dashes', $tab->detailsProblem());
+        $this->assertSame('A project named "MBEZI BEACH" already exists in Buildiwick.', $tab->detailsProblem());
 
         $this->actingAs($this->director)->post(route('admin.sheet-tabs.approve', $tab))->assertRedirect(route('admin.projects.create', ['sheet_tab' => $tab->id]));
-        $this->assertSame(0, Project::query()->count());
+        $this->assertSame(1, Project::query()->count());
         $this->actingAs($this->director)->post(route('admin.projects.store'), [
-            'project_code' => 'BWG-MBZ-2026-001', 'name' => 'Mbezi beach house', 'status' => 'active', 'location' => 'Mbezi', 'standard_stages' => '1',
+            'project_code' => 'BWG-MBZ-RES-2026-001', 'name' => 'Mbezi beach house', 'status' => 'active', 'location' => 'Mbezi', 'standard_stages' => '1',
             'sheet_tab_request_id' => $tab->id,
         ])->assertRedirect();
-        $this->assertSame(556, (int) Project::sole()->sheet_tab_id);
+        $this->assertSame(556, (int) Project::where('project_code', 'BWG-MBZ-RES-2026-001')->sole()->sheet_tab_id);
         $this->assertSame('approved', $tab->fresh()->status);
+    }
+
+    public function test_project_codes_are_made_the_way_the_company_makes_them(): void
+    {
+        foreach (['Galco Bandari' => 'BND', 'KICD Project' => 'KICD', 'TTCL Site' => 'TTCL', 'Kinondoni residence' => 'KND-RES', 'Galco Mwenge Gate' => 'MWN',
+            'Mikocheni residence, finishing works' => 'MKC-RES', 'Kibada apartments (joinery/fit-out)' => 'KBD-APT', 'Morogoro Hotel' => 'MRG',
+            'Kimara Temboni residence ( finishing)' => 'KMR-RES', 'Sinza Site' => 'SNZ', 'Studio Project' => 'STD', 'Mbuyuni' => 'MBY'] as $name => $middle) {
+            $this->assertSame($middle, ProjectCode::middle($name), $name);
+        }
+        // Letters another project already uses are told apart by the next word, or another letter of the same word.
+        $taken = ['MBZ', 'MKC'];
+        $this->assertSame(['MBM', 'MKM', 'MBO', 'COB'], [ProjectCode::middle('Mbezi Makonde', $taken), ProjectCode::middle('Mikocheni Majilis', $taken),
+            ProjectCode::middle('Galco Mbozi', $taken), ProjectCode::middle('Coco Beach', $taken)]);
+
+        Project::create(['project_code' => 'BWG-KND-RES-2026-001', 'name' => 'Kinondoni residence', 'status' => 'active', 'location' => 'Kinondoni']);
+        $this->assertSame('BWG-KND-RES-2026-002', ProjectCode::suggest('Kinondoni residence 2'));
+        Project::create(['project_code' => 'BWG-MKC-FIN-2026-001', 'name' => 'Mikocheni residence, finishing works', 'status' => 'active', 'location' => 'Kinondoni']);
+        $this->assertSame('BWG-MKM-2026-001', ProjectCode::suggest('Mikocheni Majilis'));
     }
 
     public function test_a_tab_marked_as_not_a_project_is_never_read_and_only_the_director_decides(): void
