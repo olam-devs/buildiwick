@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\SheetLine;
 use App\Models\User;
 use App\Services\ExpenseLedgerService;
+use App\Services\GoogleSheets\ProjectSheetLines;
 use App\Services\GoogleSheets\ProjectSheetTabs;
 use App\Services\GoogleSheets\SheetsClient;
 use Database\Seeders\LookupSeeder;
@@ -172,7 +173,7 @@ class SheetLinesSyncTest extends TestCase
         $this->artisan('app:sheets-sync')->expectsOutputToContain('Locked lines: 1.')->assertSuccessful();
 
         $this->assertSame(['Locked '.$old->request_code, 'Saved KND-RES-TXN-0002 · can be changed until confirmed'], [$this->sheets->cell('B3'), $this->sheets->cell('B4')]);
-        $locks = array_values(array_filter($this->sheets->requests, fn ($r) => isset($r['addProtectedRange'])));
+        $locks = array_values(array_filter($this->sheets->requests, fn ($r) => ($r['addProtectedRange']['protectedRange']['description'] ?? null) === ProjectSheetLines::LOCK_DESCRIPTION));
         $this->assertCount(1, $locks);
         $range = $locks[0]['addProtectedRange']['protectedRange'];
         $this->assertSame([2, 3, false, ['boss@example.test', 'robot@example.test']], [$range['range']['startRowIndex'], $range['range']['endRowIndex'], $range['warningOnly'], $range['editors']['users']]);
@@ -301,12 +302,15 @@ class FakeSheetGrid extends SheetsClient
     {
         foreach ($requests as $request) {
             $this->requests[] = $request;
+            if (isset($request['addSheet'])) {
+                $this->tabList[] = ['id' => $request['addSheet']['properties']['sheetId'], 'title' => $request['addSheet']['properties']['title']];
+            }
             if (isset($request['deleteProtectedRange'])) {
                 foreach ($this->protections as $sheet => $ranges) {
                     $this->protections[$sheet] = array_values(array_filter($ranges, fn ($r) => $r['id'] !== $request['deleteProtectedRange']['protectedRangeId']));
                 }
             }
-            if (isset($request['addProtectedRange'])) {
+            if (($request['addProtectedRange']['protectedRange']['description'] ?? null) === ProjectSheetLines::LOCK_DESCRIPTION) {
                 $range = $request['addProtectedRange']['protectedRange'];
                 $this->protections[$range['range']['sheetId']][] = ['id' => $this->nextProtection++, 'start' => $range['range']['startRowIndex'],
                     'end' => $range['range']['endRowIndex'], 'editors' => [...$range['editors']['users'], 'owner@example.test']];

@@ -10,14 +10,19 @@ use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\ProjectDocument;
 use App\Models\Role;
+use App\Models\SheetTabRequest;
 use App\Models\User;
+use App\Services\GoogleSheets\ProjectSheetTabs;
+use App\Services\GoogleSheets\SheetsClient;
 use App\Services\PhaseStructureService;
 use App\Services\ProjectRegistrationService;
 use App\Support\Features;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProjectSetupController extends Controller
@@ -66,11 +71,13 @@ class ProjectSetupController extends Controller
         return view('projects.index', compact('projects'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $this->authorize('create', Project::class);
         if (Features::recording()) {
-            return view('projects.recording-form', $this->recordingFormData(null));
+            $sheetTab = $request->filled('sheet_tab') ? SheetTabRequest::query()->where('status', 'pending')->find($request->integer('sheet_tab')) : null;
+
+            return view('projects.recording-form', $this->recordingFormData(null) + ['sheetTab' => $sheetTab]);
         }
 
         return view('projects.form', $this->formData(null));
@@ -81,7 +88,8 @@ class ProjectSetupController extends Controller
         if (Features::recording()) {
             $this->authorize('create', Project::class);
             $data = $this->recordingData($request, null);
-            $project = DB::transaction(function () use ($data, $request, $phases): Project {
+            $sheetTabId = $request->integer('sheet_tab_request_id') ?: null;
+            $project = DB::transaction(function () use ($data, $request, $phases, $sheetTabId): Project {
                 $project = Project::create(collect($data)->only(['project_code', 'name', 'work_type', 'status', 'location', 'planned_start_date', 'expected_completion_date', 'notes'])->all() + ['is_company_overheads' => $request->boolean('is_company_overheads')] + ['created_by' => $request->user()->id]);
                 $project->assignedUsers()->sync(array_filter($data['project_manager_ids'] ?? []));
                 if ($request->boolean('standard_stages')) {
@@ -89,15 +97,84 @@ class ProjectSetupController extends Controller
                         $phases->create($project, $stage, null, $request->user());
                     }
                 }
+                if ($sheetTabId) {
+                    $this->adoptSheetTab($project, $sheetTabId, $request->user());
+                }
 
                 return $project;
             });
+            if ($sheetTabId) {
+                $this->refreshSheetTabs();
+
+                return redirect()->route('ledger.structure', $project)->with('success', 'Project '.$project->project_code.' created from the Google Sheet tab. Her lines go into her Record Expense draft within 5 minutes; set up the phases below so they match.');
+            }
 
             return redirect()->route('ledger.structure', $project)->with('success', 'Project '.$project->project_code.' created. Set up its phases and budget below.');
         }
         $project = $registration->create(app(StoreProjectSetupRequest::class)->validated(), $request->user());
 
         return redirect()->route('admin.projects.show', $project)->with('success', 'Project '.$project->project_code.' registered.');
+    }
+
+    /** Tabs Data Entry added to the entry sheet for projects Buildiwick does not have yet. */
+    public function sheetTabs()
+    {
+        $this->authorize('create', Project::class);
+        $waiting = SheetTabRequest::query()->where('status', 'pending')->orderBy('created_at')->get();
+        $decided = SheetTabRequest::query()->where('status', '!=', 'pending')->with(['project', 'decider'])->latest('decided_at')->limit(20)->get();
+
+        return view('projects.sheet-tabs', compact('waiting', 'decided'));
+    }
+
+    public function rejectSheetTab(Request $request, SheetTabRequest $sheetTab)
+    {
+        $this->authorize('create', Project::class);
+        abort_unless($sheetTab->status === 'pending', 409, 'This tab has already been decided.');
+        $sheetTab->update(['status' => 'rejected', 'decided_by' => $request->user()->id, 'decided_at' => now()]);
+        $this->refreshSheetTabs();
+
+        return back()->with('success', 'The tab "'.$sheetTab->title.'" is marked as not a project. Its lines are not read.');
+    }
+
+    public function reopenSheetTab(SheetTabRequest $sheetTab)
+    {
+        $this->authorize('create', Project::class);
+        abort_unless($sheetTab->status === 'rejected', 409, 'Only a tab marked as not a project can be reopened.');
+        $sheetTab->update(['status' => 'pending', 'decided_by' => null, 'decided_at' => null]);
+        $this->refreshSheetTabs();
+
+        return back()->with('success', 'The tab "'.$sheetTab->title.'" is waiting for approval again.');
+    }
+
+    /** Makes a waiting sheet tab the new project's tab; Data Entry's lines in it then flow into her draft. */
+    private function adoptSheetTab(Project $project, int $requestId, User $director): void
+    {
+        $sheetTab = SheetTabRequest::query()->lockForUpdate()->find($requestId);
+        if (! $sheetTab || $sheetTab->status !== 'pending') {
+            throw ValidationException::withMessages(['name' => 'That Google Sheet tab has already been decided or was deleted from the sheet.']);
+        }
+        if (! $sheetTab->layout_ok) {
+            throw ValidationException::withMessages(['name' => 'The tab "'.$sheetTab->title.'" is not in the Buildiwick layout, so its lines cannot be read. Ask her to copy them into a duplicate of the "+ New project" tab.']);
+        }
+        $project->forceFill(['sheet_tab_id' => $sheetTab->sheet_tab_id])->save();
+        $sheetTab->update(['status' => 'approved', 'project_id' => $project->id, 'decided_by' => $director->id, 'decided_at' => now()]);
+        $clerk = User::query()->where('username', (string) config('services.google_sheets.draft_username'))->first();
+        if ($clerk && ! $clerk->all_projects) {
+            $project->assignedUsers()->syncWithoutDetaching([$clerk->id]);
+        }
+    }
+
+    /** Updates the sheet now (rename, heading, dropdowns); if Google is unreachable the 5-minute sync does it. */
+    private function refreshSheetTabs(): void
+    {
+        if (! app(SheetsClient::class)->isConfigured()) {
+            return;
+        }
+        try {
+            app(ProjectSheetTabs::class)->newProjectTabs();
+        } catch (\Throwable $e) {
+            Log::warning('Sheet tab update after a decision failed; the next sync retries', ['error' => $e->getMessage()]);
+        }
     }
 
     public function show(Project $project)

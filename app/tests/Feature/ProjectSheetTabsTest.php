@@ -31,14 +31,15 @@ class ProjectSheetTabsTest extends TestCase
 
         $this->artisan('app:sheets-tabs')->expectsOutputToContain('Created (1): Kinondoni residence')->assertSuccessful();
 
-        $this->assertSame(['How to use', 'Kinondoni residence'], array_column($this->sheets->tabs(), 'title'));
+        // The "+ New project" template is made once, for tabs Data Entry adds herself.
+        $this->assertSame(['How to use', '+ New project', 'Kinondoni residence'], array_column($this->sheets->tabs(), 'title'));
         $this->assertSame(ProjectSheetTabs::TAB_ID_OFFSET + $kinondoni->id, $kinondoni->fresh()->sheet_tab_id);
 
         $requests = $this->sheets->requests;
         $this->assertSame(['Preliminaries', 'Superstructure'], $this->dropdown($requests, 12));
         $this->assertContains('GAL', $this->dropdown($requests, 9));
         $this->assertContains('Materials', $this->dropdown($requests, 3));
-        $protections = array_values(array_filter($requests, fn ($r) => isset($r['addProtectedRange'])));
+        $protections = array_values(array_filter($requests, fn ($r) => isset($r['addProtectedRange']) && $r['addProtectedRange']['protectedRange']['range']['sheetId'] === $kinondoni->fresh()->sheet_tab_id));
         $this->assertCount(2, $protections);
         $this->assertFalse($protections[0]['addProtectedRange']['protectedRange']['warningOnly']);
         $this->assertSame(['robot@example.test'], $protections[0]['addProtectedRange']['protectedRange']['editors']['users']);
@@ -58,7 +59,7 @@ class ProjectSheetTabsTest extends TestCase
         $this->sheets->requests = [];
 
         $this->artisan('app:sheets-tabs')->expectsOutputToContain('Renamed (1): Galco Mbozi → Galco Mbozi gate')->assertSuccessful();
-        $this->assertSame(['How to use', 'Galco Mbozi gate'], array_column($this->sheets->tabs(), 'title'));
+        $this->assertSame(['How to use', '+ New project', 'Galco Mbozi gate'], array_column($this->sheets->tabs(), 'title'));
         $this->assertSame(['Roofing', 'Finishing'], $this->dropdown($this->sheets->requests, 12));
     }
 

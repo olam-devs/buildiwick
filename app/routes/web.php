@@ -202,6 +202,9 @@ Route::middleware(['auth', 'active-account'])->group(function () {
 
     Route::get('/admin/projects', [ProjectSetupController::class, 'index'])->name('admin.projects.index');
     Route::get('/admin/projects/create', [ProjectSetupController::class, 'create'])->name('admin.projects.create');
+    Route::get('/admin/projects/sheet-tabs', [ProjectSetupController::class, 'sheetTabs'])->name('admin.sheet-tabs.index');
+    Route::post('/admin/projects/sheet-tabs/{sheetTab}/reject', [ProjectSetupController::class, 'rejectSheetTab'])->name('admin.sheet-tabs.reject');
+    Route::post('/admin/projects/sheet-tabs/{sheetTab}/reopen', [ProjectSetupController::class, 'reopenSheetTab'])->name('admin.sheet-tabs.reopen');
     Route::post('/admin/projects', [ProjectSetupController::class, 'store'])->name('admin.projects.store');
     Route::get('/admin/projects/{project}/edit', [ProjectSetupController::class, 'edit'])->name('admin.projects.edit');
     Route::put('/admin/projects/{project}', [ProjectSetupController::class, 'update'])->name('admin.projects.update');

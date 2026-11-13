@@ -4,8 +4,9 @@
 @include('partials.ledger.styles')
 <div class="lg-head">
   <div><h2>Project Setup</h2><p>Register projects, assign Project Managers and set each project's status.</p></div>
-  <div class="lg-actions"><a class="btn btn-primary" href="{{ route('admin.projects.create') }}">+ New Project</a></div>
+  <div class="lg-actions"><a class="btn btn-ghost" href="{{ route('admin.sheet-tabs.index') }}">New tabs from the Google Sheet</a><a class="btn btn-primary" href="{{ route('admin.projects.create') }}">+ New Project</a></div>
 </div>
+@include('projects.partials.sheet-tabs-notice')
 <div class="lg-scroll">
   <table class="lg-table">
     <thead><tr><th>Project ID</th><th>Project</th><th>Location</th><th>Dates</th><th>Status</th><th>Project Manager</th><th class="amt">Phases</th><th></th></tr></thead>

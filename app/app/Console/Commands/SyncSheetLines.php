@@ -34,6 +34,16 @@ class SyncSheetLines extends Command
                 $created = $tabs->sync($missing)['created'];
                 $this->line('New tabs ('.count($created).'): '.implode(', ', $created));
             }
+            // Tabs Data Entry added for a project Buildiwick does not have yet wait for the Director.
+            if ($only === null) {
+                $added = $tabs->newProjectTabs();
+                if ($added['new'] !== []) {
+                    $this->line('New project tabs waiting for approval: '.implode(', ', $added['new']));
+                }
+                if ($added['ready'] !== []) {
+                    $this->line('Approved project tabs set up: '.implode(', ', $added['ready']));
+                }
+            }
             $report = $lines->sync($only, (bool) $this->option('with-drafts'), (bool) $this->option('total-formulas'));
         } catch (Throwable $e) {
             $this->error('Sheet lines could not be synced: '.$e->getMessage());

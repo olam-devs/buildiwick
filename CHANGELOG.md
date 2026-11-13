@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-13 — New Projects Started From the Google Sheet
+
+- Data Entry can start a project Buildiwick does not have yet from the entry sheet: right-click the new **"+ New project"** tab (made by the sync, tab id 99999, free-text Phase column), Duplicate, rename the copy to the project name and type lines. A blank tab she adds is laid out the same way automatically.
+- Every 5 minutes `app:sheets-sync` (`ProjectSheetTabs::newProjectTabs`) records each tab that is not a project's, the guide or the template as a `sheet_tab_requests` row (`pending`), with the number of lines typed, and row 1 of the tab says it is waiting for approval. Its lines are **not** read until approval; she can keep typing meanwhile.
+- The Director sees "N new projects added in the Google Sheet are waiting" on the Company Dashboard and Project Setup, and reviews them under **Project Setup → New tabs from the Google Sheet** (`admin.sheet-tabs.index`): **Create project** opens the normal New Project form prefilled with the tab name; saving it makes the tab that project's tab (`projects.sheet_tab_id`), assigns the Data Entry account if she is not on all projects, renames the tab, writes the project heading and phase dropdown. From the next sync her lines go into her draft like every other project's. **Not a project** marks it rejected (row 1 says so, lines never read); it can be reopened. A deleted waiting/rejected tab is forgotten. A tab not in the Buildiwick layout cannot be approved until its lines are copied into a duplicate of the template.
+
 ## 2026-11-12 — Sheet Total Calculates Itself
 
 - The sheet's Total column is now a formula, `=IF(K="","",ROUND(IF(I="",1,I)*K,2))`, so changing Quantity or Unit Cost in the sheet updates the Total. New and rewritten lines get it, and so does a line typed with a unit cost but no total. A total typed on its own (no unit cost, or an amount different from quantity × unit cost) is kept as typed. Formulas are written with USER_ENTERED (`SheetsClient::writeValues($data, 'USER_ENTERED')`); everything else stays RAW.
