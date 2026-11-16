@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-16 — Clear Message When a Save Has More Than 500 Lines
+
+- When more than 500 lines are shown on the Record Expense form (`LedgerController::MAX_ROWS`, now public and passed to the page as `maxSave`), the page explains the limit and the way out before anything is sent: the note next to "Show date" turns red, Save and Preview's Save stop with the message, and the server's refusal says the same.
+- The "Show date" picker now also offers "Lines 1–500", "Lines 501–…" whenever the draft has more than 500 lines, because one date can hold more than 500 lines (a big sheet paste). Lines not shown stay in the draft for the next save.
+
 ## 2026-11-16 — Big Drafts Save Again (Kinondoni, Oysterbay)
 
 - Data Entry's edits to the Kinondoni draft were lost: after leaving and coming back the old lines were there. Cause: the draft save accepted at most 300 lines (the same limit as one save to the ledger), but the sheet sync had put 334 lines in Kinondoni's draft and 548 in Oysterbay's, so every draft save since 12/13 Nov was refused (422) and the page only said "Draft not saved (no connection?)". Not the sheet overwriting her work.

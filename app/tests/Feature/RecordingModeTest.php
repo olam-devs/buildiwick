@@ -645,6 +645,10 @@ class RecordingModeTest extends TestCase
         $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), ['header' => $draft['header'], 'rows' => $many])->assertOk();
         $this->assertSame([600, 'Cement 32.5'], [ExpenseDraft::query()->sole()->item_count, ExpenseDraft::query()->sole()->data['rows'][599]['item_description']]);
         $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), $draft)->assertOk();
+        // More than one save takes: refused with the way out (save a date or "Lines 1–500" at a time).
+        $tooMany = array_fill(0, 501, ['main_category' => 'materials', 'project_phase_id' => $phases[0]->id, 'item_description' => 'Cement', 'quantity' => '1', 'unit_cost' => '100']);
+        $this->actingAs($clerk)->post(route('ledger.expenses.store', $project), ['expense_date' => now()->toDateString(), 'status' => 'to_confirm', 'rows_json' => json_encode($tooMany)])
+            ->assertSessionHasErrors(['rows' => 'One save takes at most 500 lines. In "Show date" pick one date or "Lines 1–500" and save those; the rest stay in your draft for the next save.']);
 
         // Later (any device): the form opens with the draft, and the project list marks it.
         $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee('Unfinished entry · 1 item');

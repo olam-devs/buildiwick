@@ -40,6 +40,7 @@
       'applyUrl' => route('ledger.sheet-changes.apply', [$project, '__ID__']),
       'undoUrl' => route('ledger.sheet-changes.undo', [$project, '__ID__']),
       'today' => now()->toDateString(),
+      'maxSave' => \App\Http\Controllers\Web\LedgerController::MAX_ROWS,
   ];
   $restoring = ($draft ?? null) && ! old('rows');
 @endphp
@@ -80,6 +81,7 @@
   .rb-filter[hidden]{display:none}
   .rb-filter select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--input-bg);color:var(--ink);min-height:40px}
   .rb-filter-note{color:var(--ink-dim)}
+  .rb-filter-note.rb-filter-warn{color:var(--danger-ink);font-weight:600}
   .rb-apply{background:none;border:0;padding:6px 0 0;color:var(--primary-dark);font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left}
   /* Preview before saving */
   .pv-dialog{border:0;border-radius:16px;padding:0;width:min(720px,calc(100vw - 24px));max-height:calc(100vh - 40px);background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -323,7 +325,7 @@
     });
     tr.querySelector('[data-f=date]').addEventListener('input', () => { markDate(tr); refreshFilter(); sum(); });
     // A row added while one date is shown gets that date, so it stays in view.
-    if (filterSelect.value && data.expense_date === undefined) { const d = tr.querySelector('[data-f=date]'); d.value = filterSelect.value; d.dataset.follow = d.value === headDate.value ? '1' : '0'; markDate(tr); }
+    if (pickedDate() && data.expense_date === undefined) { const d = tr.querySelector('[data-f=date]'); d.value = filterSelect.value; d.dataset.follow = d.value === headDate.value ? '1' : '0'; markDate(tr); }
     markDate(tr);
     tr.querySelector('.rb-more-toggle').addEventListener('click', e => { const open = tr.classList.toggle('open'); e.currentTarget.textContent = open ? 'Fewer details ▴' : 'More details ▾'; });
     body.appendChild(tr);
@@ -347,20 +349,29 @@
   let reviewPick = null;
   const filterSelect = document.getElementById('dateFilter'), filterBar = document.getElementById('dateFilterBar'), filterNote = document.getElementById('dateFilterNote');
   const rowDate = tr => tr.querySelector('[data-f=date]').value || headDate.value;
+  // Above C.maxSave lines the picker also offers parts ("Lines 1–500"…), since one save takes at most that many.
+  const pickedDate = () => filterSelect.value.startsWith('part:') ? '' : filterSelect.value;
+  const tooMany = n => `${n} lines are shown, but one save takes at most ${C.maxSave}. In "Show date" above the lines, pick one date or "Lines 1–${C.maxSave}" and save those; the rest stay in your draft and you save them next.`;
   const shownRows = () => [...body.children].filter(tr => !tr.hidden);
   const shortDate = v => new Date(v + 'T00:00').toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
   function refreshFilter() {
     const counts = {};
     [...body.children].forEach(tr => { const d = rowDate(tr); counts[d] = (counts[d] || 0) + 1; });
-    const dates = Object.keys(counts).sort();
+    const dates = Object.keys(counts).sort(), all = body.children.length;
+    const parts = [];
+    for (let from = 0; all > C.maxSave && from < all; from += C.maxSave) parts.push([from, Math.min(from + C.maxSave, all)]);
     let pick = filterSelect.value;
-    if (pick && !counts[pick]) pick = '';
-    filterSelect.innerHTML = `<option value="">All dates (${body.children.length})</option>` + dates.map(d => `<option value="${d}">${shortDate(d)} (${counts[d]})</option>`).join('');
+    if (pick && !counts[pick] && !(pick.startsWith('part:') && parts.some(([from]) => 'part:' + from === pick))) pick = '';
+    filterSelect.innerHTML = `<option value="">All dates (${all})</option>` + parts.map(([from, to]) => `<option value="part:${from}">Lines ${from + 1}–${to}</option>`).join('')
+      + dates.map(d => `<option value="${d}">${shortDate(d)} (${counts[d]})</option>`).join('');
     filterSelect.value = pick;
-    filterBar.hidden = dates.length < 2 && !pick;
-    [...body.children].forEach(tr => { tr.hidden = (!!pick && rowDate(tr) !== pick) || (reviewPick !== null && !reviewPick.has(tr)); });
-    const hiddenCount = [...body.children].filter(tr => tr.hidden).length, shown = body.children.length - hiddenCount;
-    filterNote.textContent = (pick || reviewPick) ? `Only these ${shown} item${shown === 1 ? '' : 's'} are saved; the other ${hiddenCount} stay in your draft.` : 'Pick a date to save one day at a time.';
+    filterBar.hidden = dates.length < 2 && !pick && !parts.length;
+    const part = pick.startsWith('part:') ? +pick.slice(5) : null;
+    [...body.children].forEach((tr, i) => { tr.hidden = (part !== null ? i < part || i >= part + C.maxSave : (!!pick && rowDate(tr) !== pick)) || (reviewPick !== null && !reviewPick.has(tr)); });
+    const hiddenCount = [...body.children].filter(tr => tr.hidden).length, shown = all - hiddenCount;
+    filterNote.textContent = shown > C.maxSave ? tooMany(shown)
+      : (pick || reviewPick) ? `Only these ${shown} item${shown === 1 ? '' : 's'} are saved; the other ${hiddenCount} stay in your draft.` : 'Pick a date to save one day at a time.';
+    filterNote.classList.toggle('rb-filter-warn', shown > C.maxSave);
   }
   filterSelect.addEventListener('change', () => { refreshFilter(); sum(); window.scrollTo({top: filterBar.getBoundingClientRect().top + window.scrollY - 70}); });
   const sum = () => {
@@ -539,18 +550,19 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
       return `<div class="pv-item ${problems.length ? 'bad' : ''}"><div><b>${k + 1}. ${esc(v('item') || '(no item name)')}</b><small>${esc(bits.join(' · '))}</small><small>${esc(amount)}${tr.querySelector('[name$="[invoice_receipt_no]"]').value.trim() ? ' · Receipt ' + esc(tr.querySelector('[name$="[invoice_receipt_no]"]').value.trim()) : ''}</small></div><div class="amt">${isNaN(total) ? '—' : fmt(total)}</div></div>`;
     }).join('');
     const ownDates = rows.filter(tr => { const d = tr.querySelector('[data-f=date]').value; return d && d !== headDate.value; }).length;
-    document.getElementById('pvMeta').textContent = `${filterSelect.value ? dateText(filterSelect.value) : dateText(headDate.value) + (ownDates ? ` (${ownDates} with their own date)` : '')} · ${rows.length} item${rows.length === 1 ? '' : 's'}${headSup.value.trim() ? ' · ' + headSup.value.trim() : ''}`;
+    document.getElementById('pvMeta').textContent = `${pickedDate() ? dateText(pickedDate()) : dateText(headDate.value) + (ownDates ? ` (${ownDates} with their own date)` : '')} · ${rows.length} item${rows.length === 1 ? '' : 's'}${headSup.value.trim() ? ' · ' + headSup.value.trim() : ''}`;
     const left = body.children.length - shownRows().length;
-    if (left) warnings.unshift(`Only the ${rows.length} item(s) for ${shortDate(filterSelect.value)} are saved now; the other ${left} stay in your draft.`);
+    if (left) warnings.unshift(`Only the ${rows.length} item(s) ${pickedDate() ? 'for ' + shortDate(pickedDate()) : 'shown'} are saved now; the other ${left} stay in your draft.`);
+    if (shownRows().length > C.maxSave) warnings.unshift(tooMany(shownRows().length));
     document.getElementById('pvBody').innerHTML = (warnings.length ? `<div class="pv-warn"><b>Please check:</b><br>${warnings.map(esc).join('<br>')}</div>` : '') + (html || '<p class="hint" style="padding:14px 0">Nothing entered yet.</p>');
     document.getElementById('pvTotal').textContent = fmt(cents / 100);
-    document.getElementById('pvSubmit').disabled = rows.length === 0;
+    document.getElementById('pvSubmit').disabled = rows.length === 0 || shownRows().length > C.maxSave;
     dialog.showModal();
   });
   document.getElementById('pvBack').addEventListener('click', () => dialog.close());
   document.getElementById('pvSubmit').addEventListener('click', () => { dialog.close(); form.requestSubmit(document.getElementById('saveButton')); });
   // Phases with subphases (▸) cannot take expenses: block them in each row too.
-  document.getElementById('batchForm').addEventListener('submit', e => { const bad = shownRows().find(tr => tr.querySelector('[data-f=item]').value.trim() && !tr.querySelector('[data-f=phase]').value); if (bad) { e.preventDefault(); bad.querySelector('[data-f=phase]').focus(); alert('Choose a phase for every item.'); } });
+  document.getElementById('batchForm').addEventListener('submit', e => { if (shownRows().length > C.maxSave) { e.preventDefault(); filterBar.hidden = false; filterBar.scrollIntoView({block: 'center'}); alert(tooMany(shownRows().length)); return; } const bad = shownRows().find(tr => tr.querySelector('[data-f=item]').value.trim() && !tr.querySelector('[data-f=phase]').value); if (bad) { e.preventDefault(); bad.querySelector('[data-f=phase]').focus(); alert('Choose a phase for every item.'); } });
   // Lines with problems that stop saving (see Review) are caught before sending; the server checks again.
   let reviewPassed = false;
   form.addEventListener('submit', e => {

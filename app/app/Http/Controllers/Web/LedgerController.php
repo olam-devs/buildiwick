@@ -39,7 +39,8 @@ use Illuminate\Validation\ValidationException;
 class LedgerController extends Controller
 {
     /** Most items one Record Expense form (and its draft) can hold. */
-    private const MAX_ROWS = 500;
+    /** Lines one save to the ledger takes; the form offers "Lines 1–500"… parts above this. */
+    public const MAX_ROWS = 500;
 
     /** A draft holds every unsaved line, including all the lines the sheet sync brings in (a sheet tab has up to ProjectSheetLayout::ROWS rows). */
     private const MAX_DRAFT_ROWS = 3000;
@@ -381,7 +382,7 @@ class LedgerController extends Controller
             'rows.*.project_phase_id.required' => 'Row :position needs a phase.',
             'rows.*.main_category.required' => 'Row :position needs a category.',
             'rows.*.expense_date.before_or_equal' => 'Row :position has a date in the future.',
-            'rows.max' => 'Save at most '.self::MAX_ROWS.' items at a time.',
+            'rows.max' => 'One save takes at most '.self::MAX_ROWS.' lines. In "Show date" pick one date or "Lines 1–'.self::MAX_ROWS.'" and save those; the rest stay in your draft for the next save.',
         ]);
         // The Review's hard errors (no price for Data Entry, unknown unit, #REF!-style values...) stop the save.
         $blocking = DraftReviewService::blockingMessages(app(DraftReviewService::class)->review($project, $request->input('rows', []), $header['expense_date'], self::priceRequired($request->user())));
