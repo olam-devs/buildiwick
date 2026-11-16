@@ -39,7 +39,7 @@ use Illuminate\Validation\ValidationException;
 class LedgerController extends Controller
 {
     /** Most items one Record Expense form (and its draft) can hold. */
-    private const MAX_ROWS = 300;
+    private const MAX_ROWS = 500;
 
     /** A draft holds every unsaved line, including all the lines the sheet sync brings in (a sheet tab has up to ProjectSheetLayout::ROWS rows). */
     private const MAX_DRAFT_ROWS = 3000;
