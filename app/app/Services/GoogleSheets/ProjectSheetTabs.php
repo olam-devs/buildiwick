@@ -9,6 +9,7 @@ use App\Models\SheetTabRequest;
 use App\Support\PhaseTree;
 use App\Support\ProjectCode;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Keeps one tab per open project in the shared entry sheet: creates missing tabs, follows project
@@ -21,6 +22,9 @@ class ProjectSheetTabs
 {
     /** Tab ids are chosen by us so a tab can be created and formatted in one call. */
     public const TAB_ID_OFFSET = 100000;
+
+    /** Fingerprint of the dropdown lists last written to the template and the tabs waiting for approval. */
+    private const NEW_TAB_LISTS_KEY = 'sheets.new-tab-lists';
 
     public function __construct(private SheetsClient $client, private ProjectSheetLayout $layout) {}
 
@@ -108,6 +112,11 @@ class ProjectSheetTabs
         SheetTabRequest::query()->where('status', '!=', 'approved')->whereNotIn('sheet_tab_id', array_column($tabs, 'id'))->delete();
         $template = collect($tabs)->firstWhere('id', ProjectSheetLayout::TEMPLATE_TAB_ID);
         if ($unknown->isEmpty() && ! $template) {
+            if ($report['template']) {
+                // Just created with the current lists.
+                Cache::forever(self::NEW_TAB_LISTS_KEY, md5(json_encode($this->sharedLists() + ['phases' => self::standardPhases()])));
+            }
+
             return $report;
         }
 
@@ -121,6 +130,13 @@ class ProjectSheetTabs
         // The template's row 1 follows the current labels (it asked for a code before the code was made automatically).
         if ($template && trim((string) ($grids[count($ranges) - 1][0][1] ?? '')) !== ProjectSheetLayout::NAME_LABEL) {
             $requests = $this->layout->newProjectRow($template['id'], ProjectSheetLayout::templateHeading());
+        }
+        // Dropdowns follow the current lists (a new subcategory, unit…) on the template and on tabs waiting for approval,
+        // rewritten only when the lists changed since the last sync.
+        $newTabLists = $this->sharedLists() + ['phases' => self::standardPhases()];
+        $listsChanged = Cache::get(self::NEW_TAB_LISTS_KEY) !== ($listsHash = md5(json_encode($newTabLists)));
+        if ($template && $listsChanged) {
+            $requests = [...$requests, ...$this->layout->validation($template['id'], $newTabLists)];
         }
         $headers = array_column(ProjectSheetLayout::COLUMNS, 'header');
         $filled = fn (array $cells) => collect($cells)->contains(fn ($value) => trim((string) $value) !== '');
@@ -149,12 +165,18 @@ class ProjectSheetTabs
 
             $heading = $request->status === 'rejected' ? ProjectSheetLayout::rejectedHeading() : ProjectSheetLayout::waitingHeading($request->detailsProblem(), $request->project_code);
             if ($blank) {
-                $requests = [...$requests, ...$this->layout->setUp($tab['id'], $heading, $this->sharedLists() + ['phases' => self::standardPhases()], $this->client->serviceAccountEmail(), true)];
-            } elseif ($layoutOk && trim((string) ($grid[0][ProjectSheetLayout::NEW_HEADING_COLUMN] ?? '')) !== $heading) {
-                $requests = [...$requests, ...$this->layout->headingRequest($tab['id'], $heading, ProjectSheetLayout::NEW_HEADING_COLUMN)];
+                $requests = [...$requests, ...$this->layout->setUp($tab['id'], $heading, $newTabLists, $this->client->serviceAccountEmail(), true)];
+            } elseif ($layoutOk) {
+                if ($request->status === 'pending' && $listsChanged) {
+                    $requests = [...$requests, ...$this->layout->validation($tab['id'], $newTabLists)];
+                }
+                if (trim((string) ($grid[0][ProjectSheetLayout::NEW_HEADING_COLUMN] ?? '')) !== $heading) {
+                    $requests = [...$requests, ...$this->layout->headingRequest($tab['id'], $heading, ProjectSheetLayout::NEW_HEADING_COLUMN)];
+                }
             }
         }
         $this->client->batchUpdate($requests);
+        Cache::forever(self::NEW_TAB_LISTS_KEY, $listsHash);
 
         return $report;
     }

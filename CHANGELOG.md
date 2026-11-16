@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-16 — "AC" Subcategory Under Materials
+
+- New Materials subcategory "AC" (code `ac`), added by migration `add_ac_subcategory_under_materials` at the owner's request. It shows in the Record Expense form and in the sheet's Subcategory dropdown.
+- The sheet sync now also refreshes the dropdowns of the "+ New project" template and of tabs waiting for approval whenever the category/subcategory/unit lists change (fingerprint kept in cache `sheets.new-tab-lists`), so a new list value is not rejected there. Project tabs were already refreshed each sync.
+
 ## 2026-11-13 — Total Formula in Every Row of Every Tab
 
 - A second project's Total did not follow Quantity × Unit Cost: the formula was only added when the 5-minute sync read a line, and totals pasted as numbers (e.g. Lisa's 548 Oysterbay lines) stayed numbers.

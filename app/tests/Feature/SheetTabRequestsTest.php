@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ExpenseDraft;
+use App\Models\Lookup;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\SheetTabRequest;
@@ -68,6 +69,11 @@ class SheetTabRequestsTest extends TestCase
             ['', '', 46337, 'Materials', '', 'Sand', '', '', 1, '', '', 350000, 'Walling', ''],
         ]);
         $this->artisan('app:sheets-sync')->expectsOutputToContain('New project tabs waiting for approval: Copy of + New project')->assertSuccessful();
+        // A subcategory added later reaches the template's and the waiting tab's dropdown on the next sync.
+        Lookup::create(['type' => 'subcategory', 'code' => 'test_new_sub', 'label' => 'Test New Sub', 'parent_type' => 'main_category', 'parent_code' => 'materials', 'sort_order' => 999, 'is_active' => true]);
+        $this->artisan('app:sheets-sync')->assertSuccessful();
+        $this->assertContains('Test New Sub', $this->sheets->dropdown(ProjectSheetLayout::TEMPLATE_TAB_ID, 4));
+        $this->assertContains('Test New Sub', $this->sheets->dropdown(555, 4));
 
         $tab = SheetTabRequest::sole();
         // The code is made from the name, the company's way: Msasani → MSN, villa → RES.
