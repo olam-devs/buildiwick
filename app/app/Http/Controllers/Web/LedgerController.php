@@ -41,6 +41,9 @@ class LedgerController extends Controller
     /** Most items one Record Expense form (and its draft) can hold. */
     private const MAX_ROWS = 300;
 
+    /** A draft holds every unsaved line, including all the lines the sheet sync brings in (a sheet tab has up to ProjectSheetLayout::ROWS rows). */
+    private const MAX_DRAFT_ROWS = 3000;
+
     public function index(Request $request, LedgerAnalyticsService $analytics)
     {
         $user = $request->user();
@@ -222,7 +225,7 @@ class LedgerController extends Controller
         $validated = $request->validate([
             'header' => ['nullable', 'array'],
             'header.*' => ['nullable', 'string', 'max:255'],
-            'rows' => ['nullable', 'array', 'max:'.self::MAX_ROWS],
+            'rows' => ['nullable', 'array', 'max:'.self::MAX_DRAFT_ROWS],
             'rows.*' => ['array'],
             'rows.*.*' => ['nullable', 'string', 'max:2000'],
             'known_keys' => ['nullable', 'array'],

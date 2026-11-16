@@ -2,6 +2,12 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-16 — Big Drafts Save Again (Kinondoni, Oysterbay)
+
+- Data Entry's edits to the Kinondoni draft were lost: after leaving and coming back the old lines were there. Cause: the draft save accepted at most 300 lines (the same limit as one save to the ledger), but the sheet sync had put 334 lines in Kinondoni's draft and 548 in Oysterbay's, so every draft save since 12/13 Nov was refused (422) and the page only said "Draft not saved (no connection?)". Not the sheet overwriting her work.
+- The draft now takes up to 3,000 lines (`LedgerController::MAX_DRAFT_ROWS`); saving to the ledger still takes at most 300 at a time.
+- Leaving the Record Expense form through a link now first finishes saving the draft (up to 8 s), and the save made when the tab is hidden no longer uses `keepalive` above 60 KB (browsers drop those). A refused save shows the server's reason.
+
 ## 2026-11-16 — "AC" Subcategory Under Materials
 
 - New Materials subcategory "AC" (code `ac`), added by migration `add_ac_subcategory_under_materials` at the owner's request. It shows in the Record Expense form and in the sheet's Subcategory dropdown.

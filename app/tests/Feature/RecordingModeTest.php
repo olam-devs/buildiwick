@@ -638,6 +638,14 @@ class RecordingModeTest extends TestCase
         $saved = ExpenseDraft::query()->sole();
         $this->assertSame([1, 'Cement 42.5', 'ABC Hardware'], [$saved->item_count, $saved->data['rows'][0]['item_description'], $saved->data['header']['default_supplier']]);
 
+        // A big draft (more lines than one save takes, e.g. a whole sheet tab) is still kept, and an edit to it too.
+        $many = array_fill(0, 600, $draft['rows'][0]);
+        $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), ['header' => $draft['header'], 'rows' => $many])->assertOk()->assertJson(['saved' => true]);
+        $many[599]['item_description'] = 'Cement 32.5';
+        $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), ['header' => $draft['header'], 'rows' => $many])->assertOk();
+        $this->assertSame([600, 'Cement 32.5'], [ExpenseDraft::query()->sole()->item_count, ExpenseDraft::query()->sole()->data['rows'][599]['item_description']]);
+        $this->actingAs($clerk)->postJson(route('ledger.draft.save', $project), $draft)->assertOk();
+
         // Later (any device): the form opens with the draft, and the project list marks it.
         $this->actingAs($clerk)->get(route('entry.index'))->assertOk()->assertSee('Unfinished entry · 1 item');
         $this->actingAs($clerk)->get(route('entry.form', $project))->assertOk()->assertSee('Unfinished entry restored')->assertSee('Cement 42.5');

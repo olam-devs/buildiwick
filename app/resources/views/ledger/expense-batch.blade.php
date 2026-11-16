@@ -416,15 +416,26 @@ ${other} already ${other === 1 ? 'has' : 'have'} a different ${word} and will be
     return JSON.stringify({header, rows: [...body.children].map(rowData), known_keys: knownKeys});
   };
   const saveDraft = (keepalive = false) => {
-    if (submitting) return;
+    if (submitting) return Promise.resolve();
     const payload = collect();
-    if (payload === lastSent) return;
+    if (payload === lastSent) return Promise.resolve();
     lastSent = payload;
-    fetch(C.draftUrl, {method: 'POST', keepalive, headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token}, body: payload})
-      .then(r => r.ok ? r.json() : Promise.reject())
+    // Browsers refuse keepalive requests above 64 KB (a big draft), so those are sent as a normal request.
+    return fetch(C.draftUrl, {method: 'POST', keepalive: keepalive && payload.length < 60000, headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token}, body: payload})
+      .then(r => r.ok ? r.json() : r.json().catch(() => ({})).then(e => Promise.reject(e.message || `error ${r.status}`)))
       .then(d => { statusLine.textContent = d.arrived ? `${d.arrived} new line(s) arrived from the Google Sheet and are kept in your draft. Reload the page to see them.` : d.saved ? `Draft saved at ${d.at}. You can continue later on any device.` : 'Your entry is kept as a draft while you type, so you can continue later on any device.'; })
-      .catch(() => { lastSent = ''; statusLine.textContent = 'Draft not saved (no connection?). Keep the page open and save when you can.'; });
+      .catch(reason => { lastSent = ''; statusLine.textContent = typeof reason === 'string' ? `Draft not saved: ${reason} Keep the page open and tell the Director.` : 'Draft not saved (no connection?). Keep the page open and save when you can.'; });
   };
+  // Leaving through a link (another project, My Entries…) first finishes saving the draft.
+  document.addEventListener('click', e => {
+    const link = e.target.closest('a[href]');
+    if (!link || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || link.target === '_blank' || link.getAttribute('href').startsWith('#') || submitting || collect() === lastSent) return;
+    e.preventDefault();
+    clearTimeout(draftTimer);
+    statusLine.textContent = 'Saving your draft…';
+    const go = () => { window.location.href = link.href; };
+    Promise.race([saveDraft(), new Promise(resolve => setTimeout(resolve, 8000))]).then(go, go);
+  });
   const queueDraft = () => { clearTimeout(draftTimer); draftTimer = setTimeout(() => { saveDraft(); if (reviewed) refreshReview(); }, 1500); };
   ['input', 'change'].forEach(type => document.getElementById('batchForm').addEventListener(type, queueDraft));
   body.addEventListener('click', e => { if (e.target.closest('.rb-remove')) queueDraft(); });
