@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-17 — Data Entry Renames Projects From the Sheet
+
+- At the owner's request Data Entry can rename a project: renaming the project's tab in the entry sheet makes that the project's name in Buildiwick (within the hour, `app:sheets-tabs`); the project code never changes and the row-1 heading follows. Before, the sync renamed such a tab back to the old name.
+- New `projects.sheet_tab_title` / `sheet_tab_name` keep the tab title and project name as the sync last left them, so a rename in the sheet is told apart from a rename in Buildiwick. If both happened since the last sync, Buildiwick's name wins. A tab renamed to a blank or default name ("Sheet7", "Copy of …") or to another project's name is renamed back. Every rename taken from the sheet is logged ("Project renamed from its sheet tab").
+
 ## 2026-11-17 — Up to 500 Lines a Page on Expenses (Bulk Confirm)
 
 - The Expenses list had a fixed 100 lines a page, so confirming a project with hundreds of "To confirm" lines (Mikocheni: 226) took several rounds of "Select all on page → ✓ Confirm". A "Lines per page" filter (100 / 200 / 500, `LedgerController::PAGE_SIZES`; anything else falls back to 100) now lets the Director tick up to 500 lines, the most one bulk action takes, and confirm them at once.

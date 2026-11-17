@@ -33,7 +33,7 @@ class SyncProjectSheetTabs extends Command
         if ($report['guide']) {
             $this->line('Turned Sheet1 into the "How to use" tab.');
         }
-        foreach (['created' => 'Created', 'renamed' => 'Renamed', 'refreshed' => 'Lists refreshed'] as $key => $label) {
+        foreach (['created' => 'Created', 'renamed' => 'Renamed', 'named' => 'Project renamed from the sheet', 'refreshed' => 'Lists refreshed'] as $key => $label) {
             $this->line($label.' ('.count($report[$key]).')'.($report[$key] ? ': '.implode(', ', $report[$key]) : ''));
         }
 

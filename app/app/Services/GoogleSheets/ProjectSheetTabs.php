@@ -10,6 +10,7 @@ use App\Support\PhaseTree;
 use App\Support\ProjectCode;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Keeps one tab per open project in the shared entry sheet: creates missing tabs, follows project
@@ -37,11 +38,11 @@ class ProjectSheetTabs
 
     /**
      * @param  list<int>|null  $onlyProjectIds
-     * @return array{created: list<string>, renamed: list<string>, refreshed: list<string>, guide: bool}
+     * @return array{created: list<string>, renamed: list<string>, named: list<string>, refreshed: list<string>, guide: bool}
      */
     public function sync(?array $onlyProjectIds = null): array
     {
-        $report = ['created' => [], 'renamed' => [], 'refreshed' => [], 'guide' => false];
+        $report = ['created' => [], 'renamed' => [], 'named' => [], 'refreshed' => [], 'guide' => false];
         $tabs = collect($this->client->tabs());
         $titles = $tabs->pluck('title')->all();
         $robot = $this->client->serviceAccountEmail();
@@ -66,16 +67,28 @@ class ProjectSheetTabs
 
             if ($existing) {
                 $requests = $this->layout->validation($existing['id'], $lists);
-                if ($existing['title'] !== $wanted) {
-                    $title = $this->unique($wanted, $project, array_diff($titles, [$existing['title']]));
-                    $requests = [...$this->layout->rename($existing['id'], $title), ...$requests];
-                    $titles = [...array_diff($titles, [$existing['title']]), $title];
-                    $report['renamed'][] = "{$existing['title']} → {$title}";
+                $current = $existing['title'];
+                // Data Entry renames a project by renaming its tab: the project takes that name (its code never changes).
+                // A project renamed in Buildiwick since the last sync renames the tab instead.
+                $renamedInSheet = $project->sheet_tab_title !== null && $current !== $project->sheet_tab_title;
+                $renamedHere = $project->sheet_tab_name !== null && $project->name !== $project->sheet_tab_name;
+                $newName = $renamedInSheet && ! $renamedHere ? $this->nameFromTab($current, $project) : null;
+                if ($newName !== null) {
+                    $report['named'][] = "{$project->name} → {$newName}";
+                    Log::info('Project renamed from its sheet tab', ['project' => $project->project_code, 'from' => $project->name, 'to' => $newName]);
+                    $project->forceFill(['name' => $newName])->save();
+                    $requests = [...$requests, ...$this->layout->headingRequest($existing['id'], ProjectSheetLayout::heading($project))];
+                } elseif ($current !== $wanted && ($renamedInSheet || $renamedHere || $project->sheet_tab_title === null)) {
+                    $current = $this->unique($wanted, $project, array_diff($titles, [$existing['title']]));
+                    $requests = [...$this->layout->rename($existing['id'], $current), ...$requests,
+                        ...$this->layout->headingRequest($existing['id'], ProjectSheetLayout::heading($project))];
+                    $titles = [...array_diff($titles, [$existing['title']]), $current];
+                    $report['renamed'][] = "{$existing['title']} → {$current}";
                 } else {
-                    $report['refreshed'][] = $existing['title'];
+                    $report['refreshed'][] = $current;
                 }
                 $this->client->batchUpdate($requests);
-                $this->remember($project, $existing['id']);
+                $this->remember($project, $existing['id'], $current);
 
                 continue;
             }
@@ -84,7 +97,7 @@ class ProjectSheetTabs
             $title = $this->unique($wanted, $project, $titles);
             $this->client->batchUpdate($this->layout->create($project, $sheetId, $title, $lists, $robot));
             $titles[] = $title;
-            $this->remember($project, $sheetId);
+            $this->remember($project, $sheetId, $title);
             $report['created'][] = $title;
         }
 
@@ -260,10 +273,29 @@ class ProjectSheetTabs
         return in_array($title, $taken, true) ? mb_substr($title, 0, 70).' ('.$project->project_code.')' : $title;
     }
 
-    private function remember(Project $project, int $sheetId): void
+    /** Keeps the tab id, and the tab title and project name as this sync leaves them (to notice a rename later). */
+    private function remember(Project $project, int $sheetId, string $title): void
     {
-        if ((int) $project->sheet_tab_id !== $sheetId) {
-            $project->forceFill(['sheet_tab_id' => $sheetId])->save();
+        $project->forceFill(['sheet_tab_id' => $sheetId, 'sheet_tab_title' => $title, 'sheet_tab_name' => $project->name]);
+        if ($project->isDirty()) {
+            $project->save();
         }
+    }
+
+    /**
+     * The project name a renamed tab gives, or null when it cannot be one (blank, a default Google name, or the name of
+     * another project); the tab is then renamed back.
+     */
+    private function nameFromTab(string $title, Project $project): ?string
+    {
+        $name = trim(preg_replace('/\s+/', ' ', $title));
+        if ($name === '' || mb_strlen($name) > 150 || preg_match('/^(sheet\d*|copy of .*)$/i', $name)) {
+            return null;
+        }
+        if (Project::query()->whereKeyNot($project->id)->whereRaw('lower(name) = ?', [mb_strtolower($name)])->exists()) {
+            return null;
+        }
+
+        return $name;
     }
 }

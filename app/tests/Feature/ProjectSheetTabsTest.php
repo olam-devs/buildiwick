@@ -63,6 +63,37 @@ class ProjectSheetTabsTest extends TestCase
         $this->assertSame(['Roofing', 'Finishing'], $this->dropdown($this->sheets->requests, 12));
     }
 
+    public function test_a_tab_renamed_in_the_sheet_renames_the_project_but_not_its_code(): void
+    {
+        $project = $this->project('BWG-MBO-2026-001', 'Galco Mbozi', ['Roofing']);
+        $this->project('BWG-KND-RES-2026-001', 'Kinondoni residence', ['Roofing']);
+        $this->artisan('app:sheets-tabs')->assertSuccessful();
+        $tab = $project->fresh()->sheet_tab_id;
+
+        // Data Entry renames the tab: the project takes the name (spaces tidied), the code stays, the heading follows.
+        $this->sheets->retitle($tab, '  Galco   Mbozi  gate ');
+        $this->sheets->requests = [];
+        $this->artisan('app:sheets-tabs')->expectsOutputToContain('Project renamed from the sheet (1): Galco Mbozi → Galco Mbozi gate')->assertSuccessful();
+        $this->assertSame(['Galco Mbozi gate', 'BWG-MBO-2026-001'], [$project->fresh()->name, $project->fresh()->project_code]);
+        $this->assertContains('  Galco   Mbozi  gate ', array_column($this->sheets->tabs(), 'title'));
+        $headings = array_column(array_column(array_filter($this->sheets->requests, fn ($r) => isset($r['updateCells'])), 'updateCells'), 'rows');
+        $this->assertStringContainsString('Galco Mbozi gate · BWG-MBO-2026-001', json_encode($headings, JSON_UNESCAPED_UNICODE));
+        $this->artisan('app:sheets-tabs')->expectsOutputToContain('Lists refreshed (2)')->assertSuccessful();
+
+        // A name another project has, or a default Google name, is not taken: the tab is renamed back.
+        $this->sheets->retitle($tab, 'kinondoni Residence');
+        $this->artisan('app:sheets-tabs')->expectsOutputToContain('Renamed (1): kinondoni Residence → Galco Mbozi gate')->assertSuccessful();
+        $this->sheets->retitle($tab, 'Sheet7');
+        $this->artisan('app:sheets-tabs')->expectsOutputToContain('Renamed (1): Sheet7 → Galco Mbozi gate')->assertSuccessful();
+        $this->assertSame('Galco Mbozi gate', $project->fresh()->name);
+
+        // Renamed in Buildiwick and in the sheet before the next sync: Buildiwick's name wins.
+        $project->update(['name' => 'Galco Mbozi depot']);
+        $this->sheets->retitle($tab, 'Mbozi something');
+        $this->artisan('app:sheets-tabs')->expectsOutputToContain('Renamed (1): Mbozi something → Galco Mbozi depot')->assertSuccessful();
+        $this->assertSame('Galco Mbozi depot', $project->fresh()->name);
+    }
+
     /** @return list<string> */
     private function dropdown(array $requests, int $column): array
     {
@@ -128,5 +159,16 @@ class FakeSheetsClient extends SheetsClient
     public function serviceAccountEmail(): string
     {
         return 'robot@example.test';
+    }
+
+    /** A person renaming a tab in Google Sheets. */
+    public function retitle(int $id, string $title): void
+    {
+        foreach ($this->tabList as &$tab) {
+            if ($tab['id'] === $id) {
+                $tab['title'] = $title;
+            }
+        }
+        unset($tab);
     }
 }
