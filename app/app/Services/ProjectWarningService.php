@@ -178,8 +178,9 @@ class ProjectWarningService
         if ($rules['no_activity_days']['active'] && $project->status === 'active') {
             $days = (int) round((float) $rules['no_activity_days']['threshold']);
             $last = $report['totals']['last_entry'];
-            if (! $last || CarbonImmutable::parse($last)->lt($today->subDays($days))) {
-                $add('no_activity_days', $last ? 'No expense recorded since '.CarbonImmutable::parse($last)->format('d M Y').'.' : 'No expense has been recorded yet.');
+            // Only a project that has stopped recording; one with nothing recorded yet is not a warning (owner, 2026-11-17).
+            if ($last && CarbonImmutable::parse($last)->lt($today->subDays($days))) {
+                $add('no_activity_days', 'No expense recorded since '.CarbonImmutable::parse($last)->format('d M Y').'.');
             }
         }
         if ($rules['phase_late_days']['active']) {

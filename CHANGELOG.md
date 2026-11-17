@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-17 — "No Expense Recorded Yet" Is Not a Warning
+
+- The Director's Needs attention list showed every active project with nothing recorded ("No expense has been recorded yet."). At the owner's request that case is no longer a warning; the rule (`no_activity_days` in `ProjectWarningService::evaluateLedger`) now only flags a project that recorded expenses before and then stopped ("No expense recorded since …").
+
 ## 2026-11-16 — Clear Message When a Save Has More Than 500 Lines
 
 - When more than 500 lines are shown on the Record Expense form (`LedgerController::MAX_ROWS`, now public and passed to the page as `maxSave`), the page explains the limit and the way out before anything is sent: the note next to "Show date" turns red, Save and Preview's Save stop with the message, and the server's refusal says the same.

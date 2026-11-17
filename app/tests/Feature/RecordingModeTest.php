@@ -232,6 +232,10 @@ class RecordingModeTest extends TestCase
         $this->assertTrue($warnings->contains(fn ($m) => str_contains($m, 'Preliminaries › Materials: 92.00% of budget')));
         $this->assertTrue($warnings->contains(fn ($m) => str_contains($m, '1 line(s) recorded more than 14 days ago are still not confirmed')));
         $this->assertSame(1, $warnings->filter(fn ($m) => str_contains($m, '% of budget ('))->count());
+        // Stopped recording is a warning; nothing recorded yet is not.
+        $this->assertContains('No expense recorded since 01 Oct 2026.', $warnings->all());
+        [$empty] = $this->project('BWG-TST-E-2026-001');
+        $this->assertNotContains('no_activity_days', array_column(app(ProjectWarningService::class)->evaluateLedger(app(LedgerAnalyticsService::class)->project($empty)), 'rule'));
         $this->actingAs($director)->get(route('director.projects.warnings', $project))->assertOk()->assertSee('92.00% of budget');
         $this->actingAs($director)->get(route('director.index'))->assertOk()->assertSee('Needs attention')->assertSee($project->name);
     }
