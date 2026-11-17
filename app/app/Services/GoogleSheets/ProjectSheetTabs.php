@@ -27,6 +27,14 @@ class ProjectSheetTabs
     /** Fingerprint of the dropdown lists last written to the template and the tabs waiting for approval. */
     private const NEW_TAB_LISTS_KEY = 'sheets.new-tab-lists';
 
+    /**
+     * The spreadsheet's locale. Google reads typed and pasted dates by it: en_GB takes 05/11/2026 as 5 November
+     * (en_US would make it 11 May and refuse 25/10/2026). Formulas and decimals work the same in both.
+     */
+    public const LOCALE = 'en_GB';
+
+    private const LOCALE_KEY = 'sheets.locale';
+
     public function __construct(private SheetsClient $client, private ProjectSheetLayout $layout) {}
 
     /** Projects that get a tab: open project ledgers, not company overheads. */
@@ -47,6 +55,7 @@ class ProjectSheetTabs
         $titles = $tabs->pluck('title')->all();
         $robot = $this->client->serviceAccountEmail();
         $shared = $this->sharedLists();
+        $this->ensureLocale();
 
         if (! in_array('How to use', $titles, true) && ($starter = $tabs->firstWhere('title', 'Sheet1'))) {
             $this->client->batchUpdate($this->layout->guide($starter['id']));
@@ -102,6 +111,16 @@ class ProjectSheetTabs
         }
 
         return $report;
+    }
+
+    /** Sets the spreadsheet's locale to day-first dates (once; remembered until the cache is cleared). */
+    private function ensureLocale(): void
+    {
+        if (Cache::get(self::LOCALE_KEY) === self::LOCALE) {
+            return;
+        }
+        $this->client->batchUpdate([['updateSpreadsheetProperties' => ['properties' => ['locale' => self::LOCALE], 'fields' => 'locale']]]);
+        Cache::forever(self::LOCALE_KEY, self::LOCALE);
     }
 
     /**

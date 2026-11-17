@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-17 — Sheet Reads Pasted Dates Day First
+
+- The entry spreadsheet's locale was en_US, so a date typed or pasted as 05/11/2026 became 11 May and 25/10/2026 was refused by the Date column. `app:sheets-tabs` now sets the spreadsheet locale to en_GB once (`ProjectSheetTabs::LOCALE`, remembered in the cache key `sheets.locale`), so dates are read day/month/year. The column still shows dd/mm/yyyy; dates already in the sheet keep their value; formulas and decimals are unchanged.
+
 ## 2026-11-17 — Quantity Takes Up to 4 Decimals
 
 - Data Entry could not save steel bought by the tonne (quantity 0.652): the Qty box only accepted 2 decimals ("The two nearest valid values are 0.65 and 0.66") and the ledger rounded quantity to 2 decimals. Quantity now keeps up to 4 decimals (`App\Casts\Quantity`), stored and shown without trailing zeros ("30", "0.652"); the Qty boxes on Record Expense and the single-line form accept any decimal. Money totals stay at 2 decimals.

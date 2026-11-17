@@ -49,6 +49,17 @@ class ProjectSheetTabsTest extends TestCase
         $this->assertEmpty(array_filter($this->sheets->requests, fn ($r) => isset($r['addSheet']) || isset($r['addProtectedRange'])));
     }
 
+    public function test_the_spreadsheet_reads_dates_day_first_set_once(): void
+    {
+        $this->artisan('app:sheets-tabs')->assertSuccessful();
+        $locale = fn () => array_values(array_filter($this->sheets->requests, fn ($r) => isset($r['updateSpreadsheetProperties'])));
+        $this->assertSame([['updateSpreadsheetProperties' => ['properties' => ['locale' => 'en_GB'], 'fields' => 'locale']]], $locale());
+
+        $this->sheets->requests = [];
+        $this->artisan('app:sheets-tabs')->assertSuccessful();
+        $this->assertSame([], $locale());
+    }
+
     public function test_a_renamed_project_renames_its_tab_and_new_phases_reach_the_dropdown(): void
     {
         $project = $this->project('BWG-MBO-2026-001', 'Galco Mbozi', ['Roofing']);
