@@ -45,6 +45,7 @@
   <div class="field" style="min-width:135px"><label for="to">To</label><input type="date" id="to" name="to" value="{{ $filters['to'] ?? '' }}"></div>
   @if($canConfirm || $canDeny)<div class="field" style="min-width:150px"><label for="check">Check</label><select id="check" name="check"><option value="">Everything</option><option value="duplicates" @selected(($filters['check'] ?? '') === 'duplicates')>Possible duplicates</option></select></div>@endif
   <div class="field" style="min-width:130px"><label for="sort">Sort</label><select id="sort" name="sort"><option value="newest">Newest first</option><option value="oldest" @selected(($filters['sort'] ?? '') === 'oldest')>Oldest first</option><option value="amount" @selected(($filters['sort'] ?? '') === 'amount')>Largest amount</option></select></div>
+  <div class="field" style="min-width:110px"><label for="per">Lines per page</label><select id="per" name="per">@foreach($pageSizes as $size)<option value="{{ $size }}" @selected($perPage === $size)>{{ $size }}</option>@endforeach</select></div>
   @if(array_filter($filters))<a class="btn btn-ghost" href="{{ route('ledger.expenses', $project) }}">Clear filters</a>@endif
 </form>
 

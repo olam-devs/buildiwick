@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-17 — Up to 500 Lines a Page on Expenses (Bulk Confirm)
+
+- The Expenses list had a fixed 100 lines a page, so confirming a project with hundreds of "To confirm" lines (Mikocheni: 226) took several rounds of "Select all on page → ✓ Confirm". A "Lines per page" filter (100 / 200 / 500, `LedgerController::PAGE_SIZES`; anything else falls back to 100) now lets the Director tick up to 500 lines, the most one bulk action takes, and confirm them at once.
+
 ## 2026-11-17 — "No Expense Recorded Yet" Is Not a Warning
 
 - The Director's Needs attention list showed every active project with nothing recorded ("No expense has been recorded yet."). At the owner's request that case is no longer a warning; the rule (`no_activity_days` in `ProjectWarningService::evaluateLedger`) now only flags a project that recorded expenses before and then stopped ("No expense recorded since …").

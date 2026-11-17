@@ -488,6 +488,14 @@ class RecordingModeTest extends TestCase
         $foreign = ExpenseRequest::where('item_description', 'Elsewhere')->value('id');
 
         $this->actingAs($accounts)->get(route('ledger.expenses', [$project, 'status' => 'to_confirm']))->assertOk()->assertSee('id="bulkBar"', false);
+        // Up to 500 lines a page, so a big batch can be ticked and confirmed in one go (100 by default; other sizes ignored).
+        [$big, $bigPhases] = $this->project('BWG-TST-D-2026-001');
+        $this->actingAs($this->user('project_manager', $big))->post(route('ledger.expenses.store', $big), ['expense_date' => '2026-10-29', 'status' => 'to_confirm',
+            'rows' => array_fill(0, 130, ['main_category' => 'materials', 'project_phase_id' => $bigPhases[0]->id, 'item_description' => 'Cement', 'quantity' => '1', 'unit_cost' => '100'])])->assertSessionHasNoErrors();
+        $boxes = fn (array $query) => substr_count($this->actingAs($accounts)->get(route('ledger.expenses', [$big, ...$query]))->assertOk()->getContent(), 'class="rowCheck"');
+        $this->assertSame([100, 130, 100], [$boxes([]), $boxes(['per' => 200]), $boxes(['per' => 999])]);
+        $this->actingAs($accounts)->post(route('ledger.expenses.bulk', $big), ['action' => 'confirm', 'ids' => ExpenseRequest::where('project_id', $big->id)->pluck('id')->all(), 'payment_date' => '2026-10-30'])
+            ->assertSessionHas('success', '130 line(s) confirmed · TSh 13,000.00 paid.');
         $this->actingAs($pm)->post(route('ledger.expenses.bulk', $project), ['action' => 'confirm', 'ids' => [$ids[0]], 'payment_date' => '2026-10-30', 'payment_method' => 'cash'])->assertForbidden();
         $this->actingAs($accounts)->post(route('ledger.expenses.bulk', $project), ['action' => 'deny', 'ids' => [$ids[0]]])->assertSessionHasErrors('reason');
 

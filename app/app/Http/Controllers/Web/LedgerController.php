@@ -42,6 +42,9 @@ class LedgerController extends Controller
     /** Lines one save to the ledger takes; the form offers "Lines 1–500"… parts above this. */
     public const MAX_ROWS = 500;
 
+    /** Lines per page on the Expenses list; the largest equals the most lines one bulk confirm takes. */
+    private const PAGE_SIZES = [100, 200, 500];
+
     /** A draft holds every unsaved line, including all the lines the sheet sync brings in (a sheet tab has up to ProjectSheetLayout::ROWS rows). */
     private const MAX_DRAFT_ROWS = 3000;
 
@@ -145,7 +148,9 @@ class LedgerController extends Controller
         ];
         $totals['to_confirm'] = Money::difference($totals['recorded'], $totals['paid']);
         $page = LengthAwarePaginator::resolveCurrentPage();
-        $paged = new LengthAwarePaginator($lines->slice(($page - 1) * 100, 100)->values(), $lines->count(), 100, $page, ['path' => $request->url(), 'query' => $request->query()]);
+        // Up to 500 lines a page, so many lines can be ticked and confirmed at once (a bulk action takes 500).
+        $perPage = in_array((int) $request->query('per'), self::PAGE_SIZES, true) ? (int) $request->query('per') : self::PAGE_SIZES[0];
+        $paged = new LengthAwarePaginator($lines->slice(($page - 1) * $perPage, $perPage)->values(), $lines->count(), $perPage, $page, ['path' => $request->url(), 'query' => $request->query()]);
         // The per-phase summary is only shown to users who may see totals; skip the work for everyone else.
         $phaseRows = $request->user()->can('view-analytics', $project)
             ? $analytics->phaseRows($tree, $lines, $analytics->budgets($project))->filter(fn ($row) => $row['depth'] === 1 || $row['count'] > 0)
@@ -156,7 +161,7 @@ class LedgerController extends Controller
             ->whereIn('document_id', $paged->getCollection()->pluck('id'))->pluck('document_id')->flip();
 
         return view('ledger.expenses', [
-            'project' => $project, 'lines' => $paged, 'edited' => $edited, 'totals' => $totals, 'filters' => $filters, 'tree' => $tree,
+            'project' => $project, 'lines' => $paged, 'perPage' => $perPage, 'pageSizes' => self::PAGE_SIZES, 'edited' => $edited, 'totals' => $totals, 'filters' => $filters, 'tree' => $tree,
             'phaseRows' => $phaseRows, 'subcategories' => Lookup::ofType('subcategory')->pluck('label', 'code'),
             'units' => ExpenseLedgerService::units(), 'methods' => Lookup::ofType('payment_method')->pluck('label', 'code'),
             'workers' => LabourAgreement::query()->where('project_id', $project->id)->orderBy('fundi_subcontractor')->pluck('fundi_subcontractor', 'id'),
