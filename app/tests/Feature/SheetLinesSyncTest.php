@@ -200,7 +200,7 @@ class SheetLinesSyncTest extends TestCase
         $this->sheets->rows[0][8] = 12;
         $this->sheets->rows[0][11] = 222000;
         $this->artisan('app:sheets-sync')->expectsOutputToContain('waiting for approval: 1')->assertSuccessful();
-        $this->assertSame('10.00', $saved->fresh()->quantity);
+        $this->assertSame('10', $saved->fresh()->quantity);
         $this->assertStringEndsWith('sheet change waiting for approval in Buildiwick', $this->sheets->cell('B3'));
         $changes = $this->actingAs($this->clerk)->postJson(route('ledger.draft.review', $this->project), ['rows' => []])->json('sheet_changes');
         $this->assertSame([['field' => 'Quantity', 'from' => '10', 'to' => '12'], ['field' => 'Total (TSh)', 'from' => '185,000.00', 'to' => '222,000.00']], $changes[0]['changes']);
@@ -208,7 +208,7 @@ class SheetLinesSyncTest extends TestCase
 
         // Apply goes through the normal edit.
         $this->actingAs($this->clerk)->postJson(route('ledger.sheet-changes.apply', [$this->project, $changes[0]['id']]))->assertOk();
-        $this->assertSame(['12.00', '222000.00'], [$saved->fresh()->quantity, $saved->fresh()->total_amount]);
+        $this->assertSame(['12', '222000.00'], [$saved->fresh()->quantity, $saved->fresh()->total_amount]);
         $this->artisan('app:sheets-sync')->assertSuccessful();
         $this->assertSame('Saved '.$saved->request_code.' · can be changed until confirmed', $this->sheets->cell('B3'));
 

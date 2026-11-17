@@ -951,6 +951,22 @@ class RecordingModeTest extends TestCase
         $this->assertSame(['4500000.50', '1,000'], [$line->total_amount, $line->item_description]);
     }
 
+    public function test_quantity_keeps_up_to_four_decimals_without_trailing_zeros(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+
+        $this->actingAs($pm)->get(route('ledger.expenses.create', $project))->assertOk()
+            ->assertSee('data-f="qty" class="num" type="number" step="any"', false);
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['quantity' => '0.652', 'unit' => 'pc', 'unit_cost' => '2076271.19', 'total_amount' => null]))
+            ->assertSessionHasNoErrors();
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['quantity' => '30']))->assertSessionHasNoErrors();
+
+        $lines = ExpenseRequest::query()->orderBy('id')->get();
+        $this->assertSame(['0.652', '1353728.82'], [$lines[0]->quantity, $lines[0]->total_amount]);
+        $this->assertSame('30', $lines[1]->quantity);
+    }
+
     private function project(string $code = 'BWG-TST-A-2026-001', bool $stages = true): array
     {
         $project = Project::create(['project_code' => $code, 'name' => 'Project '.$code, 'status' => 'active', 'location' => 'Dar es Salaam']);

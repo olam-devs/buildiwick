@@ -97,7 +97,7 @@
   .pv-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;border-top:1px solid var(--line);position:sticky;bottom:0;background:var(--surface)}
   .pv-total{font-size:17px;font-weight:700}
   @media(max-width:760px){.pv-dialog{width:100vw;max-width:100vw;max-height:100dvh;height:100dvh;border-radius:0;margin:0}.pv-foot .btn{flex:1;justify-content:center;min-height:48px}.pv-foot .pv-total{width:100%;text-align:center}}
-  .rb-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:1450px}
+  .rb-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:1485px}
   .rb-table tr.own-date [data-f=date]{border-color:var(--primary);background:var(--primary-soft)}
   .rb-table th{background:var(--head);color:var(--head-ink);font-size:11px;font-weight:600;text-align:left;padding:8px 6px;white-space:nowrap}
   .rb-table td{padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -188,7 +188,7 @@
     <div class="rb-filter" id="dateFilterBar" hidden><label for="dateFilter"><b>Show date</b></label><select id="dateFilter"></select><span class="rb-filter-note" id="dateFilterNote"></span></div>
     <div style="overflow:auto">
       <table class="rb-table">
-        <thead><tr><th></th><th style="width:130px">Date</th><th style="width:150px" class="rb-cat-th">Category</th><th style="width:170px">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:160px">Supplier</th><th style="width:150px" class="rb-sub-th">Subcategory</th><th style="width:80px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
+        <thead><tr><th></th><th style="width:130px">Date</th><th style="width:150px" class="rb-cat-th">Category</th><th style="width:170px">{{ $project->is_company_overheads ? 'Cost group' : 'Phase' }}</th><th style="min-width:200px">Item <span style="opacity:.7">*</span></th><th style="width:160px">Supplier</th><th style="width:150px" class="rb-sub-th">Subcategory</th><th style="width:115px">Qty</th><th style="width:96px">Unit</th><th style="width:120px">Unit cost</th><th style="width:130px">Total</th><th style="width:110px">Receipt no.</th><th style="min-width:150px">Notes</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -309,7 +309,7 @@
           <div class="worker-wrap" style="margin-top:5px"><select name="rows[${i}][labour_agreement_id]">${workerOptions(data.labour_agreement_id ?? (i === 0 ? C.presetWorker : ''))}</select></div></td>
       <td class="rb-more rb-supcell" data-label="Supplier"><input data-f="sup" name="rows[${i}][supplier]" list="supplierList" maxlength="150" autocomplete="off"></td>
       <td class="rb-more rb-subcell" data-label="Subcategory"><select data-f="sub" name="rows[${i}][subcategory]" data-value="${esc(data.subcategory)}"></select></td>
-      <td data-label="Qty"><input data-f="qty" class="num" type="number" step="0.01" min="0" name="rows[${i}][quantity]" value="${esc(data.quantity ?? '1')}"></td>
+      <td data-label="Qty"><input data-f="qty" class="num" type="number" step="any" min="0" name="rows[${i}][quantity]" value="${esc(data.quantity ?? '1')}"></td>
       <td data-label="Unit"><select data-f="unit" name="rows[${i}][unit]" data-value="${esc(data.unit)}"></select></td>
       <td data-label="Unit cost (TSh)"><input data-f="cost" class="num" type="text" inputmode="decimal" data-money step="0.01" min="0" name="rows[${i}][unit_cost]" value="${esc(data.unit_cost)}"></td>
       <td data-label="Total (TSh)"><input data-f="total" class="num" type="text" inputmode="decimal" data-money step="0.01" min="0" name="rows[${i}][total_amount]" value="${esc(data.total_amount)}"></td>

@@ -47,7 +47,7 @@
 
   <div class="lg-step"><span>4</span> Amount</div>
   <div class="grid">
-    <div class="field"><label for="quantity">Quantity</label><input type="number" step="0.01" min="0" id="quantity" name="quantity" value="{{ $value('quantity', '1') }}"></div>
+    <div class="field"><label for="quantity">Quantity</label><input type="number" step="any" min="0" id="quantity" name="quantity" value="{{ $value('quantity', '1') }}"></div>
     <div class="field"><label for="unit">Unit</label><input id="unit" name="unit" list="unitList" maxlength="30" value="{{ $value('unit', 'ls') }}"><datalist id="unitList">@foreach($units as $unit)<option value="{{ $unit->code }}">{{ $unit->label }}</option>@endforeach</datalist></div>
     <div class="field"><label for="unit_cost">Unit cost (TSh)</label><input type="text" inputmode="decimal" data-money step="0.01" min="0" id="unit_cost" name="unit_cost" value="{{ $value('unit_cost') }}"></div>
     <div class="field"><label for="total_amount">Total (TSh)</label><input type="text" inputmode="decimal" data-money step="0.01" min="0" id="total_amount" name="total_amount" value="{{ $value('total_amount') }}"><small class="form-context" id="totalHint">Calculated from quantity × unit cost.</small></div>

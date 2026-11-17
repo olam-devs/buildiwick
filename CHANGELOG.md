@@ -2,6 +2,11 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-17 — Quantity Takes Up to 4 Decimals
+
+- Data Entry could not save steel bought by the tonne (quantity 0.652): the Qty box only accepted 2 decimals ("The two nearest valid values are 0.65 and 0.66") and the ledger rounded quantity to 2 decimals. Quantity now keeps up to 4 decimals (`App\Casts\Quantity`), stored and shown without trailing zeros ("30", "0.652"); the Qty boxes on Record Expense and the single-line form accept any decimal. Money totals stay at 2 decimals.
+- The Qty column on Record Expense is wider (115px) so 4–5 digits show without scrolling.
+
 ## 2026-11-17 — Data Entry Renames Projects From the Sheet
 
 - At the owner's request Data Entry can rename a project: renaming the project's tab in the entry sheet makes that the project's name in Buildiwick (within the hour, `app:sheets-tabs`); the project code never changes and the row-1 heading follows. Before, the sync renamed such a tab back to the old name.

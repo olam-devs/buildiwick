@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\Quantity;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -44,7 +45,7 @@ class ExpenseRequest extends Model
     protected function casts(): array
     {
         return [
-            'quantity' => 'decimal:2', 'unit_cost' => 'decimal:2', 'total_amount' => 'decimal:2', 'requested_amount' => 'decimal:2',
+            'quantity' => Quantity::class, 'unit_cost' => 'decimal:2', 'total_amount' => 'decimal:2', 'requested_amount' => 'decimal:2',
             'commercial_unit_rate' => 'decimal:2', 'commercial_total' => 'decimal:2', 'approved_amount' => 'decimal:2',
             'requested_at' => 'date', 'submitted_at' => 'datetime', 'commercial_prepared_at' => 'datetime',
             'cancelled_at' => 'datetime', 'verified_at' => 'datetime', 'is_new_item' => 'boolean', 'pm_edited' => 'boolean',

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Casts\Quantity;
 use App\Models\ExpensePayment;
 use App\Models\ExpenseRequest;
 use App\Models\Lookup;
@@ -360,7 +361,7 @@ class ExpenseLedgerService
     /** @return array{0: ?string, 1: ?string, 2: string} quantity, unit cost, total */
     private function amounts(array $data): array
     {
-        $quantity = isset($data['quantity']) && $data['quantity'] !== '' ? number_format((float) $data['quantity'], 2, '.', '') : null;
+        $quantity = isset($data['quantity']) && $data['quantity'] !== '' ? Quantity::normal($data['quantity']) : null;
         $unitCost = isset($data['unit_cost']) && $data['unit_cost'] !== '' ? number_format((float) $data['unit_cost'], 2, '.', '') : null;
         $total = isset($data['total_amount']) && $data['total_amount'] !== '' ? number_format((float) $data['total_amount'], 2, '.', '') : null;
         if ($total === null && $unitCost !== null) {
