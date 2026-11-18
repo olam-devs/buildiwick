@@ -951,6 +951,21 @@ class RecordingModeTest extends TestCase
         $this->assertSame(['4500000.50', '1,000'], [$line->total_amount, $line->item_description]);
     }
 
+    public function test_a_line_can_be_filed_under_other(): void
+    {
+        [$project, $phases] = $this->project();
+        $pm = $this->user('project_manager', $project);
+        $director = $this->user('director');
+
+        $this->actingAs($pm)->post(route('ledger.expenses.store', $project), $this->line($phases[0], ['main_category' => 'other', 'item_description' => 'Bank charges', 'quantity' => '1', 'unit' => 'ls', 'unit_cost' => '5000']))
+            ->assertSessionHasNoErrors();
+        $this->assertSame('other', ExpenseRequest::query()->sole()->main_category);
+
+        $this->actingAs($director)->get(route('ledger.overview', $project))->assertOk()->assertSee('Other');
+        $this->actingAs($director)->get(route('ledger.structure', $project))->assertOk();
+        $this->actingAs($director)->get(route('ledger.expenses', $project))->assertOk()->assertSee('Bank charges');
+    }
+
     public function test_quantity_keeps_up_to_four_decimals_without_trailing_zeros(): void
     {
         [$project, $phases] = $this->project();

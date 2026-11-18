@@ -2,6 +2,10 @@
 
 Every session or PR adds an entry here — dated, plain language, written for a teammate (human or AI) who wasn't in the room. See `CLAUDE.md` for the full contribution protocol.
 
+## 2026-11-18 — "Other" Main Category
+
+- At the owner's request there is a fifth main category, **Other** (code `other`, grey `#7A8794`), for costs that fit none of the four. It is in `LedgerAnalyticsService::CATEGORIES` (so Record Expense, the expense list, filters, overview, structure, Excel export and phase budgets all show it), the `main_category` lookups (migration `2026_11_18_152233_add_other_main_category`, also in `LookupSeeder`), so it reaches the Google sheet's Main category dropdown on the next hourly `app:sheets-tabs`. It has no subcategories of its own; any subcategory may be picked. The old request/estimate modules and the legacy transactions dashboard keep their four categories.
+
 ## 2026-11-17 — Sheet Reads Pasted Dates Day First
 
 - The entry spreadsheet's locale was en_US, so a date typed or pasted as 05/11/2026 became 11 May and 25/10/2026 was refused by the Date column. `app:sheets-tabs` now sets the spreadsheet locale to en_GB once (`ProjectSheetTabs::LOCALE`, remembered in the cache key `sheets.locale`), so dates are read day/month/year. The column still shows dd/mm/yyyy; dates already in the sheet keep their value; formulas and decimals are unchanged.

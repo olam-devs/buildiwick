@@ -12,6 +12,7 @@ final class CostEntryOptions
             'labour_subcontracts' => ['hour', 'worker_hour', 'day', 'worker_day', 'week', 'job', 'task', 'm2', 'point', 'ls'],
             'logistics_equipment' => ['hour', 'day', 'week', 'trip', 'load', 'km', 'pc', 'ls'],
             'preliminaries_overheads' => ['day', 'week', 'month', 'pc', 'service', 'person', 'ls'],
+            'other' => ['ls', 'pc', 'no', 'day', 'month'],
         ];
     }
 }

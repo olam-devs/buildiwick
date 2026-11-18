@@ -21,11 +21,12 @@
           'labour_subcontracts' => ['ls', 'day', 'worker_day', 'week', 'month', 'hour', 'm2', 'm', 'no'],
           'logistics_equipment' => ['trip', 'load', 'day', 'hour', 'km', 'l', 'ls'],
           'preliminaries_overheads' => ['ls', 'month', 'week', 'day', 'l', 'no', 'person'],
+          'other' => ['ls', 'pc', 'no', 'day', 'month'],
       ],
       'placeholders' => [
-          'materials' => 'e.g. Cement', 'labour_subcontracts' => 'e.g. Fundi labour', 'logistics_equipment' => 'e.g. Transport', 'preliminaries_overheads' => 'e.g. Water',
+          'materials' => 'e.g. Cement', 'labour_subcontracts' => 'e.g. Fundi labour', 'logistics_equipment' => 'e.g. Transport', 'preliminaries_overheads' => 'e.g. Water', 'other' => 'e.g. Bank charges',
       ],
-      'defaultUnit' => ['materials' => 'pc', 'labour_subcontracts' => 'ls', 'logistics_equipment' => 'trip', 'preliminaries_overheads' => 'ls'],
+      'defaultUnit' => ['materials' => 'pc', 'labour_subcontracts' => 'ls', 'logistics_equipment' => 'trip', 'preliminaries_overheads' => 'ls', 'other' => 'ls'],
       'workers' => $workers->map(fn ($w) => ['id' => $w->id, 'name' => $w->fundi_subcontractor.((float) $w->agreed_value > 0 ? ' · contract '.\App\Support\Money::format($w->agreed_value) : '')])->values(),
       'categories' => $categories,
       'colors' => $colors,
@@ -243,7 +244,7 @@
   // A row's date follows the date above unless changed on the row (past data can mix days in one entry).
   const markDate = tr => { const d = tr.querySelector('[data-f=date]'); tr.classList.toggle('own-date', !!d.value && d.value !== headDate.value); };
   const followed = [['date', 'expense_date', headDate], ['sup', 'supplier', headSup], ['rcpt', 'invoice_receipt_no', document.getElementById('default_receipt')], ['note', 'details', document.getElementById('default_notes')]];
-  const rowClass = {labour_subcontracts: 'labour', logistics_equipment: 'logistics', preliminaries_overheads: 'prelims', materials: ''};
+  const rowClass = {labour_subcontracts: 'labour', logistics_equipment: 'logistics', preliminaries_overheads: 'prelims', materials: '', other: ''};
   let n = 0;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const listFor = cat => { const id = 'items-' + cat; if (!document.getElementById(id)) { const dl = document.createElement('datalist'); dl.id = id; dl.innerHTML = (C.suggestions[cat] || []).map(v => `<option value="${esc(v)}"></option>`).join(''); document.body.appendChild(dl); } return id; };

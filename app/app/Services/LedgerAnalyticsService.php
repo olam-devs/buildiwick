@@ -31,6 +31,7 @@ class LedgerAnalyticsService
         'labour_subcontracts' => 'Labour & Subcontracts',
         'logistics_equipment' => 'Logistics & Equipment',
         'preliminaries_overheads' => 'Preliminaries & Site Overheads',
+        'other' => 'Other',
     ];
 
     public const CATEGORY_COLORS = [
@@ -38,6 +39,7 @@ class LedgerAnalyticsService
         'labour_subcontracts' => '#2FA36E',
         'logistics_equipment' => '#F5A623',
         'preliminaries_overheads' => '#8E6CEF',
+        'other' => '#7A8794',
     ];
 
     /** @var array<int, Collection> lines per project id, loaded once per request */

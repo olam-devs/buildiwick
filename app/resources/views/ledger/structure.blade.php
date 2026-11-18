@@ -10,7 +10,7 @@
   $leafGroups = $rows->filter(fn ($row) => count($row['ids']) === 1);
   $categories = \App\Services\LedgerAnalyticsService::CATEGORIES;
   $colors = \App\Services\LedgerAnalyticsService::CATEGORY_COLORS;
-  $short = ['materials' => 'Materials', 'labour_subcontracts' => 'Labour', 'logistics_equipment' => 'Logistics', 'preliminaries_overheads' => 'Prelims & Overheads'];
+  $short = ['materials' => 'Materials', 'labour_subcontracts' => 'Labour', 'logistics_equipment' => 'Logistics', 'preliminaries_overheads' => 'Prelims & Overheads', 'other' => 'Other'];
   if ($groups) {
       // Office costs have one budget per cost group (they are all filed under one category).
       $categories = [\App\Services\ExpenseLedgerService::OVERHEADS_CATEGORY => 'Budget'];

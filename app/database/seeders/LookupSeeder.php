@@ -20,6 +20,7 @@ class LookupSeeder extends Seeder
             ['labour_subcontracts', 'Labour & Subcontracts'],
             ['logistics_equipment', 'Logistics & Equipment'],
             ['preliminaries_overheads', 'Preliminaries & Site Overheads'],
+            ['other', 'Other'],
         ]);
 
         $this->seedType('subcategory', [

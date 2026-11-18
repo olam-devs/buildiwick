@@ -24,6 +24,7 @@ class ExpenseRequest extends Model
         'labour_subcontracts' => 'Salaries, wages, casual or fundi labour, professional services and subcontracted scopes. Link an agreement where one exists.',
         'logistics_equipment' => 'Transport, delivery, haulage, tools, fuel, equipment hire and plant or machinery needed to execute the work.',
         'preliminaries_overheads' => 'Project-support costs not tied to one building element: site office, temporary utilities, PPE, cleaning, security, permits, communications and insurance.',
+        'other' => 'Anything that fits none of the categories above.',
     ];
 
     protected $fillable = [
